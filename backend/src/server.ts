@@ -32,7 +32,11 @@ app.use(helmet({
 // CORS: en producción se limita al dominio del frontend (CORS_ORIGIN); en
 // desarrollo, si no está definido, se permite cualquier origen (localhost).
 const corsOrigin = process.env.CORS_ORIGIN;
-app.use(cors(corsOrigin ? { origin: corsOrigin.split(",").map((o: string) => o.trim()) } : {}));
+const allowedOrigins = corsOrigin
+  ?.split(",")
+  .map((origin: string) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+app.use(cors(allowedOrigins?.length ? { origin: allowedOrigins } : {}));
 
 app.use(express.json());
 app.use("/uploads", express.static(uploadsRoot));
