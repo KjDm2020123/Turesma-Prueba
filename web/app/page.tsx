@@ -135,11 +135,11 @@ export default function RootPage() {
     <main className="bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
       
       {/* NAVBAR */}
-      <nav className="fixed z-50 w-full border-b border-gray-100 bg-white/95 shadow-sm backdrop-blur-md">
+      <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center">
+          <div className="flex h-full items-center bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Turesma S.A · Transporte Turístico" className="h-16 sm:h-20 w-auto mix-blend-multiply" />
+            <img src="/logo.png" alt="Turesma S.A · Transporte Turístico" className="h-16 sm:h-20 w-auto" />
           </div>
 
           {/* Menú Escritorio */}
