@@ -10,6 +10,7 @@ backend/prueba_proforma.pdf
 
 # uploaded/generated media (keep directories with .gitkeep when needed)
 backend/uploads/*
+backend/uploads/*/*
 !backend/uploads/*/
 !backend/uploads/*/.gitkeep
 .expo/
