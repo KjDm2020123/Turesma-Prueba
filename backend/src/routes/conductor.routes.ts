@@ -1,0 +1,46 @@
+export {};
+
+const express = require("express");
+const { verifyToken, requireRole } = require("../middleware/auth.middleware");
+const {
+  listarReservasConductor,
+  aceptarReservaConductor,
+  rechazarReservaConductor,
+  actualizarEstadoReservaConductor,
+  marcarRecogidoConductor,
+  obtenerDisponibilidadConductor,
+  actualizarDisponibilidadConductor,
+  crearReporteRutaConductor,
+  listarReportesRutaConductor,
+  actualizarEstadoConductor,
+  obtenerMiVehiculoConductor,
+  listarMantenimientoConductor,
+  crearMantenimientoConductor,
+  compartirUbicacionConductor,
+  listarClientesConductor,
+  registrarViajeConductor,
+} = require("../controllers/conductor.controller");
+
+const router = express.Router();
+
+// Todas las rutas de conductor requieren token JWT válido
+router.use(verifyToken);
+
+router.get("/:id/reservas", listarReservasConductor);
+router.patch("/:id/reservas/:reservaId/aceptar", aceptarReservaConductor);
+router.patch("/:id/reservas/:reservaId/rechazar", rechazarReservaConductor);
+router.patch("/:id/reservas/:reservaId/estado", actualizarEstadoReservaConductor);
+router.patch("/:id/reservas/:reservaId/recoger", marcarRecogidoConductor);
+router.get("/:id/disponibilidad", obtenerDisponibilidadConductor);
+router.patch("/:id/disponibilidad", actualizarDisponibilidadConductor);
+router.get("/:id/rutas", listarReportesRutaConductor);
+router.post("/:id/rutas", crearReporteRutaConductor);
+router.patch("/:id/estado", actualizarEstadoConductor);
+router.get("/:id/vehiculo", obtenerMiVehiculoConductor);
+router.get("/:id/mantenimiento", listarMantenimientoConductor);
+router.post("/:id/mantenimiento", crearMantenimientoConductor);
+router.post("/:id/ubicacion", compartirUbicacionConductor);
+router.get("/:id/clientes", listarClientesConductor);
+router.post("/:id/registrar-viaje", registrarViajeConductor);
+
+module.exports = router;
