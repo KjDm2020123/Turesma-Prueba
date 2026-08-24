@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, PointerEvent, useEffect, useRef, useState } from "react";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
@@ -69,6 +69,12 @@ export default function AdminVehiculosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
+  const [cropZoom, setCropZoom] = useState(1);
+  const [draggingCrop, setDraggingCrop] = useState(false);
+  const cropDragStart = useRef({ x: 0, y: 0 });
+  const cropImageRef = useRef<HTMLImageElement>(null);
 
   const emptyForm = {
     placa: "", tipo: "van", modelo: "", capacidad: "",
@@ -139,10 +145,40 @@ export default function AdminVehiculosPage() {
 
   const handleImgUpload = async (file: File | null) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setErr("Selecciona una imagen válida");
+      return;
+    }
+    setImageToCrop(URL.createObjectURL(file));
+    setCropPosition({ x: 0, y: 0 });
+    setCropZoom(0.75);
+    setErr("");
+  };
+
+  const uploadCroppedImage = async () => {
+    if (!imageToCrop) return;
     setUploadingImg(true);
     try {
+      const image = cropImageRef.current;
+      if (!image) throw new Error("La imagen aún no está lista");
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 960;
+      canvas.height = 540;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("No se pudo preparar la imagen");
+
+      context.fillStyle = "#f8fafc";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight) * cropZoom;
+      const width = image.naturalWidth * scale;
+      const height = image.naturalHeight * scale;
+      context.drawImage(image, (canvas.width - width) / 2 + cropPosition.x * 3, (canvas.height - height) / 2 + cropPosition.y * 3, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+      if (!blob) throw new Error("No se pudo procesar la imagen");
       const fd = new FormData();
-      fd.append("imagen", file);
+      fd.append("imagen", blob, "vehiculo.jpg");
       const authToken = getAuthHeaders()["Authorization"];
       const res = await fetch(`${API_URL}/api/admin/uploads/vehiculo-imagen`, {
         method: "POST",
@@ -152,8 +188,20 @@ export default function AdminVehiculosPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al subir imagen");
       setForm((p) => ({ ...p, imagen_url: json.imageUrl || "" }));
-    } catch { setErr("No se pudo subir la imagen"); }
+      setImageToCrop(null);
+    } catch { setErr("No se pudo procesar o subir la imagen"); }
     finally { setUploadingImg(false); }
+  };
+
+  const startCropDrag = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    cropDragStart.current = { x: event.clientX - cropPosition.x, y: event.clientY - cropPosition.y };
+    setDraggingCrop(true);
+  };
+
+  const moveCrop = (event: PointerEvent<HTMLDivElement>) => {
+    if (!draggingCrop) return;
+    setCropPosition({ x: event.clientX - cropDragStart.current.x, y: event.clientY - cropDragStart.current.y });
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -454,6 +502,34 @@ export default function AdminVehiculosPage() {
                   {uploadingImg && <Loader2 className="animate-spin mx-auto mt-2 text-[#E31E24]" size={18} />}
                   {form.imagen_url && <img src={form.imagen_url} alt="preview" className="mt-3 h-28 w-full object-cover rounded-xl" />}
                 </div>
+                {imageToCrop && (
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-900 p-4 text-white">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Ajusta el encuadre</p>
+                    <div
+                      className="relative mx-auto aspect-video max-w-lg cursor-grab overflow-hidden rounded-xl bg-black active:cursor-grabbing"
+                      onPointerDown={startCropDrag}
+                      onPointerMove={moveCrop}
+                      onPointerUp={() => setDraggingCrop(false)}
+                      onPointerCancel={() => setDraggingCrop(false)}
+                    >
+                      <img
+                        ref={cropImageRef}
+                        src={imageToCrop}
+                        alt="Vista previa del encuadre"
+                        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+                        style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${cropZoom})` }}
+                      />
+                      <div className="pointer-events-none absolute inset-0 border-2 border-white/70" />
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="text-xs text-slate-300">Zoom</span>
+                      <input type="range" min="0.5" max="2" step="0.05" value={cropZoom} onChange={e => setCropZoom(Number(e.target.value))} className="w-full accent-[#E31E24]" />
+                      <button type="button" onClick={uploadCroppedImage} disabled={uploadingImg} className="shrink-0 rounded-xl bg-[#E31E24] px-3 py-2 text-[10px] font-black uppercase tracking-widest disabled:opacity-60">
+                        {uploadingImg ? "Subiendo..." : "Usar foto"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Días de servicio */}
