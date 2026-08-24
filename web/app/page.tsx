@@ -136,10 +136,10 @@ export default function RootPage() {
       
       {/* NAVBAR */}
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white/95 shadow-sm backdrop-blur-md">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Turesma S.A · Transporte Turístico" className="h-12 sm:h-14 w-auto" />
+            <img src="/logo.png" alt="Turesma S.A · Transporte Turístico" className="h-16 sm:h-20 w-auto mix-blend-multiply" />
           </div>
 
           {/* Menú Escritorio */}
