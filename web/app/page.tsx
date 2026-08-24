@@ -54,7 +54,6 @@ export default function RootPage() {
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
   const flotaRef = useRef<HTMLDivElement | null>(null);
-  const flotaPausedRef = useRef(false);
 
   // Desplaza el carrusel de flota una "tarjeta" a izq/der. Si ya está al final,
   // vuelve al inicio (loop infinito) para que el auto-avance no se detenga.
@@ -74,17 +73,6 @@ export default function RootPage() {
       el.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
     }
   };
-
-  // Auto-avance del carrusel de flota cada 1s. Se pausa mientras el usuario
-  // interactúa (hover/touch) y se reanuda al soltar.
-  useEffect(() => {
-    if (vehiculos.length < 2) return;
-    const interval = setInterval(() => {
-      if (!flotaPausedRef.current) scrollFlota("right");
-    }, 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehiculos.length]);
 
   useEffect(() => {
     fetch(`${API_URL}/api/usuarios/vehiculos`)
@@ -271,10 +259,6 @@ export default function RootPage() {
           ) : (
             <div
               className="relative"
-              onMouseEnter={() => { flotaPausedRef.current = true; }}
-              onMouseLeave={() => { flotaPausedRef.current = false; }}
-              onTouchStart={() => { flotaPausedRef.current = true; }}
-              onTouchEnd={() => { flotaPausedRef.current = false; }}
             >
               {/* Botón izquierda */}
               <button
