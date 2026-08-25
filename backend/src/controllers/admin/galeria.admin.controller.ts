@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const pool = require("../../config/db");
+const { uploadImage, deleteImage } = require("../../config/storage");
 
 // ── Almacenamiento en disco de las fotos de la galería de viajes ─────────────
 const galeriaDir = path.join(__dirname, "../../../uploads/galeria");
@@ -12,17 +13,7 @@ if (!fs.existsSync(galeriaDir)) {
   fs.mkdirSync(galeriaDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (_req: any, _file: any, cb: any) => {
-    cb(null, galeriaDir);
-  },
-  filename: (_req: any, file: any, cb: any) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
-    const uniqueName = `viaje-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
-    cb(null, uniqueName);
-  },
-});
+const storage = multer.memoryStorage();
 
 const fileFilter = (_req: any, file: any, cb: any) => {
   const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -40,15 +31,20 @@ const uploadGaleriaMiddleware = multer({
 
 // ── Admin: sube una foto de viaje y devuelve su URL pública ──────────────────
 const uploadGaleriaImagen = (req: any, res: any) => {
-  uploadGaleriaMiddleware(req, res, (error: any) => {
+  uploadGaleriaMiddleware(req, res, async (error: any) => {
     if (error) {
       return res.status(400).json({ error: error.message || "No se pudo subir la imagen" });
     }
     if (!req.file) {
       return res.status(400).json({ error: "Debes seleccionar una imagen" });
     }
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/uploads/galeria/${req.file.filename}`;
+    let imageUrl;
+    try {
+      imageUrl = await uploadImage(req.file, "galeria");
+    } catch (uploadError) {
+      console.error("Error subiendo imagen de galería a Supabase:", uploadError);
+      return res.status(502).json({ error: "No se pudo guardar la imagen" });
+    }
     return res.status(201).json({
       message: "Imagen subida correctamente",
       imageUrl,

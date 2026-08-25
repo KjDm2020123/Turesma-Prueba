@@ -3,6 +3,7 @@ export {};
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const { uploadImage } = require("../../config/storage");
 
 const uploadsDir = path.join(__dirname, "../../../uploads/vehiculos");
 
@@ -10,17 +11,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
-    const uniqueName = `vehiculo-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
-    cb(null, uniqueName);
-  },
-});
+const storage = multer.memoryStorage();
 
 const fileFilter = (_req, file, cb) => {
   const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -41,7 +32,7 @@ const uploadVehiculoImageMiddleware = multer({
 }).single("imagen");
 
 const uploadVehiculoImagen = (req, res) => {
-  uploadVehiculoImageMiddleware(req, res, (error) => {
+  uploadVehiculoImageMiddleware(req, res, async (error) => {
     if (error) {
       return res.status(400).json({ error: error.message || "No se pudo subir la imagen" });
     }
@@ -50,8 +41,13 @@ const uploadVehiculoImagen = (req, res) => {
       return res.status(400).json({ error: "Debes seleccionar una imagen" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/uploads/vehiculos/${req.file.filename}`;
+    let imageUrl;
+    try {
+      imageUrl = await uploadImage(req.file, "vehiculos");
+    } catch (uploadError) {
+      console.error("Error subiendo imagen de vehículo a Supabase:", uploadError);
+      return res.status(502).json({ error: "No se pudo guardar la imagen" });
+    }
 
     return res.status(201).json({
       message: "Imagen subida correctamente",
