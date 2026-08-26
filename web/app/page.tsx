@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState, useRef, type MouseEvent } from "react";
 import {
   BriefcaseBusiness,
@@ -45,6 +46,12 @@ const TELEFONO_EMPRESA = "593993570061";
 const TELEFONO_EMPRESA_DISPLAY = "+593 99 357 0061";
 
 const IMAGEN_FALLBACK = "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=800&auto=format&fit=crop";
+const PUBLIC_DATA_CACHE_KEY = "turesma_public_data";
+
+type PublicDataCache = {
+  vehiculos: VehiculoPublico[];
+  galeria: GaleriaFoto[];
+};
 
 export default function RootPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -75,28 +82,50 @@ export default function RootPage() {
   };
 
   useEffect(() => {
-    fetch(`${API_URL}/api/usuarios/vehiculos`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-        // La vitrina pública muestra solo unidades con foto real subida, para
-        // presentar una flota curada. Si aún no hay al menos 3 con foto, se
-        // muestran todas para que la sección nunca quede vacía.
-        const conFoto = data.filter((v: VehiculoPublico) => v.imagen_url);
-        setVehiculos(conFoto.length >= 3 ? conFoto : data);
+    let cachedVehicles: VehiculoPublico[] = [];
+    let cachedGallery: GaleriaFoto[] = [];
+
+    try {
+      const cached = localStorage.getItem(PUBLIC_DATA_CACHE_KEY);
+      if (cached) {
+        const data = JSON.parse(cached) as Partial<PublicDataCache>;
+        if (Array.isArray(data.vehiculos)) {
+          cachedVehicles = data.vehiculos;
+          setVehiculos(cachedVehicles);
+        }
+        if (Array.isArray(data.galeria)) {
+          cachedGallery = data.galeria;
+          setGaleria(cachedGallery);
+        }
+        if (Array.isArray(data.vehiculos) || Array.isArray(data.galeria)) setLoadingVehiculos(false);
+      }
+    } catch {
+      localStorage.removeItem(PUBLIC_DATA_CACHE_KEY);
+    }
+
+    // Flota y galería se actualizan en paralelo; la caché permite pintar antes
+    // de que el backend termine de despertar.
+    Promise.all([
+      fetch(`${API_URL}/api/usuarios/vehiculos`).then((r) => r.json()),
+      fetch(`${API_URL}/api/usuarios/galeria`).then((r) => r.json()),
+    ])
+      .then(([vehiclesData, galleryData]) => {
+        let nextVehicles = cachedVehicles;
+        let nextGallery = cachedGallery;
+
+        if (Array.isArray(vehiclesData)) {
+          const conFoto = vehiclesData.filter((v: VehiculoPublico) => v.imagen_url);
+          nextVehicles = conFoto.length >= 3 ? conFoto : vehiclesData;
+          setVehiculos(nextVehicles);
+        }
+        if (Array.isArray(galleryData)) {
+          nextGallery = galleryData.filter((g: GaleriaFoto) => g.imagen_url);
+          setGaleria(nextGallery);
+        }
+        localStorage.setItem(PUBLIC_DATA_CACHE_KEY, JSON.stringify({ vehiculos: nextVehicles, galeria: nextGallery }));
       })
       .catch(() => {})
       .finally(() => setLoadingVehiculos(false));
-  }, []);
-
-  // Galería de viajes realizados (fotos que el admin publica desde su panel).
-  useEffect(() => {
-    fetch(`${API_URL}/api/usuarios/galeria`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setGaleria(data.filter((g: GaleriaFoto) => g.imagen_url));
-      })
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -284,7 +313,7 @@ export default function RootPage() {
                 ref={flotaRef}
                 className="flota-carousel flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-4"
               >
-                {vehiculos.map((v) => {
+                {vehiculos.map((v, index) => {
                   const estadoColor = v.estado === "disponible" ? "text-green-600" : v.estado === "en_servicio" ? "text-blue-600" : "text-amber-600";
                   const estadoLabel = v.estado === "disponible" ? "Disponible" : v.estado === "en_servicio" ? "En Servicio" : v.estado === "mantenimiento" ? "Mantenimiento" : "Inactivo";
                   return (
@@ -293,9 +322,13 @@ export default function RootPage() {
                       data-flota-card
                       className="flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl transition-all hover:shadow-2xl hover:-translate-y-1 sm:w-[360px]"
                     >
-                      <img
+                      <Image
                         src={v.imagen_url || IMAGEN_FALLBACK}
                         alt={`${v.tipo || "Vehículo"} ${v.placa}`}
+                        width={720}
+                        height={512}
+                        sizes="(max-width: 640px) 85vw, 360px"
+                        priority={index === 0}
                         className="h-56 w-full object-cover sm:h-64"
                       />
                       <div className="p-7 flex flex-col flex-1">
@@ -360,10 +393,13 @@ export default function RootPage() {
                   key={foto.id}
                   className="group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
                 >
-                  <img
+                  <Image
                     src={foto.imagen_url}
                     alt={foto.titulo || "Viaje realizado por Turesma"}
-                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    priority={foto.id === galeria[0]?.id}
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
                   />
                   {(foto.titulo || foto.descripcion) && (
                     <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-6 pt-16 translate-y-2 opacity-0 transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100">
