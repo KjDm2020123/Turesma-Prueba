@@ -14,6 +14,7 @@ const conductorRoutes = require("./routes/conductor.routes");
 const comunicacionRoutes = require("./routes/comunicacion.routes");
 const cotizacionesRoutes = require("./routes/cotizaciones.routes");
 const { initDatabase } = require("./config/initDb");
+const pool = require("./config/db");
 
 const app = express();
 const uploadsRoot = path.join(__dirname, "../uploads");
@@ -63,8 +64,14 @@ app.get("/", (req, res) => {
 });
 
 // Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({ status: "OK", message: "API Turesma está activa" });
+app.get("/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "OK", message: "API Turesma está activa" });
+  } catch (error) {
+    console.error("Error en health check de PostgreSQL:", error);
+    res.status(503).json({ status: "ERROR", message: "Base de datos no disponible" });
+  }
 });
 
 const PORT = process.env.PORT || 4000;

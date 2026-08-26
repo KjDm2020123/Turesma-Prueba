@@ -5,6 +5,14 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    rules: {
+      // El proyecto usa tipos dinámicos en integraciones de Leaflet y respuestas API.
+      "@typescript-eslint/no-explicit-any": "warn",
+      // Estos efectos sincronizan estado con APIs del navegador o datos externos.
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

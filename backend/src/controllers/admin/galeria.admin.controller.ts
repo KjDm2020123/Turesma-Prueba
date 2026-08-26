@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const pool = require("../../config/db");
-const { uploadImage, deleteImage } = require("../../config/storage");
+const { uploadImage, deleteImage, getStoragePathFromUrl } = require("../../config/storage");
 
 // ── Almacenamiento en disco de las fotos de la galería de viajes ─────────────
 const galeriaDir = path.join(__dirname, "../../../uploads/galeria");
@@ -122,7 +122,7 @@ const actualizarGaleria = async (req: any, res: any) => {
   }
 };
 
-// ── Admin: elimina una foto de la galería (y su archivo en disco) ────────────
+// ── Admin: elimina una foto de la galería y su archivo almacenado ────────────
 const eliminarGaleria = async (req: any, res: any) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID inválido" });
@@ -133,8 +133,13 @@ const eliminarGaleria = async (req: any, res: any) => {
 
     await pool.query("DELETE FROM galeria_viajes WHERE id = $1", [id]);
 
-    // Borra el archivo físico si vive en nuestra carpeta de uploads.
     const url = String(found.rows[0].imagen_url || "");
+    const storagePath = getStoragePathFromUrl(url);
+    if (storagePath) {
+      await deleteImage(storagePath);
+    }
+
+    // Compatibilidad con fotos antiguas guardadas en el disco local.
     const marker = "/uploads/galeria/";
     const idx = url.indexOf(marker);
     if (idx !== -1) {

@@ -317,7 +317,7 @@ export default function AdminHistorialMantenimientoPage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 sm:p-4 flex items-center gap-3">
         <DollarSign size={16} className="text-blue-500 flex-shrink-0" />
-        <p className="text-[11px] sm:text-xs font-bold text-blue-700">Este gasto se refleja en el Dashboard, en el gráfico <span className="italic">"Gasto de Mantenimiento por Vehículo"</span>.</p>
+        <p className="text-[11px] sm:text-xs font-bold text-blue-700">Este gasto se refleja en el Dashboard, en el gráfico <span className="italic">&quot;Gasto de Mantenimiento por Vehículo&quot;</span>.</p>
       </div>
 
       {/* ALERTAS DE PRÓXIMO MANTENIMIENTO (programado por el conductor: fecha y/o km) */}

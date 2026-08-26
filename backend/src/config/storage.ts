@@ -37,4 +37,14 @@ const deleteImage = async (filePath: string) => {
   await supabase.storage.from(bucketName).remove([filePath]);
 };
 
-module.exports = { uploadImage, deleteImage };
+const getStoragePathFromUrl = (imageUrl: string) => {
+  const marker = "/storage/v1/object/public/";
+  const markerIndex = imageUrl.indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  const bucketAndPath = decodeURIComponent(imageUrl.slice(markerIndex + marker.length));
+  const separatorIndex = bucketAndPath.indexOf("/");
+  return separatorIndex === -1 ? null : bucketAndPath.slice(separatorIndex + 1);
+};
+
+module.exports = { uploadImage, deleteImage, getStoragePathFromUrl };

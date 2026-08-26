@@ -3,24 +3,7 @@ export {};
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
-
-const uploadsDir = path.join(__dirname, "../../uploads/perfiles");
-
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
-    const uniqueName = `perfil-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
-    cb(null, uniqueName);
-  },
-});
+const { uploadImage } = require("../config/storage");
 
 const fileFilter = (_req, file, cb) => {
   const allowedMimeTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -33,7 +16,7 @@ const fileFilter = (_req, file, cb) => {
 };
 
 const uploadPerfilImageMiddleware = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024,
@@ -41,7 +24,7 @@ const uploadPerfilImageMiddleware = multer({
 }).single("imagen");
 
 const uploadPerfilImagen = (req, res) => {
-  uploadPerfilImageMiddleware(req, res, (error) => {
+  uploadPerfilImageMiddleware(req, res, async (error) => {
     if (error) {
       return res.status(400).json({ error: error.message || "No se pudo subir la imagen" });
     }
@@ -50,13 +33,18 @@ const uploadPerfilImagen = (req, res) => {
       return res.status(400).json({ error: "Debes seleccionar una imagen" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/uploads/perfiles/${req.file.filename}`;
+    let imageUrl;
+    try {
+      imageUrl = await uploadImage(req.file, "perfiles");
+    } catch (uploadError) {
+      console.error("Error subiendo foto de perfil a Supabase:", uploadError);
+      return res.status(502).json({ error: "No se pudo guardar la foto de perfil" });
+    }
 
     return res.status(201).json({
       message: "Imagen subida correctamente",
       imageUrl,
-      filename: req.file.filename,
+      filename: imageUrl.split("/").pop(),
     });
   });
 };
@@ -110,26 +98,8 @@ const uploadComprobantePago = (req, res) => {
 };
 
 // ── Cédula / documento de identidad del cliente ──────────────────────────────
-const cedulasDir = path.join(__dirname, "../../uploads/cedulas");
-
-if (!fs.existsSync(cedulasDir)) {
-  fs.mkdirSync(cedulasDir, { recursive: true });
-}
-
-const cedulaStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, cedulasDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || "").toLowerCase();
-    const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
-    const uniqueName = `cedula-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
-    cb(null, uniqueName);
-  },
-});
-
 const uploadCedulaMiddleware = multer({
-  storage: cedulaStorage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024,
@@ -137,7 +107,7 @@ const uploadCedulaMiddleware = multer({
 }).single("cedula");
 
 const uploadCedula = (req, res) => {
-  uploadCedulaMiddleware(req, res, (error) => {
+  uploadCedulaMiddleware(req, res, async (error) => {
     if (error) {
       return res.status(400).json({ error: error.message || "No se pudo subir la cédula" });
     }
@@ -146,13 +116,18 @@ const uploadCedula = (req, res) => {
       return res.status(400).json({ error: "Debes adjuntar una imagen de tu cédula" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/uploads/cedulas/${req.file.filename}`;
+    let imageUrl;
+    try {
+      imageUrl = await uploadImage(req.file, "cedulas");
+    } catch (uploadError) {
+      console.error("Error subiendo cédula a Supabase:", uploadError);
+      return res.status(502).json({ error: "No se pudo guardar la cédula" });
+    }
 
     return res.status(201).json({
       message: "Cédula subida correctamente",
       imageUrl,
-      filename: req.file.filename,
+      filename: imageUrl.split("/").pop(),
     });
   });
 };

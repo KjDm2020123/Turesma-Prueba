@@ -1,6 +1,9 @@
 export {};
 
 const pool = require("../config/db");
+
+const PUBLIC_VEHICLES_CACHE_MS = 30_000;
+let publicVehiclesCache: { expiresAt: number; rows: unknown[] } | null = null;
 const bcrypt = require("bcrypt");
 const { normalizeRole } = require("../config/catalogoHelpers");
 const { enviarCorreoBienvenida } = require("../config/usuarioMailer");
@@ -71,6 +74,11 @@ const listarVehiculosCliente = async (req, res) => {
   const fecha = req.query.fecha;
 
   try {
+    if (!fecha && publicVehiclesCache && publicVehiclesCache.expiresAt > Date.now()) {
+      res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      return res.status(200).json(publicVehiclesCache.rows);
+    }
+
     const result = await pool.query(
       `SELECT
          v.id,
@@ -117,6 +125,11 @@ const listarVehiculosCliente = async (req, res) => {
        ORDER BY v.id DESC`,
       [fecha || null]
     );
+
+    if (!fecha) {
+      publicVehiclesCache = { rows: result.rows, expiresAt: Date.now() + PUBLIC_VEHICLES_CACHE_MS };
+      res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+    }
 
     return res.status(200).json(result.rows);
   } catch (error) {

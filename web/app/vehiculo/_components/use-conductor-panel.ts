@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import {
@@ -67,7 +67,7 @@ type PanelConductor = {
   historial: ReservaConductor[];
 };
 
-export const useConductorPanel = () => {
+const useConductorPanelState = () => {
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -245,3 +245,27 @@ export const useConductorPanel = () => {
     actualizarEstadoGeneral,
   };
 };
+
+type ConductorPanelState = ReturnType<typeof useConductorPanelState>;
+
+const ConductorPanelContext = createContext<ConductorPanelState | null>(null);
+
+export function ConductorPanelProvider({
+  value,
+  children,
+}: {
+  value: ConductorPanelState;
+  children: React.ReactNode;
+}) {
+  return createElement(ConductorPanelContext.Provider, { value }, children);
+}
+
+export function useConductorPanel() {
+  const context = useContext(ConductorPanelContext);
+  if (!context) {
+    throw new Error("useConductorPanel debe usarse dentro de ConductorPanelProvider");
+  }
+  return context;
+}
+
+export { useConductorPanelState };

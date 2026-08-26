@@ -103,7 +103,7 @@ export default function ClienteCotizarPage() {
 
   // Detecta la ubicación actual del cliente y la usa como punto de salida por
   // defecto, así solo tiene que marcar el destino en el mapa.
-  const useMyLocation = () => {
+  const locateMyLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLocationError("Tu dispositivo no soporta ubicación automática. Marca la salida manualmente en el mapa.");
       return;
@@ -126,7 +126,7 @@ export default function ClienteCotizarPage() {
   };
 
   // Al abrir la página, intenta ubicar al cliente automáticamente.
-  useEffect(() => { useMyLocation(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { locateMyLocation(); /* eslint-disable-next-line */ }, []);
 
   const loadVehiculos = async () => {
     try {
@@ -190,7 +190,7 @@ export default function ClienteCotizarPage() {
       setForm({ fecha_servicio: "", fecha_fin: "", num_personas: "1", vehiculo_id: "", valor_ofrecido: "", hora_salida: "", notas: "" });
       setVariosDias(false);
       setOrigin(null); setDestination(null);
-      useMyLocation();
+      locateMyLocation();
       loadCotizaciones();
     } catch (e: any) { setFormErr(e.message); }
     finally { setSending(false); }
@@ -283,7 +283,7 @@ export default function ClienteCotizarPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><MapPin size={12} /> 3. Marca tu destino en el mapa</p>
-                <button type="button" onClick={useMyLocation} disabled={locatingOrigin}
+                <button type="button" onClick={locateMyLocation} disabled={locatingOrigin}
                   className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 disabled:opacity-50">
                   {locatingOrigin ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />} Usar mi ubicación actual
                 </button>

@@ -19,7 +19,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { clearStoredUser, getStoredUser } from "../../../lib/session";
-import { useConductorPanel } from "./use-conductor-panel";
+import { ConductorPanelProvider, useConductorPanelState } from "./use-conductor-panel";
 import { NotificationBell } from "../../../components/notification-bell";
 
 type MenuItemType = {
@@ -45,7 +45,8 @@ const menuItems: MenuItemType[] = [
 export function ConductorShell({ children }: ConductorShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { newSolicitudesCount, user } = useConductorPanel();
+  const panelState = useConductorPanelState();
+  const { newSolicitudesCount, user } = panelState;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
 
@@ -73,7 +74,8 @@ export function ConductorShell({ children }: ConductorShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-[#1a1a1a]">
+    <ConductorPanelProvider value={panelState}>
+      <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-[#1a1a1a]">
 
       {/* ═══════════ SIDEBAR DESKTOP — ESTILO PREMIUM DARK ═══════════ */}
       <aside className="hidden lg:flex w-72 flex-col bg-[#0b0f1a] text-white fixed h-full shadow-[10px_0_30px_rgba(0,0,0,0.1)] z-50">
@@ -277,6 +279,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
           `,
         }}
       />
-    </div>
+      </div>
+    </ConductorPanelProvider>
   );
 }

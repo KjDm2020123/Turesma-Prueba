@@ -429,7 +429,7 @@ export default function ClienteHistorialPage() {
                   <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tu calificación:</span>
                     <StarRating value={r.calificacion} readOnly />
-                    {r.comentario_calificacion && <span className="text-xs text-slate-500 italic">"{r.comentario_calificacion}"</span>}
+                    {r.comentario_calificacion && <span className="text-xs text-slate-500 italic">&quot;{r.comentario_calificacion}&quot;</span>}
                   </div>
                 ) : puedeCalificar ? (
                   rateId === r.id ? (
