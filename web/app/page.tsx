@@ -62,6 +62,31 @@ export default function RootPage() {
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
   const flotaRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    const elements = document.querySelectorAll<HTMLElement>('[data-reveal]');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (reduceMotion) {
+      elements.forEach((element) => element.classList.add('is-visible'));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
   // Desplaza el carrusel de flota una "tarjeta" a izq/der. Si ya está al final,
   // vuelve al inicio (loop infinito) para que el auto-avance no se detenga.
   const scrollFlota = (dir: "left" | "right") => {
@@ -241,7 +266,7 @@ export default function RootPage() {
 
       {/* SECCIÓN NOSOTROS */}
       <section id="nosotros" className="relative py-24 bg-white border-b border-gray-50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
           <div className="text-center mb-16">
             <h2 className="text-4xl font-black italic tracking-tighter text-[#E31E24] md:text-6xl uppercase">Sobre Nosotros</h2>
             <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
@@ -269,7 +294,7 @@ export default function RootPage() {
 
       {/* SECCIÓN FLOTA */}
       <section id="flota" className="bg-[#fcfcfc] py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
           <div className="mb-16 text-center">
             <h2 className="text-4xl font-black italic tracking-tighter text-[#E31E24] md:text-6xl uppercase">Nuestra Flota</h2>
             <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
@@ -420,7 +445,7 @@ export default function RootPage() {
 
       {/* SECCIÓN SERVICIOS */}
       <section id="servicios" className="py-24 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
            <div className="mb-16 text-center">
              <h2 className="text-4xl font-black italic tracking-tighter text-[#E31E24] md:text-6xl uppercase">Servicios Premium</h2>
              <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
@@ -450,7 +475,7 @@ export default function RootPage() {
           <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-yellow-400/10 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center min-h-[500px] text-center">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center min-h-[500px] text-center" data-reveal>
           {/* Frase principal con comillas pegadas al texto */}
           <div className="max-w-4xl mb-8">
             <p className="text-2xl md:text-4xl font-black italic text-white leading-tight tracking-tight drop-shadow-lg">
@@ -476,7 +501,7 @@ export default function RootPage() {
 
       {/* SECCIÓN INFORMATIVA (REEMPLAZO DE FORMULARIO) */}
       <section id="contacto" className="py-24 bg-[#fcfcfc]">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
           <div className="overflow-hidden rounded-[3rem] bg-gray-900 shadow-2xl lg:flex min-h-[500px]">
             
             {/* LADO IZQUIERDO: MARCA */}
@@ -549,7 +574,7 @@ export default function RootPage() {
 
       {/* SECCIÓN FAQ */}
       <section className="bg-[#f1f3f6] py-12 md:py-14">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
           <div className="mb-6 text-center md:mb-8">
             <h2 className="text-2xl font-black italic uppercase tracking-tighter text-[#E31E24] md:text-4xl">
               Preguntas Frecuentes
