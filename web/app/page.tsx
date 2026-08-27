@@ -56,7 +56,7 @@ type PublicDataCache = {
 export default function RootPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [vehiculos, setVehiculos] = useState<VehiculoPublico[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
