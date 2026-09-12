@@ -16,7 +16,11 @@ import {
   Phone,
   Mail,
   MapPin,
-  ShieldCheck
+  ShieldCheck,
+  CalendarRange,
+  Route,
+  UsersRound,
+  SlidersHorizontal
 } from "lucide-react";
 
 type VehiculoPublico = {
@@ -201,6 +205,7 @@ export default function RootPage() {
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Flota</a>
             <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Servicios</a>
+            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Soluciones</a>
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Contacto</a>
           </div>
 
@@ -224,6 +229,7 @@ export default function RootPage() {
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Flota</a>
             <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Servicios</a>
+            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Soluciones</a>
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Contacto</a>
             <div className="pt-4 flex flex-col gap-3">
               <Link href="/login" className="text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
@@ -467,6 +473,64 @@ export default function RootPage() {
         </div>
       </section>
 
+      {/* SECCIÓN SOLUCIONES A LA MEDIDA */}
+      <section id="requerimiento" className="relative overflow-hidden bg-[#f7f8fa] py-24">
+        <div className="absolute -right-32 top-16 h-80 w-80 rounded-full bg-yellow-400/10 blur-3xl" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
+          <div className="mx-auto mb-14 max-w-3xl text-center">
+            <p className="mb-3 text-xs font-black uppercase tracking-[0.3em] text-[#E31E24]">Más que una flota</p>
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 md:text-6xl">
+              Cuéntanos qué necesitas.
+            </h2>
+            <div className="mx-auto mt-3 h-1.5 w-32 rounded-full bg-yellow-400" />
+            <p className="mt-6 text-lg font-medium leading-relaxed text-gray-600 md:text-xl">
+              Diseñamos la solución de transporte de acuerdo con tu ruta, tus tiempos y el tamaño de tu operación.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              { title: "Traslado individual", text: "Un viaje cómodo y puntual para una persona o familia.", icon: MapPin, color: "text-[#E31E24]", bg: "bg-red-50" },
+              { title: "Gira turística", text: "Itinerarios personalizados para descubrir Ecuador.", icon: Route, color: "text-blue-600", bg: "bg-blue-50" },
+              { title: "Transporte empresarial", text: "Movilización coordinada para equipos y colaboradores.", icon: BriefcaseBusiness, color: "text-green-600", bg: "bg-green-50" },
+              { title: "Logística de eventos", text: "Varios vehículos, horarios y puntos bajo una sola coordinación.", icon: UsersRound, color: "text-orange-500", bg: "bg-orange-50" },
+              { title: "Requerimiento especial", text: "Cuéntanos el desafío y buscamos la alternativa adecuada.", icon: SlidersHorizontal, color: "text-purple-600", bg: "bg-purple-50" },
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <article key={item.title} className="group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                  <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-2xl ${item.bg} transition-transform group-hover:rotate-6`}>
+                    <Icon size={23} className={item.color} />
+                  </div>
+                  <h3 className="text-lg font-black uppercase leading-tight tracking-tight text-gray-900">{item.title}</h3>
+                  <p className="mt-3 text-sm font-medium leading-relaxed text-gray-500">{item.text}</p>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="mt-10 grid gap-4 rounded-[2rem] bg-[#0b0f1a] p-6 text-white shadow-2xl md:grid-cols-[1fr_auto] md:items-center md:p-8">
+            <div>
+              <h3 className="flex items-center gap-2 text-xl font-black uppercase italic tracking-tight md:text-2xl">
+                <CalendarRange className="text-yellow-400" size={24} />
+                Tú defines el requerimiento. Nosotros lo coordinamos.
+              </h3>
+              <p className="mt-3 max-w-3xl text-sm font-medium leading-relaxed text-gray-300 md:text-base">
+                Adaptamos vehículo, horarios, ruta y operación para ofrecerte una propuesta clara, segura y conveniente.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row md:flex-col lg:flex-row">
+              <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white hover:text-[#E31E24]">
+                Cotizar en línea <ChevronRight size={16} />
+              </Link>
+              <a href={`https://wa.me/${TELEFONO_EMPRESA}?text=${encodeURIComponent("Hola TURESMA, tengo un requerimiento de transporte personalizado.")}`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10">
+                Cuéntanos tu requerimiento
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* SECCIÓN MISIÓN - FRASE PRINCIPAL */}
       <section className="relative py-32 overflow-hidden bg-gradient-to-r from-[#0a0a1a] via-[#0f1a2e] to-[#0a0a1a]">
         {/* Efectos de fondo */}
@@ -689,6 +753,7 @@ export default function RootPage() {
               <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Nosotros</a>
               <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Flota</a>
               <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Servicios</a>
+              <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Soluciones</a>
               <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Contacto</a>
             </div>
           </div>
