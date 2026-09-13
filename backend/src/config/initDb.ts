@@ -225,9 +225,18 @@ const initDatabase = async () => {
   `);
 
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS vehiculos_placa_unique_idx
+    ALTER TABLE vehiculos
+    DROP CONSTRAINT IF EXISTS vehiculos_placa_key;
+  `);
+
+  await pool.query(`
+    DROP INDEX IF EXISTS vehiculos_placa_unique_idx;
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS vehiculos_placa_active_unique_idx
     ON vehiculos (placa)
-    WHERE placa IS NOT NULL;
+    WHERE placa IS NOT NULL AND activo = true;
   `);
 
   await pool.query(`
