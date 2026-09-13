@@ -191,6 +191,7 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS dias_servicio INT[] DEFAULT ARRAY[0,1,2,3,4,5,6],
     ADD COLUMN IF NOT EXISTS estado VARCHAR(50) DEFAULT 'disponible',
     ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS orden INTEGER,
     ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
   `);
 
@@ -205,6 +206,18 @@ const initDatabase = async () => {
     SET dias_servicio = ARRAY[0,1,2,3,4,5,6]
     WHERE dias_servicio IS NULL
       OR array_length(dias_servicio, 1) IS NULL;
+  `);
+
+  await pool.query(`
+    WITH orden_inicial AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY id DESC) AS nuevo_orden
+      FROM vehiculos
+      WHERE orden IS NULL
+    )
+    UPDATE vehiculos v
+    SET orden = orden_inicial.nuevo_orden
+    FROM orden_inicial
+    WHERE v.id = orden_inicial.id;
   `);
 
   await pool.query(`

@@ -102,6 +102,7 @@ const listarVehiculos = async (_req, res) => {
          COALESCE(v.dias_servicio, ARRAY[0,1,2,3,4,5,6]) AS dias_servicio,
          v.estado,
          v.activo,
+         v.orden,
          v.fecha_creacion,
          u.id       AS conductor_id,
          u.nombre   AS conductor_nombre,
@@ -118,7 +119,7 @@ const listarVehiculos = async (_req, res) => {
          WHERE r.vehiculo_id = v.id
            AND r.estado NOT IN ('cancelada')
        ) rv ON true
-       ORDER BY v.id DESC`
+      ORDER BY v.orden ASC NULLS LAST, v.id DESC`
     );
 
     return res.status(200).json(result.rows);
@@ -140,8 +141,8 @@ const registrarVehiculo = async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO vehiculos (placa, usuario_id, tipo, modelo, capacidad, color, imagen_url, descripcion, dias_servicio, estado, activo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+      `INSERT INTO vehiculos (placa, orden, usuario_id, tipo, modelo, capacidad, color, imagen_url, descripcion, dias_servicio, estado, activo)
+       VALUES ($1, COALESCE((SELECT MAX(orden) + 1 FROM vehiculos WHERE activo = true), 1), $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
        RETURNING *`,
       [
         placa.toUpperCase(),
@@ -330,6 +331,36 @@ const eliminarVehiculo = async (req, res) => {
     return res.status(200).json({ message: "Vehículo eliminado correctamente" });
   } catch (error) {
     console.error("Error eliminando vehículo:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const reordenarVehiculos = async (req, res) => {
+  const vehiculoIds = Array.isArray(req.body?.vehiculoIds) ? req.body.vehiculoIds : null;
+  const ids = vehiculoIds?.map(parsePositiveInt);
+
+  if (!ids || ids.length === 0 || ids.some((id) => !id) || new Set(ids).size !== ids.length) {
+    return res.status(400).json({ error: "Debes enviar una lista válida de vehículos" });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE vehiculos v
+       SET orden = orden_data.orden
+       FROM unnest($1::int[], $2::int[]) AS orden_data(id, orden)
+       WHERE v.id = orden_data.id
+         AND v.activo = true
+       RETURNING v.id`,
+      [ids, ids.map((_, index) => index + 1)]
+    );
+
+    if (result.rowCount !== ids.length) {
+      return res.status(400).json({ error: "La lista contiene vehículos inválidos" });
+    }
+
+    return res.status(200).json({ message: "Orden de vehículos actualizado" });
+  } catch (error) {
+    console.error("Error reordenando vehículos:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 };
@@ -868,6 +899,7 @@ module.exports = {
   registrarVehiculo,
   editarVehiculo,
   eliminarVehiculo,
+  reordenarVehiculos,
   verVehiculosDisponibles,
   listarConductores,
   registrarConductor,

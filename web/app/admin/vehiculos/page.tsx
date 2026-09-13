@@ -9,7 +9,7 @@ import { useConfirm } from "../../../components/confirm-dialog";
 import {
   Bus, Plus, Edit3, Trash2, RefreshCw, X, Search,
   CheckCircle, AlertCircle, Clock, Wrench, Car,
-  Users, Loader2, ChevronDown, UploadCloud, Download
+  Users, Loader2, ChevronDown, UploadCloud, Download, GripVertical
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -70,6 +70,7 @@ export default function AdminVehiculosPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [arrastrandoId, setArrastrandoId] = useState<number | null>(null);
   const [cropPosition, setCropPosition] = useState({ x: 0, y: 0 });
   const [cropZoom, setCropZoom] = useState(1);
   const [draggingCrop, setDraggingCrop] = useState(false);
@@ -110,6 +111,7 @@ export default function AdminVehiculosPage() {
     const matchEstado = filtroEstado === "todos" || v.estado === filtroEstado;
     return matchSearch && matchEstado && v.activo;
   });
+  const canReorder = !search && filtroEstado === "todos";
 
   const openCreate = () => {
     setEditingId(null);
@@ -233,6 +235,41 @@ export default function AdminVehiculosPage() {
     if (!(await confirmar({ title: "Desactivar vehículo", message: `¿Desactivar el vehículo ${v.placa} — ${v.modelo}?`, confirmText: "Desactivar", tone: "danger" }))) return;
     const res = await fetch(`${API_URL}/api/admin/vehiculos/${v.id}`, { method: "DELETE", headers: getAuthHeaders() });
     if (res.ok) { setMsg("Vehículo desactivado"); load(); }
+  };
+
+  const handleDrop = async (targetId: number) => {
+    if (!canReorder || arrastrandoId === null || arrastrandoId === targetId) return;
+
+    const next = [...filtered];
+    const sourceIndex = next.findIndex((v) => v.id === arrastrandoId);
+    const targetIndex = next.findIndex((v) => v.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const [moved] = next.splice(sourceIndex, 1);
+    next.splice(targetIndex, 0, moved);
+    setVehiculos((current) => {
+      const activeIds = new Set(next.map((v) => v.id));
+      const reordered = new Map(next.map((v, index) => [v.id, index]));
+      return [...current].sort((a, b) => {
+        if (activeIds.has(a.id) && activeIds.has(b.id)) {
+          return reordered.get(a.id)! - reordered.get(b.id)!;
+        }
+        return activeIds.has(a.id) ? -1 : activeIds.has(b.id) ? 1 : 0;
+      });
+    });
+    setArrastrandoId(null);
+
+    const res = await fetch(`${API_URL}/api/admin/vehiculos/orden`, {
+      method: "PATCH",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ vehiculoIds: next.map((v) => v.id) }),
+    });
+    if (!res.ok) {
+      setErr("No se pudo guardar el orden de los vehículos");
+      load();
+      return;
+    }
+    setMsg("Orden de vehículos actualizado");
   };
 
   const toggleDia = (d: number) => {
@@ -359,6 +396,7 @@ export default function AdminVehiculosPage() {
             <table className="min-w-[920px] w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/60 border-b border-slate-100">
+                  <th className="w-10 px-2 py-4" aria-label="Orden" />
                   {["Vehículo", "Tipo / Capacidad", "Conductor", "Días servicio", "Estado", "Acciones"].map(h => (
                     <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>
                   ))}
@@ -366,7 +404,18 @@ export default function AdminVehiculosPage() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.map((v) => (
-                  <tr key={v.id} className="hover:bg-slate-50/80 transition-colors group">
+                  <tr
+                    key={v.id}
+                    draggable={canReorder}
+                    onDragStart={() => canReorder && setArrastrandoId(v.id)}
+                    onDragOver={(event) => canReorder && event.preventDefault()}
+                    onDrop={() => handleDrop(v.id)}
+                    onDragEnd={() => setArrastrandoId(null)}
+                    className={`hover:bg-slate-50/80 transition-colors group ${arrastrandoId === v.id ? "opacity-40" : ""}`}
+                  >
+                    <td className="w-10 px-2 py-4">
+                      <GripVertical size={16} className={canReorder ? "cursor-grab text-slate-300 active:cursor-grabbing" : "text-transparent"} />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {v.imagen_url ? (

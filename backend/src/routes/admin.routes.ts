@@ -17,6 +17,7 @@ const {
   registrarVehiculo,
   editarVehiculo,
   eliminarVehiculo,
+  reordenarVehiculos,
   verVehiculosDisponibles,
   listarConductores,
   registrarConductor,
@@ -144,6 +145,7 @@ router.patch("/reservas/:id/estado-viaje", actualizarEstadoViaje);
 
 router.get("/vehiculos", listarVehiculos);
 router.post("/vehiculos", registrarVehiculo);
+router.patch("/vehiculos/orden", reordenarVehiculos);
 router.put("/vehiculos/:id", editarVehiculo);
 router.delete("/vehiculos/:id", eliminarVehiculo);
 router.get("/vehiculos/disponibles", verVehiculosDisponibles);

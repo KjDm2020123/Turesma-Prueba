@@ -91,6 +91,7 @@ const listarVehiculosCliente = async (req, res) => {
          v.descripcion,
          COALESCE(v.dias_servicio, ARRAY[0,1,2,3,4,5,6]) AS dias_servicio,
          v.estado,
+         v.orden,
          u.id AS conductor_id,
          u.nombre AS conductor_nombre,
          u.telefono AS conductor_telefono,
@@ -122,7 +123,7 @@ const listarVehiculosCliente = async (req, res) => {
        LEFT JOIN usuarios u
          ON u.id = v.usuario_id
        WHERE v.activo = true
-       ORDER BY v.id DESC`,
+      ORDER BY v.orden ASC NULLS LAST, v.id DESC`,
       [fecha || null]
     );
 
