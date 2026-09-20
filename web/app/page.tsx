@@ -20,7 +20,8 @@ import {
   CalendarRange,
   Route,
   UsersRound,
-  SlidersHorizontal
+  SlidersHorizontal,
+  PlayCircle
 } from "lucide-react";
 
 type VehiculoPublico = {
@@ -491,6 +492,31 @@ export default function RootPage() {
           </div>
         </section>
       )}
+
+      {/* SECCIÓN VIDEOS */}
+      <section id="videos" className="relative overflow-hidden bg-[#0b0f1a] py-24 text-white">
+        <div className="absolute -left-24 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-[#E31E24]/20 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-64 w-64 rounded-full bg-yellow-400/10 blur-3xl" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
+          <div className="mb-14 text-center">
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white md:text-6xl">TURESMA en movimiento</h2>
+            <div className="mx-auto mt-2 h-1.5 w-32 rounded-full bg-yellow-400" />
+            <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-gray-300">
+              Conoce nuestros vehículos, servicios y experiencias en carretera.
+            </p>
+          </div>
+
+          <div className="mx-auto flex min-h-80 max-w-4xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-12 text-center shadow-2xl">
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-400 text-[#0b0f1a] shadow-lg shadow-yellow-400/20">
+              <PlayCircle size={42} strokeWidth={1.8} />
+            </div>
+            <h3 className="text-2xl font-black uppercase italic tracking-tight text-white">Próximamente en movimiento</h3>
+            <p className="mt-3 max-w-xl text-base font-medium leading-relaxed text-gray-400">
+              Aquí podrás descubrir los videos de nuestros recorridos, vehículos y servicios.
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* SECCIÓN SERVICIOS */}
       <section id="servicios" className="py-24 bg-white">
