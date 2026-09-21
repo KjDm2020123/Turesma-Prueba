@@ -20,7 +20,8 @@ import {
   CalendarRange,
   Route,
   UsersRound,
-  SlidersHorizontal
+  SlidersHorizontal,
+  PlayCircle
 } from "lucide-react";
 
 type VehiculoPublico = {
@@ -298,6 +299,49 @@ export default function RootPage() {
         </div>
       </section>
 
+      {/* SECCIÓN MISIÓN Y VISIÓN */}
+      <section className="relative overflow-hidden bg-[#0b0f1a] py-24 text-white">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute -left-24 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-[#E31E24] blur-3xl" />
+          <div className="absolute -right-24 bottom-0 h-64 w-64 rounded-full bg-yellow-400 blur-3xl" />
+        </div>
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
+          <div className="mb-14 text-center">
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white md:text-6xl">Nuestra esencia</h2>
+            <div className="mx-auto mt-2 h-1.5 w-32 rounded-full bg-yellow-400" />
+            <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-gray-300">
+              El compromiso que guía cada traslado y cada decisión de TURESMA.
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 md:gap-0">
+            <article className="border-b border-white/10 pb-8 text-center md:border-b-0 md:border-r md:pr-12 md:pb-0">
+              <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E31E24] text-white shadow-lg shadow-red-950/30">
+                <Route size={28} />
+              </div>
+              <h3 className="text-2xl font-black uppercase tracking-tight text-yellow-400">Misión</h3>
+              <p className="mx-auto mt-4 max-w-2xl text-justify text-base font-medium leading-relaxed text-gray-300">
+                Brindar servicios de transporte turístico, ejecutivo y logístico seguros, cómodos y confiables, apoyados en un equipo responsable, tecnología y altos estándares de calidad. Trabajamos para ofrecer traslados eficientes y una experiencia satisfactoria a nuestros clientes, tanto a nivel local como nacional.
+              </p>
+            </article>
+
+            <article className="pt-8 text-center md:pl-12 md:pt-0">
+              <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-400 text-[#0b0f1a] shadow-lg shadow-yellow-950/20">
+                <ShieldCheck size={28} />
+              </div>
+              <h3 className="text-2xl font-black uppercase tracking-tight text-yellow-400">Visión</h3>
+              <p className="mx-auto mt-4 max-w-2xl text-justify text-base font-medium leading-relaxed text-gray-300">
+                Ser una empresa referente a nivel nacional en transporte turístico, ejecutivo y logístico, reconocida por la excelencia de nuestro servicio, la innovación, la seguridad y el compromiso permanente con nuestros clientes.
+              </p>
+            </article>
+          </div>
+
+          <p className="mt-14 text-center text-lg font-black uppercase italic tracking-[0.14em] text-white md:text-xl">
+            Seguridad, confianza y excelencia en cada camino.
+          </p>
+        </div>
+      </section>
+
       {/* SECCIÓN FLOTA */}
       <section id="flota" className="bg-[#fcfcfc] py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
@@ -448,6 +492,31 @@ export default function RootPage() {
           </div>
         </section>
       )}
+
+      {/* SECCIÓN VIDEOS */}
+      <section id="videos" className="relative overflow-hidden bg-[#0b0f1a] py-24 text-white">
+        <div className="absolute -left-24 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-[#E31E24]/20 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-64 w-64 rounded-full bg-yellow-400/10 blur-3xl" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
+          <div className="mb-14 text-center">
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white md:text-6xl">TURESMA en movimiento</h2>
+            <div className="mx-auto mt-2 h-1.5 w-32 rounded-full bg-yellow-400" />
+            <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-gray-300">
+              Conoce nuestros vehículos, servicios y experiencias en carretera.
+            </p>
+          </div>
+
+          <div className="mx-auto flex min-h-80 max-w-4xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-12 text-center shadow-2xl">
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-400 text-[#0b0f1a] shadow-lg shadow-yellow-400/20">
+              <PlayCircle size={42} strokeWidth={1.8} />
+            </div>
+            <h3 className="text-2xl font-black uppercase italic tracking-tight text-white">Próximamente en movimiento</h3>
+            <p className="mt-3 max-w-xl text-base font-medium leading-relaxed text-gray-400">
+              Aquí podrás descubrir los videos de nuestros recorridos, vehículos y servicios.
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* SECCIÓN SERVICIOS */}
       <section id="servicios" className="py-24 bg-white">
