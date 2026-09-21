@@ -64,7 +64,7 @@ const initDatabase = async () => {
       activo BOOLEAN DEFAULT true,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-  `); 
+  `);
 
   await pool.query(`
     ALTER TABLE usuarios
@@ -74,8 +74,6 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS imagen_url VARCHAR(600);
   `);
 
-  // Verificación de identidad del cliente (cédula). estado_verificacion:
-  // no_verificado → pendiente (subió cédula) → verificado / rechazado.
   await pool.query(`
     ALTER TABLE usuarios
     ADD COLUMN IF NOT EXISTS cedula VARCHAR(20),
@@ -165,6 +163,39 @@ const initDatabase = async () => {
       activo BOOLEAN DEFAULT true,
       fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE tours
+      ADD COLUMN IF NOT EXISTS origen VARCHAR(300),
+      ADD COLUMN IF NOT EXISTS destino VARCHAR(300),
+      ADD COLUMN IF NOT EXISTS fecha_servicio DATE,
+      ADD COLUMN IF NOT EXISTS hora_salida VARCHAR(10),
+      ADD COLUMN IF NOT EXISTS cupos_totales INT,
+      ADD COLUMN IF NOT EXISTS tipo_servicio VARCHAR(80) DEFAULT 'viaje',
+      ADD COLUMN IF NOT EXISTS imagenes JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS vehiculo_id INT REFERENCES vehiculos(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS creado_por INT REFERENCES usuarios(id) ON DELETE SET NULL;
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS tours_publicados_idx
+    ON tours (activo, fecha_servicio, origen, destino);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_imagenes (
+      id SERIAL PRIMARY KEY,
+      tour_id INT NOT NULL REFERENCES tours(id) ON DELETE CASCADE,
+      imagen_url TEXT NOT NULL,
+      orden INT NOT NULL DEFAULT 0,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS tour_imagenes_tour_idx
+    ON tour_imagenes (tour_id, orden, creado_en);
   `);
 
   await pool.query(`
@@ -293,6 +324,66 @@ const initDatabase = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS operaciones (
+      id SERIAL PRIMARY KEY,
+      reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL,
+      tipo_servicio VARCHAR(80) NOT NULL DEFAULT 'viaje',
+      fecha_programada DATE NOT NULL,
+      hora_inicio TIME,
+      hora_fin TIME,
+      origen VARCHAR(300) NOT NULL,
+      destino VARCHAR(300) NOT NULL,
+      pasajeros INT NOT NULL DEFAULT 1 CHECK (pasajeros > 0),
+      vehiculo_id INT REFERENCES vehiculos(id) ON DELETE SET NULL,
+      conductor_id INT REFERENCES conductores(id) ON DELETE SET NULL,
+      estado VARCHAR(30) NOT NULL DEFAULT 'programada',
+      kilometros_estimados NUMERIC(10, 2),
+      kilometros_reales NUMERIC(10, 2),
+      hora_inicio_real TIMESTAMP,
+      hora_fin_real TIMESTAMP,
+      observaciones TEXT,
+      creado_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT operaciones_horas_validas CHECK (hora_fin IS NULL OR hora_inicio IS NULL OR hora_fin > hora_inicio),
+      CONSTRAINT operaciones_estado_valido CHECK (estado IN ('programada', 'asignada', 'en_curso', 'completada', 'cancelada', 'incidencia'))
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS operaciones_fecha_estado_idx
+    ON operaciones (fecha_programada, estado);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS operaciones_vehiculo_fecha_idx
+    ON operaciones (vehiculo_id, fecha_programada, hora_inicio, hora_fin);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS operaciones_conductor_fecha_idx
+    ON operaciones (conductor_id, fecha_programada, hora_inicio, hora_fin);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS operacion_historial (
+      id SERIAL PRIMARY KEY,
+      operacion_id INT NOT NULL REFERENCES operaciones(id) ON DELETE CASCADE,
+      usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      accion VARCHAR(50) NOT NULL,
+      estado_anterior VARCHAR(30),
+      estado_nuevo VARCHAR(30),
+      detalle JSONB,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS operacion_historial_operacion_idx
+    ON operacion_historial (operacion_id, creado_en DESC);
+  `);
+
+  await pool.query(`
     ALTER TABLE reservas
     ADD COLUMN IF NOT EXISTS usuario_id INT REFERENCES usuarios(id) ON DELETE CASCADE,
     ADD COLUMN IF NOT EXISTS tour_id INT REFERENCES tours(id) ON DELETE CASCADE,
@@ -305,7 +396,8 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS vehiculo_id INT REFERENCES vehiculos(id),
     ADD COLUMN IF NOT EXISTS conductor_id INT REFERENCES usuarios(id),
     ADD COLUMN IF NOT EXISTS origen VARCHAR(300),
-    ADD COLUMN IF NOT EXISTS destino VARCHAR(300);
+    ADD COLUMN IF NOT EXISTS destino VARCHAR(300),
+    ADD COLUMN IF NOT EXISTS hora_salida VARCHAR(10);
   `);
 
   await pool.query(`
@@ -539,6 +631,7 @@ const initDatabase = async () => {
       monto DECIMAL(10, 2) NOT NULL,
       metodo VARCHAR(30) NOT NULL DEFAULT 'transferencia',
       comprobante_url TEXT,
+      proveedor_id VARCHAR(120),
       estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
       notas_admin TEXT,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -555,6 +648,11 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS monto_pagado DECIMAL(10, 2) DEFAULT 0,
     ADD COLUMN IF NOT EXISTS estado_pago VARCHAR(20) DEFAULT 'pendiente',
     ADD COLUMN IF NOT EXISTS link_pago VARCHAR(500);
+  `);
+
+  await pool.query(`
+    ALTER TABLE pagos_reserva
+    ADD COLUMN IF NOT EXISTS proveedor_id VARCHAR(120);
   `);
 
   // ============ CAMPOS ADICIONALES PARA CONDUCTORES ============
@@ -672,6 +770,96 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS destino_lng DECIMAL(10,7),
     ADD COLUMN IF NOT EXISTS hora_salida VARCHAR(10),
     ADD COLUMN IF NOT EXISTS fecha_fin DATE;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS configuracion_tarifas (
+      id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      tarifa_diaria DECIMAL(10,2) NOT NULL DEFAULT 80,
+      precio_km DECIMAL(10,2) NOT NULL DEFAULT 0.80,
+      tarifa_viaje DECIMAL(10,2) NOT NULL DEFAULT 15,
+      recargo_peajes DECIMAL(10,2) NOT NULL DEFAULT 0,
+      minimo_km DECIMAL(10,2) NOT NULL DEFAULT 0,
+      tarifa_van DECIMAL(10,2) NOT NULL DEFAULT 80,
+      tarifa_bus DECIMAL(10,2) NOT NULL DEFAULT 120,
+      tarifa_suv DECIMAL(10,2) NOT NULL DEFAULT 110,
+      tarifa_minibus DECIMAL(10,2) NOT NULL DEFAULT 95,
+      tarifa_sedan DECIMAL(10,2) NOT NULL DEFAULT 70,
+      traslado_van DECIMAL(10,2) NOT NULL DEFAULT 35,
+      traslado_bus DECIMAL(10,2) NOT NULL DEFAULT 55,
+      traslado_suv DECIMAL(10,2) NOT NULL DEFAULT 50,
+      traslado_minibus DECIMAL(10,2) NOT NULL DEFAULT 42,
+      traslado_sedan DECIMAL(10,2) NOT NULL DEFAULT 30,
+      hora_van DECIMAL(10,2) NOT NULL DEFAULT 15,
+      hora_bus DECIMAL(10,2) NOT NULL DEFAULT 25,
+      hora_suv DECIMAL(10,2) NOT NULL DEFAULT 22,
+      hora_minibus DECIMAL(10,2) NOT NULL DEFAULT 19,
+      hora_sedan DECIMAL(10,2) NOT NULL DEFAULT 14,
+      medio_dia_van DECIMAL(10,2) NOT NULL DEFAULT 55,
+      medio_dia_bus DECIMAL(10,2) NOT NULL DEFAULT 85,
+      medio_dia_suv DECIMAL(10,2) NOT NULL DEFAULT 78,
+      medio_dia_minibus DECIMAL(10,2) NOT NULL DEFAULT 68,
+      medio_dia_sedan DECIMAL(10,2) NOT NULL DEFAULT 50,
+      oferta_activa BOOLEAN NOT NULL DEFAULT false,
+      oferta_dia VARCHAR(30) DEFAULT 'lunes',
+      descuento_oferta_pct DECIMAL(5,2) NOT NULL DEFAULT 0,
+      oferta_descripcion TEXT,
+      actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE configuracion_tarifas
+      ADD COLUMN IF NOT EXISTS tarifa_van DECIMAL(10,2) NOT NULL DEFAULT 80,
+      ADD COLUMN IF NOT EXISTS tarifa_bus DECIMAL(10,2) NOT NULL DEFAULT 120,
+      ADD COLUMN IF NOT EXISTS tarifa_suv DECIMAL(10,2) NOT NULL DEFAULT 110,
+      ADD COLUMN IF NOT EXISTS tarifa_minibus DECIMAL(10,2) NOT NULL DEFAULT 95,
+      ADD COLUMN IF NOT EXISTS tarifa_sedan DECIMAL(10,2) NOT NULL DEFAULT 70,
+      ADD COLUMN IF NOT EXISTS traslado_van DECIMAL(10,2) NOT NULL DEFAULT 35,
+      ADD COLUMN IF NOT EXISTS traslado_bus DECIMAL(10,2) NOT NULL DEFAULT 55,
+      ADD COLUMN IF NOT EXISTS traslado_suv DECIMAL(10,2) NOT NULL DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS traslado_minibus DECIMAL(10,2) NOT NULL DEFAULT 42,
+      ADD COLUMN IF NOT EXISTS traslado_sedan DECIMAL(10,2) NOT NULL DEFAULT 30,
+      ADD COLUMN IF NOT EXISTS hora_van DECIMAL(10,2) NOT NULL DEFAULT 15,
+      ADD COLUMN IF NOT EXISTS hora_bus DECIMAL(10,2) NOT NULL DEFAULT 25,
+      ADD COLUMN IF NOT EXISTS hora_suv DECIMAL(10,2) NOT NULL DEFAULT 22,
+      ADD COLUMN IF NOT EXISTS hora_minibus DECIMAL(10,2) NOT NULL DEFAULT 19,
+      ADD COLUMN IF NOT EXISTS hora_sedan DECIMAL(10,2) NOT NULL DEFAULT 14,
+      ADD COLUMN IF NOT EXISTS medio_dia_van DECIMAL(10,2) NOT NULL DEFAULT 55,
+      ADD COLUMN IF NOT EXISTS medio_dia_bus DECIMAL(10,2) NOT NULL DEFAULT 85,
+      ADD COLUMN IF NOT EXISTS medio_dia_suv DECIMAL(10,2) NOT NULL DEFAULT 78,
+      ADD COLUMN IF NOT EXISTS medio_dia_minibus DECIMAL(10,2) NOT NULL DEFAULT 68,
+      ADD COLUMN IF NOT EXISTS medio_dia_sedan DECIMAL(10,2) NOT NULL DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS oferta_activa BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS oferta_dia VARCHAR(30) DEFAULT 'lunes',
+      ADD COLUMN IF NOT EXISTS descuento_oferta_pct DECIMAL(5,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS oferta_descripcion TEXT;
+  `);
+
+  await pool.query(`
+    INSERT INTO configuracion_tarifas (id)
+    VALUES (1)
+    ON CONFLICT (id) DO NOTHING;
+  `);
+
+  await pool.query(`
+    UPDATE configuracion_tarifas
+    SET tarifa_van = COALESCE(tarifa_van, tarifa_diaria),
+        tarifa_bus = COALESCE(tarifa_bus, tarifa_diaria + 40),
+        tarifa_suv = COALESCE(tarifa_suv, tarifa_diaria + 30),
+        tarifa_minibus = COALESCE(tarifa_minibus, tarifa_diaria + 15),
+        tarifa_sedan = COALESCE(tarifa_sedan, tarifa_diaria - 10),
+        oferta_activa = COALESCE(oferta_activa, false),
+        oferta_dia = COALESCE(oferta_dia, 'lunes'),
+        descuento_oferta_pct = COALESCE(descuento_oferta_pct, 0),
+        oferta_descripcion = COALESCE(oferta_descripcion, '')
+    WHERE id = 1;
+  `);
+  await pool.query(`
+    ALTER TABLE cotizaciones
+      ADD COLUMN IF NOT EXISTS num_viajes INT DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS distancia_km DECIMAL(10,2),
+      ADD COLUMN IF NOT EXISTS precio_desglose JSONB;
   `);
 
   await pool.query(`

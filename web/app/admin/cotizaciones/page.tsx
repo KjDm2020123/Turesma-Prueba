@@ -8,7 +8,7 @@ import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  FileText, RefreshCw, Check, X, Eye, Loader2,
+  FileText, Check, X, Eye, Loader2,
   MapPin, Users, Calendar, DollarSign, Clock, Car,
   MessageSquare, TrendingUp, CheckCircle2, XCircle,
   Printer, Send
@@ -27,6 +27,9 @@ type Cotizacion = {
   fecha_servicio: string;
   fecha_fin?: string | null;
   num_personas: number;
+  num_viajes?: number | null;
+  distancia_km?: number | null;
+  precio_desglose?: { daily_amount?: number; distance_amount?: number; trips_amount?: number; tolls_amount?: number; total?: number } | null;
   tipo_vehiculo?: string | null;
   notas?: string | null;
   estado: string;
@@ -263,7 +266,7 @@ function AdminCotizacionesContent() {
   const openModal = async (cot: Cotizacion, mode: "view" | "aprobar" | "rechazar" | "contraoferta") => {
     setSelected(cot);
     setModalMode(mode);
-    setPrecioFinal(cot.precio_final ? String(cot.precio_final) : cot.precio_propuesto ? String(cot.precio_propuesto) : cot.valor_ofrecido ? String(cot.valor_ofrecido) : "");
+    setPrecioFinal(cot.precio_final ? String(cot.precio_final) : cot.precio_propuesto ? String(cot.precio_propuesto) : cot.precio_estimado ? String(cot.precio_estimado) : cot.valor_ofrecido ? String(cot.valor_ofrecido) : "");
     setRespuesta("");
     setNego([]);
     setMsg(""); setErr("");
@@ -623,6 +626,13 @@ function AdminCotizacionesContent() {
                     <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">Valor ofrecido por el cliente</p>
                     <p className="text-lg font-black text-amber-700">${Number(selected.valor_ofrecido).toFixed(2)}</p>
                   </div>
+                </div>
+              )}
+              {selected.precio_estimado != null && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
+                  <div className="flex items-center justify-between"><p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Estimación automática</p><p className="text-lg font-black text-emerald-700">${Number(selected.precio_estimado).toFixed(2)}</p></div>
+                  <p className="text-xs font-bold text-emerald-800">{selected.distancia_km != null ? `${Number(selected.distancia_km).toFixed(1)} km` : "Distancia no disponible"} · {selected.num_viajes || 1} viaje(s)</p>
+                  {selected.precio_desglose && <p className="text-[11px] text-emerald-700">Días: ${Number(selected.precio_desglose.daily_amount || 0).toFixed(2)} · Km: ${Number(selected.precio_desglose.distance_amount || 0).toFixed(2)} · Viajes: ${Number(selected.precio_desglose.trips_amount || 0).toFixed(2)}</p>}
                 </div>
               )}
 

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { clearStoredUser, getStoredUser } from "../../../lib/session";
 import { NotificationBell } from "../../../components/notification-bell";
+import { ClienteChatbot } from "../../../components/cliente-chatbot";
 import { useClienteBadges } from "./use-cliente-badges";
 
 type MenuItem = {
@@ -251,6 +252,8 @@ export function ClienteShell({ children }: ClienteShellProps) {
       {isMobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 bg-black/45 z-[60]" onClick={() => setIsMobileMenuOpen(false)} />
       )}
+
+      <ClienteChatbot />
 
       <style
         dangerouslySetInnerHTML={{

@@ -11,7 +11,6 @@ import { getAuthHeaders, getStoredUser, setStoredUser, handleUnauthorized } from
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type Perfil = { id: number; nombre: string; email: string; rol: string; telefono?: string | null; imagen_url?: string | null };
-
 const INPUT = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10 disabled:bg-slate-50 disabled:text-slate-400";
 
 export default function AdminConfiguracionPage() {
@@ -138,6 +137,7 @@ export default function AdminConfiguracionPage() {
       <button onClick={handleSave} disabled={saving} className="w-full py-3.5 bg-[#E31E24] hover:bg-[#b3141a] text-white font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60">
         {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}{saving ? "Guardando..." : "Guardar cambios"}
       </button>
+
     </div>
   );
 }

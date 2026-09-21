@@ -39,7 +39,9 @@ const allowedOrigins = corsOrigin
   .filter(Boolean);
 app.use(cors(allowedOrigins?.length ? { origin: allowedOrigins } : {}));
 
-app.use(express.json());
+// Las publicaciones pueden incluir varias URLs de imágenes. El archivo nunca
+// viaja dentro del JSON, pero el límite debe permitir galerías y metadatos.
+app.use(express.json({ limit: "10mb" }));
 app.use("/uploads", express.static(uploadsRoot));
 
 // Límite de peticiones a autenticación: frena ataques de fuerza bruta al login
@@ -58,6 +60,15 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/conductor", conductorRoutes);
 app.use("/api/comunicacion", comunicacionRoutes);
 app.use("/api/cotizaciones", cotizacionesRoutes);
+
+// Mantiene las respuestas de la API en JSON incluso cuando una petición
+// supera el límite, evitando que el frontend reciba una página HTML de error.
+app.use((error: any, _req: any, res: any, next: any) => {
+  if (error?.type === "entity.too.large") {
+    return res.status(413).json({ error: "La solicitud es demasiado grande. Reduce el tamaño o la cantidad de imágenes." });
+  }
+  return next(error);
+});
 
 app.get("/", (req, res) => {
   res.send("API TURESMA funcionando 🚀");

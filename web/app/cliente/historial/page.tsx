@@ -84,7 +84,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
 
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loadingPagos, setLoadingPagos] = useState(true);
-  const [metodo, setMetodo] = useState<"transferencia" | "link_pago">(reserva.link_pago ? "link_pago" : "transferencia");
+  const [metodo, setMetodo] = useState<"transferencia" | "link_pago" | "paypal">(reserva.link_pago ? "link_pago" : "transferencia");
   const [monto, setMonto] = useState(faltaParaMinimo > 0 ? faltaParaMinimo.toFixed(2) : minimo.toFixed(2));
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -106,8 +106,22 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
 
   const handleSubmit = async () => {
     setErr(""); setMsg("");
-    if (!file) { setErr("Adjunta una imagen del comprobante"); return; }
     if (!monto || Number(monto) <= 0) { setErr("Ingresa un monto válido"); return; }
+
+    if (metodo === "paypal") {
+      setSending(true);
+      try {
+        const res = await fetch(`${API}/api/usuarios/mis-reservas/${reserva.id}/pagos/paypal/orden`, {
+          method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ monto: Number(monto) }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "No se pudo iniciar el pago PayPal");
+        window.location.assign(data.approval_url);
+      } catch (e: any) { setErr(e.message); setSending(false); }
+      return;
+    }
+
+    if (!file) { setErr("Adjunta una imagen del comprobante"); return; }
 
     setUploading(true);
     try {
@@ -168,14 +182,23 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${metodo === "transferencia" ? "bg-[#E31E24] border-[#E31E24] text-white" : "border-slate-100 text-slate-500"}`}>
                 <Building2 size={14} /> Transferencia
               </button>
+              <button type="button" onClick={() => setMetodo("paypal")}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${metodo === "paypal" ? "bg-[#0070ba] border-[#0070ba] text-white" : "border-slate-100 text-slate-500"}`}>
+                <CreditCard size={14} /> PayPal / Tarjeta
+              </button>
               <button type="button" onClick={() => setMetodo("link_pago")} disabled={!reserva.link_pago}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${metodo === "link_pago" ? "bg-[#E31E24] border-[#E31E24] text-white" : "border-slate-100 text-slate-500"}`}>
+                className={`col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${metodo === "link_pago" ? "bg-[#E31E24] border-[#E31E24] text-white" : "border-slate-100 text-slate-500"}`}>
                 <Link2 size={14} /> Link de pago
               </button>
             </div>
           </div>
 
-          {metodo === "transferencia" ? (
+          {metodo === "paypal" ? (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center space-y-2">
+              <p className="text-xs font-black text-blue-800">Pago seguro con PayPal</p>
+              <p className="text-[11px] text-blue-700">Puedes pagar con tu saldo PayPal o con tarjeta. No guardamos los datos de tu tarjeta.</p>
+            </div>
+          ) : metodo === "transferencia" ? (
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1.5 text-xs">
               <p className="font-black text-slate-700 uppercase text-[11px] mb-1">Datos para transferencia</p>
               <p><span className="text-slate-400">Banco:</span> <span className="font-bold text-slate-700">{CUENTA_EMPRESA.banco}</span></p>
@@ -203,19 +226,19 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
               <input type="number" min="0.01" step="0.01" value={monto} onChange={e => setMonto(e.target.value)}
                 className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24] focus:bg-white" />
             </div>
-            <div className="space-y-1">
+            {metodo !== "paypal" && <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Comprobante (imagen) *</label>
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl py-4 cursor-pointer hover:border-[#E31E24] transition-all">
                 <UploadCloud size={16} className="text-slate-400" />
                 <span className="text-xs font-bold text-slate-500">{file ? file.name : "Selecciona una imagen"}</span>
                 <input type="file" accept="image/*" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
               </label>
-            </div>
+            </div>}
             {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
             <button onClick={handleSubmit} disabled={uploading || sending}
               className="w-full py-3 rounded-2xl bg-[#E31E24] text-white font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-              {(uploading || sending) ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-              {uploading ? "Subiendo imagen..." : sending ? "Enviando..." : "Enviar comprobante"}
+              {(uploading || sending) ? <Loader2 size={16} className="animate-spin" /> : metodo === "paypal" ? <CreditCard size={16} /> : <UploadCloud size={16} />}
+              {uploading ? "Subiendo imagen..." : sending ? "Enviando..." : metodo === "paypal" ? "Continuar con PayPal" : "Enviar comprobante"}
             </button>
           </div>
 
@@ -310,6 +333,34 @@ export default function ClienteHistorialPage() {
   useEffect(() => {
     if (checkingSession || !userId) return;
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkingSession, userId]);
+
+  useEffect(() => {
+    if (checkingSession || !userId || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const paypalResult = params.get("paypal");
+    const orderId = params.get("token");
+    const reservaId = params.get("reserva_id");
+    if (paypalResult !== "ok" || !orderId || !reservaId) return;
+    const captureKey = `paypal-capture-${orderId}`;
+    if (sessionStorage.getItem(captureKey)) return;
+    sessionStorage.setItem(captureKey, "processing");
+    fetch(`${API}/api/usuarios/mis-reservas/${reservaId}/pagos/paypal/capturar`, {
+      method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ order_id: orderId }),
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "PayPal no pudo confirmar el pago");
+        setMsg(data.message || "Pago PayPal confirmado correctamente");
+        sessionStorage.setItem(captureKey, "done");
+        load(true);
+      })
+      .catch(error => {
+        sessionStorage.removeItem(captureKey);
+        setMsg(error.message);
+      })
+      .finally(() => window.history.replaceState({}, "", "/cliente/historial"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkingSession, userId]);
 

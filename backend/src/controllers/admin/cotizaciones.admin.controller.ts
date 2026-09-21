@@ -2,17 +2,85 @@ export {};
 
 const pool = require("../../config/db");
 const { crearNotificacion, notificarAdmins } = require("../../config/notificaciones");
+const { getPricing, roadDistanceKm, calculateQuote } = require("../../config/pricing");
+const { createPaypalOrder } = require("../../config/paypal");
+
+// Busca un conductor y un vehículo disponibles para completar la reserva sin
+// intervención manual del conductor. Si ya existe una asignación activa válida,
+// la reutiliza; de lo contrario crea una nueva asignación con un par disponible.
+const resolverAsignacionAutomatica = async (client: any, c: any) => {
+  const capacidad = Number(c.num_personas || 1);
+  const tipoVehiculo = String(c.tipo_vehiculo || "").trim().toLowerCase();
+  const fechaServicio = c.fecha_servicio ? String(c.fecha_servicio).slice(0, 10) : new Date().toISOString().slice(0, 10);
+
+  const pairRes = await client.query(
+    `SELECT v.id AS vehiculo_id, cnd.id AS conductor_id
+     FROM vehiculos v
+     JOIN conductores cnd ON cnd.estado = 'disponible'
+     WHERE v.activo = true
+       AND v.estado = 'disponible'
+       AND v.capacidad >= $1
+       AND v.id NOT IN (SELECT vehiculo_id FROM asignacion_vehiculos WHERE estado = 'activa')
+       AND cnd.id NOT IN (SELECT conductor_id FROM asignacion_vehiculos WHERE estado = 'activa')
+       AND (
+         $2 = ''
+         OR LOWER(v.tipo) = $2
+         OR LOWER(v.modelo) LIKE '%' || $2 || '%'
+         OR LOWER(v.marca) LIKE '%' || $2 || '%'
+       )
+     ORDER BY v.capacidad ASC, v.id ASC
+     LIMIT 1`,
+    [capacidad, tipoVehiculo]
+  );
+
+  if (!pairRes.rowCount) {
+    return { vehiculo_id: null, conductor_id: null };
+  }
+
+  const vehiculo_id = Number(pairRes.rows[0].vehiculo_id);
+  const conductor_id = Number(pairRes.rows[0].conductor_id);
+
+  await client.query(
+    `INSERT INTO asignacion_vehiculos (conductor_id, vehiculo_id, fecha_inicio, observaciones, estado)
+     SELECT $1, $2, $3, $4, 'activa'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM asignacion_vehiculos
+       WHERE conductor_id = $1 AND vehiculo_id = $2 AND estado = 'activa'
+     )`,
+    [conductor_id, vehiculo_id, fechaServicio, `Asignación automática por cotización #${c.id}`]
+  );
+
+  await client.query(
+    `UPDATE vehiculos
+     SET estado = 'en_servicio', usuario_id = (SELECT usuario_id FROM conductores WHERE id = $1)
+     WHERE id = $2`,
+    [conductor_id, vehiculo_id]
+  );
+
+  await client.query(
+    `UPDATE conductores SET estado = 'en_servicio' WHERE id = $1`,
+    [conductor_id]
+  );
+
+  return { vehiculo_id, conductor_id };
+};
 
 // Crea una reserva a partir de una cotización, resolviendo el conductor del
 // vehículo (asignacion_vehiculos → conductores.id, o vehiculos.usuario_id).
 // Si hay un precio de por medio, la reserva nace 'pendiente_pago': solo pasa a
-// 'confirmada' cuando el admin aprueba el comprobante del 50% mínimo
-// (ver admin/pagos.admin.controller.ts → aprobarPago).
+// 'confirmada' cuando el admin aprueba el comprobante del 50% mínimo.
 const crearReservaDesdeCotizacion = async (
   client: any, c: any, precioFinal: number, vehiculoOverride?: number | null, conductorOverride?: number | null
 ) => {
-  const vehiculoFinal = vehiculoOverride || c.vehiculo_id || null;
-  let conductorFinal = conductorOverride || null;
+  let vehiculoFinal = vehiculoOverride ?? c.vehiculo_id ?? null;
+  let conductorFinal = conductorOverride ?? null;
+
+  if (!vehiculoFinal || !conductorFinal) {
+    const autoPair = await resolverAsignacionAutomatica(client, c);
+    if (!vehiculoFinal && autoPair.vehiculo_id) vehiculoFinal = autoPair.vehiculo_id;
+    if (!conductorFinal && autoPair.conductor_id) conductorFinal = autoPair.conductor_id;
+  }
+
   if (!conductorFinal && vehiculoFinal) {
     const porAsignacion = await client.query(
       `SELECT conductor_id FROM asignacion_vehiculos
@@ -28,6 +96,13 @@ const crearReservaDesdeCotizacion = async (
       if (porUsuario.rowCount) conductorFinal = porUsuario.rows[0].id;
     }
   }
+
+  if (!vehiculoFinal && !conductorFinal) {
+    const fallback = await resolverAsignacionAutomatica(client, c);
+    vehiculoFinal = fallback.vehiculo_id ?? vehiculoFinal;
+    conductorFinal = fallback.conductor_id ?? conductorFinal;
+  }
+
   const estadoInicial = Number(precioFinal) > 0 ? "pendiente_pago" : "confirmada";
   const reservaRes = await client.query(
     `INSERT INTO reservas
@@ -66,6 +141,61 @@ const listarCotizaciones = async (req: any, res: any) => {
     console.error(e);
     return res.status(500).json({ error: "Error al listar cotizaciones" });
   }
+};
+
+// Cliente: acepta el precio visible y crea la reserva directamente, sin pasar
+// por la bandeja de cotizaciones del administrador.
+const crearReservaDirecta = async (req: any, res: any) => {
+  const usuarioId = req.user?.id;
+  const { origen, destino, fecha_servicio, fecha_fin, num_personas, vehiculo_id,
+    origen_lat, origen_lng, destino_lat, destino_lng, num_viajes, modalidad_servicio, duracion_horas, hora_salida, notas } = req.body;
+  if (!usuarioId || !origen || !destino || !fecha_servicio || !num_personas) {
+    return res.status(400).json({ error: "Faltan datos para crear la reserva" });
+  }
+
+  const client = await pool.connect();
+  try {
+    const verified = await client.query("SELECT COALESCE(estado_verificacion, 'no_verificado') AS estado FROM usuarios WHERE id = $1", [usuarioId]);
+    if (verified.rows[0]?.estado !== "verificado") {
+      return res.status(403).json({ error: "Debes verificar tu identidad antes de reservar.", requiere_verificacion: true });
+    }
+    const vehicle = vehiculo_id ? await client.query("SELECT id, tipo FROM vehiculos WHERE id = $1 AND activo = true", [Number(vehiculo_id)]) : { rowCount: 0, rows: [] };
+    if (vehiculo_id && vehicle.rowCount === 0) {
+      return res.status(400).json({ error: "El vehículo seleccionado ya no está disponible" });
+    }
+    const tipoVehiculo = String(vehicle.rows[0]?.tipo || "van").trim().toLowerCase();
+    const fechaFin = typeof fecha_fin === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha_fin) && fecha_fin > String(fecha_servicio) ? fecha_fin : null;
+    const days = fechaFin ? Math.max(1, Math.round((new Date(fechaFin).getTime() - new Date(String(fecha_servicio).slice(0, 10)).getTime()) / 86400000) + 1) : 1;
+    const trips = Math.max(1, Math.floor(Number(num_viajes) || 1));
+    const coordinates = [origen_lat, origen_lng, destino_lat, destino_lng].every((value) => Number.isFinite(Number(value)));
+    const distanceKm = coordinates ? await roadDistanceKm(Number(origen_lat), Number(origen_lng), Number(destino_lat), Number(destino_lng)) : 0;
+    const pricing = await getPricing();
+    const serviceMode = String(modalidad_servicio || (fechaFin ? "varios_dias" : "dia")).trim().toLowerCase();
+    const hours = Math.max(1, Number(duracion_horas) || 1);
+    const breakdown = calculateQuote({ pricing, distanceKm, days, trips, vehicleType: tipoVehiculo, serviceMode, hours });
+    await client.query("BEGIN");
+    const reservation = await client.query(
+      `INSERT INTO reservas (usuario_id, fecha_reserva, fecha_fin, num_personas, total, estado, origen, destino, vehiculo_id, monto_pagado, estado_pago, hora_salida)
+       VALUES ($1, $2, $3, $4, $5, 'pendiente_pago', $6, $7, $8, 0, 'pendiente', $9) RETURNING id, total`,
+      [usuarioId, fecha_servicio, fechaFin, Number(num_personas), breakdown.total, origen, destino, vehiculo_id ? Number(vehiculo_id) : null, hora_salida || null]
+    );
+    await client.query("COMMIT");
+    const reservaId = Number(reservation.rows[0].id);
+    await notificarAdmins(usuarioId, `Nueva reserva directa #${reservaId} pendiente de pago por $${Number(breakdown.total).toFixed(2)}.`, "reserva", reservaId);
+    let approvalUrl = null;
+    try {
+      const minimum = Number(breakdown.total) * 0.5;
+      const order = await createPaypalOrder(minimum, reservaId);
+      approvalUrl = order.links?.find((link: any) => link.rel === "approve")?.href || null;
+    } catch (paypalError) {
+      console.warn("Reserva creada sin orden PayPal; podrá pagarse por transferencia:", paypalError.message);
+    }
+    return res.status(201).json({ message: "Reserva creada. Continúa con el pago para confirmarla.", reserva_id: reservaId, total: breakdown.total, pago_minimo: Number(breakdown.total) * 0.5, approval_url: approvalUrl });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Error creando reserva directa:", error);
+    return res.status(500).json({ error: "No se pudo crear la reserva" });
+  } finally { client.release(); }
 };
 
 // ── Admin: aprobar cotización y crear reserva ────────────────────────────────
@@ -291,6 +421,7 @@ const crearCotizacion = async (req: any, res: any) => {
     origen, destino, fecha_servicio, fecha_fin, num_personas, tipo_vehiculo, notas,
     vehiculo_id, valor_ofrecido, duracion_valor, duracion_unidad, hora_salida,
     origen_lat, origen_lng, destino_lat, destino_lng,
+    num_viajes, modalidad_servicio, duracion_horas,
   } = req.body;
 
   if (!usuario_id || !origen || !destino || !fecha_servicio || !num_personas) {
@@ -328,18 +459,43 @@ const crearCotizacion = async (req: any, res: any) => {
       }
     }
 
+    const days = fechaFin
+      ? Math.max(1, Math.round((new Date(fechaFin).getTime() - new Date(String(fecha_servicio).slice(0, 10)).getTime()) / 86400000) + 1)
+      : 1;
+    const trips = Math.max(1, Math.floor(Number(num_viajes) || 1));
+    const hasCoordinates = [origen_lat, origen_lng, destino_lat, destino_lng].every((value) => Number.isFinite(Number(value)));
+    const distanceKm = hasCoordinates
+      ? await roadDistanceKm(Number(origen_lat), Number(origen_lng), Number(destino_lat), Number(destino_lng))
+      : 0;
+    let tipoVehiculo = String(tipo_vehiculo || "").trim().toLowerCase() || null;
+    if (vehiculo_id) {
+      const vehicleResult = await pool.query("SELECT tipo FROM vehiculos WHERE id = $1", [Number(vehiculo_id)]);
+      if (vehicleResult.rows[0]?.tipo) tipoVehiculo = String(vehicleResult.rows[0].tipo).trim().toLowerCase();
+    }
+    const pricing = await getPricing();
+    const serviceMode = String(modalidad_servicio || (fechaFin ? "varios_dias" : "dia")).trim().toLowerCase();
+    const serviceHours = Math.max(1, Number(duracion_horas) || 1);
+    const priceBreakdown = calculateQuote({ pricing, distanceKm, days, trips, vehicleType: tipoVehiculo, serviceMode, hours: serviceHours });
+
     const result = await pool.query(
       `INSERT INTO cotizaciones
          (usuario_id, origen, destino, fecha_servicio, fecha_fin, num_personas, tipo_vehiculo, notas,
-          vehiculo_id, valor_ofrecido, duracion_valor, duracion_unidad, turno,
+          vehiculo_id, valor_ofrecido, precio_estimado, num_viajes, distancia_km, precio_desglose,
+          duracion_valor, duracion_unidad, turno,
           origen_lat, origen_lng, destino_lat, destino_lng, hora_salida)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'admin', $13, $14, $15, $16, $17)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'admin', $17, $18, $19, $20, $21)
        RETURNING *`,
       [
-        usuario_id, origen, destino, fecha_servicio, fechaFin, num_personas, tipo_vehiculo || null, notas || null,
-        vehiculo_id ? Number(vehiculo_id) : null,
-        num(valor_ofrecido), num(duracion_valor), dUnidad,
-        num(origen_lat), num(origen_lng), num(destino_lat), num(destino_lng), horaSalida,
+        usuario_id, origen, destino, fecha_servicio, fechaFin, num_personas, tipoVehiculo, notas || null,
+        vehiculo_id ? Number(vehiculo_id) : null, num(valor_ofrecido), priceBreakdown.total, trips, priceBreakdown.distance_km,
+        JSON.stringify({ ...priceBreakdown, pricing: {
+          tarifa_diaria: Number(pricing.tarifa_diaria), precio_km: Number(pricing.precio_km),
+          tarifa_viaje: Number(pricing.tarifa_viaje), recargo_peajes: Number(pricing.recargo_peajes),
+          tarifa_van: Number(pricing.tarifa_van), tarifa_bus: Number(pricing.tarifa_bus),
+          tarifa_suv: Number(pricing.tarifa_suv), tarifa_minibus: Number(pricing.tarifa_minibus),
+          tarifa_sedan: Number(pricing.tarifa_sedan), service_mode: serviceMode, hours: serviceHours,
+        } }),
+        num(duracion_valor), dUnidad, num(origen_lat), num(origen_lng), num(destino_lat), num(destino_lng), horaSalida,
       ]
     );
     const cotizacion = result.rows[0];
@@ -415,4 +571,5 @@ module.exports = {
   crearCotizacion,
   listarMisCotizaciones,
   resumenCotizaciones,
+  crearReservaDirecta,
 };

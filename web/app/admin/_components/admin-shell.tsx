@@ -26,14 +26,18 @@ import {
   Route,
   Brain,
   MapPin,
+  ClipboardList,
   ClipboardCheck,
   CreditCard,
+  Calculator,
   IdCard,
   Images
+  ,Ticket
 } from "lucide-react";
 import { clearStoredUser, getStoredUser } from "../../../lib/session";
 import { NotificationBell } from "../../../components/notification-bell";
 import { useAdminBadges } from "./use-admin-badges";
+import { AdminChatbot } from "./admin-chatbot";
 
 type AdminShellProps = {
   children: React.ReactNode;
@@ -63,6 +67,8 @@ const menuGroups: MenuGroup[] = [
   },
   {
     id: "operaciones", label: "Operaciones", icon: Route, items: [
+      { href: "/admin/operaciones", label: "Operaciones", icon: ClipboardList },
+      { href: "/admin/viajes", label: "Viajes publicados", icon: Ticket },
       { href: "/admin/cotizaciones", label: "Cotizaciones", icon: FileText },
       { href: "/admin/reservas", label: "Reservas", icon: Calendar },
       { href: "/admin/pagos", label: "Pagos", icon: CreditCard },
@@ -90,6 +96,7 @@ const menuGroups: MenuGroup[] = [
     id: "sistema", label: "Sistema", icon: Settings, items: [
       { href: "/admin/galeria", label: "Galería Web", icon: Images },
       { href: "/admin/configuracion", label: "Perfil", icon: User },
+      { href: "/admin/tarifas", label: "Tarifas de cotización", icon: Calculator },
     ],
   },
 ];
@@ -374,6 +381,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
             <div className="bg-white rounded-lg md:rounded-[2.5rem] border border-gray-200 shadow-sm md:shadow-2xl min-h-[420px] md:min-h-[600px] overflow-hidden p-4 md:p-8 border-b-4 md:border-b-8 border-[#E31E24] w-full">
               {children}
             </div>
+            <AdminChatbot />
           </div>
         </section>
       </main>

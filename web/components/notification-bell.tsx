@@ -100,22 +100,25 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   const lastSeenIdRef = useRef<number | null>(null);
 
   const loadNotifications = async () => {
-    if (!userId) return;
+    if (!userId || !API_URL) return;
 
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/comunicacion/notificaciones?userId=${userId}`);
-      const data = await res.json();
-      if (!res.ok) return;
+      if (!res.ok) {
+        setUnreadCount(0);
+        setItems([]);
+        return;
+      }
 
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : { notifications: [], unread_count: 0 };
       const notifications: NotificationItem[] = Array.isArray(data.notifications) ? data.notifications : [];
       setUnreadCount(Number(data.unread_count || 0));
       setItems(notifications);
 
-      // Detecta notificaciones NUEVAS (id mayor al último visto) para el toast.
       const maxId = notifications.reduce((m, n) => Math.max(m, Number(n.id) || 0), 0);
       if (lastSeenIdRef.current === null) {
-        // Primera carga: no saltar toasts de lo que ya existía antes de entrar.
         lastSeenIdRef.current = maxId;
       } else if (maxId > lastSeenIdRef.current) {
         const nuevas = notifications
@@ -124,6 +127,10 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
         if (nuevas.length > 0) setToast(nuevas[0]);
         lastSeenIdRef.current = maxId;
       }
+    } catch (error) {
+      console.warn("No se pudieron cargar las notificaciones:", error);
+      setUnreadCount(0);
+      setItems([]);
     } finally {
       setLoading(false);
     }

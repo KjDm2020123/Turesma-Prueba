@@ -7,6 +7,7 @@ const {
   listarMisCotizaciones,
   responderCotizacion,
   obtenerNegociacion,
+  crearReservaDirecta,
 } = require("../controllers/admin/cotizaciones.admin.controller");
 
 const router = express.Router();
@@ -16,6 +17,7 @@ const router = express.Router();
 router.use(verifyToken);
 
 router.post("/", crearCotizacion);
+router.post("/reserva-directa", crearReservaDirecta);
 router.get("/mias", listarMisCotizaciones);
 router.patch("/:id/responder", responderCotizacion);
 router.get("/:id/negociacion", obtenerNegociacion);

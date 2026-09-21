@@ -8,6 +8,41 @@ const bcrypt = require("bcrypt");
 const { normalizeRole } = require("../config/catalogoHelpers");
 const { enviarCorreoBienvenida } = require("../config/usuarioMailer");
 const { notificarReprogramacion } = require("../config/reservaMailer");
+const { getPricing } = require("../config/pricing");
+
+const listarTarifasCliente = async (_req: any, res: any) => {
+  try {
+    const pricing = await getPricing();
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    return res.json({
+      tarifa_diaria: Number(pricing.tarifa_diaria),
+      precio_km: Number(pricing.precio_km),
+      tarifa_viaje: Number(pricing.tarifa_viaje),
+      recargo_peajes: Number(pricing.recargo_peajes),
+      minimo_km: Number(pricing.minimo_km),
+      tarifa_van: Number(pricing.tarifa_van || pricing.tarifa_diaria || 0),
+      tarifa_bus: Number(pricing.tarifa_bus || pricing.tarifa_diaria || 0),
+      tarifa_suv: Number(pricing.tarifa_suv || pricing.tarifa_diaria || 0),
+      tarifa_minibus: Number(pricing.tarifa_minibus || pricing.tarifa_diaria || 0),
+      tarifa_sedan: Number(pricing.tarifa_sedan || pricing.tarifa_diaria || 0),
+      traslado_van: Number(pricing.traslado_van || 0), traslado_bus: Number(pricing.traslado_bus || 0),
+      traslado_suv: Number(pricing.traslado_suv || 0), traslado_minibus: Number(pricing.traslado_minibus || 0), traslado_sedan: Number(pricing.traslado_sedan || 0),
+      hora_van: Number(pricing.hora_van || 0), hora_bus: Number(pricing.hora_bus || 0),
+      hora_suv: Number(pricing.hora_suv || 0), hora_minibus: Number(pricing.hora_minibus || 0), hora_sedan: Number(pricing.hora_sedan || 0),
+      medio_dia_van: Number(pricing.medio_dia_van || 0), medio_dia_bus: Number(pricing.medio_dia_bus || 0),
+      medio_dia_suv: Number(pricing.medio_dia_suv || 0), medio_dia_minibus: Number(pricing.medio_dia_minibus || 0), medio_dia_sedan: Number(pricing.medio_dia_sedan || 0),
+      oferta_activa: Boolean(pricing.oferta_activa),
+      oferta_dia: pricing.oferta_dia || "lunes",
+      descuento_oferta_pct: Number(pricing.descuento_oferta_pct || 0),
+      oferta_descripcion: pricing.oferta_descripcion || "",
+    });
+  } catch (error) {
+    console.error("Error listando tarifas públicas:", error);
+    return res.status(500).json({ error: "No se pudieron obtener las tarifas" });
+  }
+};
 
 const crearUsuario = async (req, res) => {
   const { nombre, email: rawEmail, password, rol } = req.body;
@@ -136,6 +171,79 @@ const listarVehiculosCliente = async (req, res) => {
   } catch (error) {
     console.error("Error listando vehiculos para cliente:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const recomendarVehiculo = async (req: any, res: any) => {
+  const personas = Math.max(1, Number(req.body?.num_personas) || 1);
+  const notas = String(req.body?.notas || "").trim().toLowerCase();
+  const fechaInicio = typeof req.body?.fecha_servicio === "string" ? req.body.fecha_servicio : null;
+  const fechaFin = typeof req.body?.fecha_fin === "string" && req.body.fecha_fin >= fechaInicio
+    ? req.body.fecha_fin
+    : fechaInicio;
+  const tipoPreferido = String(req.body?.tipo_vehiculo || "").trim().toLowerCase();
+
+  if (fechaInicio && !/^\d{4}-\d{2}-\d{2}$/.test(fechaInicio)) {
+    return res.status(400).json({ error: "La fecha del servicio no es válida" });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT v.id, v.placa, v.tipo, v.modelo, v.capacidad, v.imagen_url, v.descripcion,
+              COALESCE(v.dias_servicio, ARRAY[0,1,2,3,4,5,6]) AS dias_servicio
+       FROM vehiculos v
+       WHERE v.activo = true
+         AND v.estado = 'disponible'
+         AND v.capacidad >= $1
+         AND ($2::text IS NULL OR NOT EXISTS (
+           SELECT 1 FROM generate_series($2::date, $3::date, interval '1 day') AS dias(fecha)
+           WHERE NOT (
+             EXTRACT(DOW FROM dias.fecha)::INT = ANY(COALESCE(v.dias_servicio, ARRAY[0,1,2,3,4,5,6]))
+             OR EXISTS (
+               SELECT 1 FROM vehiculo_disponibilidad vd
+               WHERE vd.vehiculo_id = v.id AND vd.fecha = dias.fecha::date AND vd.disponible = true
+             )
+           )
+         ))
+         AND ($2::text IS NULL OR NOT EXISTS (
+           SELECT 1 FROM vehiculo_disponibilidad vd
+           WHERE vd.vehiculo_id = v.id AND vd.fecha BETWEEN $2::date AND $3::date AND vd.disponible = false
+         ))
+         AND ($2::text IS NULL OR NOT EXISTS (
+           SELECT 1 FROM reservas r
+           WHERE r.vehiculo_id = v.id
+             AND r.estado NOT IN ('cancelada', 'finalizada')
+             AND r.fecha_reserva <= $3::date
+             AND COALESCE(r.fecha_fin, r.fecha_reserva) >= $2::date
+         ))
+       ORDER BY v.capacidad ASC, v.orden ASC NULLS LAST, v.id DESC`,
+      [personas, fechaInicio, fechaFin]
+    );
+
+    const palabrasGrandes = /(equipaje|maleta|equipajes|grupo|amplio|espacio)/i;
+    const palabrasComodas = /(comodidad|lujo|ejecutivo|premium|privado)/i;
+    const ranked = result.rows
+      .map((vehiculo: any) => {
+        let score = 100 - Math.max(0, Number(vehiculo.capacidad) - personas) * 4;
+        const textoVehiculo = `${vehiculo.tipo || ""} ${vehiculo.modelo || ""} ${vehiculo.descripcion || ""}`;
+        if (tipoPreferido && textoVehiculo.toLowerCase().includes(tipoPreferido)) score += 30;
+        if (palabrasGrandes.test(notas) && Number(vehiculo.capacidad) >= personas + 2) score += 18;
+        if (palabrasComodas.test(notas) && /(bus|van|sprinter|minibus)/i.test(textoVehiculo)) score += 8;
+        return { ...vehiculo, score };
+      })
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 3)
+      .map(({ score, dias_servicio, ...vehiculo }: any) => vehiculo);
+
+    const recomendado = ranked[0] || null;
+    const message = recomendado
+      ? `Te recomiendo el ${recomendado.modelo || recomendado.tipo} (${recomendado.capacidad} pasajeros): cubre tu grupo${fechaInicio ? " y está disponible en las fechas indicadas" : ""}. Puedes usarlo o comparar las alternativas.`
+      : `No encontré un vehículo disponible para ${personas} pasajero${personas === 1 ? "" : "s"}${fechaInicio ? " en esas fechas" : ""}. Prueba con otro rango o reduce el número de pasajeros.`;
+
+    return res.json({ message, recommendation: recomendado, alternatives: ranked.slice(1), criteria: { personas, fechaInicio, fechaFin } });
+  } catch (error) {
+    console.error("Error recomendando vehículo:", error);
+    return res.status(500).json({ error: "No se pudo generar la recomendación" });
   }
 };
 
@@ -468,6 +576,8 @@ module.exports = {
   crearUsuario,
   listarUsuarios,
   listarVehiculosCliente,
+  listarTarifasCliente,
+  recomendarVehiculo,
   verDisponibilidadVehiculoCliente,
   listarMisReservas,
   cancelarMiReserva,

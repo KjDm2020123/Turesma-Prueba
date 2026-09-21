@@ -45,6 +45,8 @@ const {
   getBadgesSidebar,
   getAnaliticaInteligente,
   exportarReporteCSV,
+  getTarifas,
+  updateTarifas,
 } = require("../controllers/admin.controller");
 const {
   getMantenimientoVehiculos,
@@ -65,7 +67,7 @@ const {
   getRutasReportadas,
   getRutasReportadasResumen,
 } = require("../controllers/admin/rutas-reportadas.admin.controller");
-const { uploadVehiculoImagen } = require("../controllers/admin/uploads.admin.controller");
+const { uploadVehiculoImagen, uploadViajeImagenes } = require("../controllers/admin/uploads.admin.controller");
 const { listarPagosAdmin, aprobarPago, rechazarPago, actualizarLinkPago } = require("../controllers/admin/pagos.admin.controller");
 const { getDashboardData } = require("../controllers/admin/dashboard.admin.controller");
 const { getHistorialMensual } = require("../controllers/admin/historial.admin.controller");
@@ -108,6 +110,20 @@ const {
   actualizarCalendario,
   marcarMatriculado,
 } = require("../controllers/admin/matriculas.admin.controller");
+const {
+  listarOperaciones,
+  crearOperacion,
+  asignarOperacion,
+  actualizarEstadoOperacion,
+  historialOperacion,
+} = require("../controllers/admin/operaciones.admin.controller");
+const { consultarChatbotAdmin } = require("../controllers/admin/chatbot.admin.controller");
+const {
+  listarViajesAdmin,
+  crearViajeAdmin,
+  actualizarViajeAdmin,
+  eliminarViajeAdmin,
+} = require("../controllers/admin/viajes.admin.controller");
 
 const router = express.Router();
 
@@ -117,10 +133,23 @@ router.use(verifyToken);
 router.use(requireRole("admin", "operativo"));
 
 router.get("/catalogo", getCatalogo);
+router.get("/tarifas", getTarifas);
+router.put("/tarifas", updateTarifas);
 
 // ── DASHBOARD PRINCIPAL ───────────────────────────────────────────────────────
 router.get("/dashboard", getDashboardData);
 router.get("/historial/mensual", getHistorialMensual);
+
+router.get("/operaciones", listarOperaciones);
+router.post("/operaciones", crearOperacion);
+router.patch("/operaciones/:id/asignar", asignarOperacion);
+router.patch("/operaciones/:id/estado", actualizarEstadoOperacion);
+router.get("/operaciones/:id/historial", historialOperacion);
+router.post("/chatbot", consultarChatbotAdmin);
+router.get("/viajes", listarViajesAdmin);
+router.post("/viajes", crearViajeAdmin);
+router.put("/viajes/:id", actualizarViajeAdmin);
+router.delete("/viajes/:id", eliminarViajeAdmin);
 
 router.get("/inteligencia/dashboard", getInteligenciaDashboard);
 router.get("/inteligencia/alertas", getAlertasInteligentes);
@@ -182,6 +211,7 @@ router.put("/usuarios/:id", editarUsuarioAdmin);
 router.delete("/usuarios/:id", eliminarUsuarioAdmin);
 router.patch("/usuarios/:id/recuperar-password", recuperarPasswordUsuarioAdmin);
 router.post("/uploads/vehiculo-imagen", uploadVehiculoImagen);
+router.post("/uploads/viaje-imagenes", uploadViajeImagenes);
 router.get("/pagos", listarPagosAdmin);
 router.patch("/pagos/:id/aprobar", aprobarPago);
 router.patch("/pagos/:id/rechazar", rechazarPago);

@@ -5,6 +5,7 @@ const inteligenciaController = require("./admin/inteligencia.admin.controller");
 const vehiculosConductoresController = require("./admin/vehiculos-conductores.admin.controller");
 const historialReportesController = require("./admin/historial-reportes.admin.controller");
 const usuariosController = require("./admin/usuarios.admin.controller");
+const tarifasController = require("./admin/tarifas.admin.controller");
 
 module.exports = {
   ...catalogoReservasController,
@@ -12,4 +13,5 @@ module.exports = {
   ...vehiculosConductoresController,
   ...historialReportesController,
   ...usuariosController,
+  ...tarifasController,
 };
