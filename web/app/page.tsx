@@ -39,6 +39,7 @@ type VehiculoPublico = {
 type GaleriaFoto = {
   id: number;
   imagen_url: string;
+  tipo?: "imagen" | "video";
   titulo: string | null;
   descripcion: string | null;
 };
@@ -66,6 +67,8 @@ export default function RootPage() {
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
   const flotaRef = useRef<HTMLDivElement | null>(null);
+  const fotosGaleria = galeria.filter((contenido) => contenido.tipo !== "video");
+  const videosGaleria = galeria.filter((contenido) => contenido.tipo === "video");
 
   useEffect(() => {
     const elements = document.querySelectorAll<HTMLElement>('[data-reveal]');
@@ -453,7 +456,7 @@ export default function RootPage() {
       </section>
 
       {/* SECCIÓN GALERÍA DE VIAJES (fotos publicadas por el admin) */}
-      {galeria.length > 0 && (
+      {fotosGaleria.length > 0 && (
         <section id="galeria" className="py-24 bg-white border-t border-gray-50">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mb-16 text-center">
@@ -463,19 +466,23 @@ export default function RootPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {galeria.map((foto) => (
+              {fotosGaleria.map((foto) => (
                 <figure
                   key={foto.id}
                   className="group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
                 >
-                  <Image
-                    src={foto.imagen_url}
-                    alt={foto.titulo || "Viaje realizado por Turesma"}
-                    fill
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    priority={foto.id === galeria[0]?.id}
-                    className="object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
+                  {foto.tipo === "video" ? (
+                    <video src={foto.imagen_url} controls preload="metadata" playsInline className="w-full h-full object-cover" />
+                  ) : (
+                    <Image
+                      src={foto.imagen_url}
+                      alt={foto.titulo || "Viaje realizado por Turesma"}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      priority={foto.id === fotosGaleria[0]?.id}
+                      className="object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                  )}
                   {(foto.titulo || foto.descripcion) && (
                     <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-6 pt-16 translate-y-2 opacity-0 transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100">
                       {foto.titulo && (
@@ -506,15 +513,37 @@ export default function RootPage() {
             </p>
           </div>
 
-          <div className="mx-auto flex min-h-80 max-w-4xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-12 text-center shadow-2xl">
-            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-400 text-[#0b0f1a] shadow-lg shadow-yellow-400/20">
-              <PlayCircle size={42} strokeWidth={1.8} />
+          {videosGaleria.length > 0 ? (
+            <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
+              {videosGaleria.map((video) => (
+                <figure key={video.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl">
+                  <video
+                    src={video.imagen_url}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    className="aspect-video w-full object-cover"
+                  />
+                  {(video.titulo || video.descripcion) && (
+                    <figcaption className="p-5">
+                      {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
+                      {video.descripcion && <p className="mt-1 text-sm font-medium leading-snug text-gray-400">{video.descripcion}</p>}
+                    </figcaption>
+                  )}
+                </figure>
+              ))}
             </div>
-            <h3 className="text-2xl font-black uppercase italic tracking-tight text-white">Próximamente en movimiento</h3>
-            <p className="mt-3 max-w-xl text-base font-medium leading-relaxed text-gray-400">
-              Aquí podrás descubrir los videos de nuestros recorridos, vehículos y servicios.
-            </p>
-          </div>
+          ) : (
+            <div className="mx-auto flex min-h-80 max-w-4xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-12 text-center shadow-2xl">
+              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-400 text-[#0b0f1a] shadow-lg shadow-yellow-400/20">
+                <PlayCircle size={42} strokeWidth={1.8} />
+              </div>
+              <h3 className="text-2xl font-black uppercase italic tracking-tight text-white">Próximamente en movimiento</h3>
+              <p className="mt-3 max-w-xl text-base font-medium leading-relaxed text-gray-400">
+                Aquí podrás descubrir los videos de nuestros recorridos, vehículos y servicios.
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
