@@ -6,6 +6,11 @@ const { Pool } = require("pg");
 // En local NO se usa SSL. Se activa con DB_SSL=true en el hosting.
 const useSSL = String(process.env.DB_SSL || "").toLowerCase() === "true";
 const sslConfig = useSSL ? { rejectUnauthorized: false } : undefined;
+const poolConfig = {
+  max: Number(process.env.DB_POOL_MAX || 5),
+  idleTimeoutMillis: 300000,
+  connectionTimeoutMillis: 10000,
+};
 
 let pool: any;
 
@@ -15,6 +20,7 @@ if (process.env.DATABASE_URL) {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: sslConfig,
+    ...poolConfig,
   });
 } else {
   const requiredEnvVars = ["DB_USER", "DB_HOST", "DB_NAME", "DB_PASSWORD", "DB_PORT"];
@@ -33,6 +39,7 @@ if (process.env.DATABASE_URL) {
     password: process.env.DB_PASSWORD,
     port: Number(process.env.DB_PORT),
     ssl: sslConfig,
+    ...poolConfig,
   });
 }
 

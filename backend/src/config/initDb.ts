@@ -923,12 +923,18 @@ const initDatabase = async () => {
     CREATE TABLE IF NOT EXISTS galeria_viajes (
       id SERIAL PRIMARY KEY,
       imagen_url TEXT NOT NULL,
+      tipo VARCHAR(10) NOT NULL DEFAULT 'imagen' CHECK (tipo IN ('imagen', 'video')),
       titulo VARCHAR(120),
       descripcion TEXT,
       orden INT DEFAULT 0,
       activo BOOLEAN DEFAULT TRUE,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE galeria_viajes
+    ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'imagen';
   `);
 
   await pool.query(`

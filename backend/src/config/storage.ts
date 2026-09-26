@@ -48,6 +48,24 @@ const uploadImage = async (file: any, folder: string) => {
   return uploadBuffer(await optimizeImage(file.buffer, folder), folder);
 };
 
+const uploadVideo = async (file: any, folder = "videos") => {
+  if (!supabase) {
+    throw new Error("Supabase Storage no está configurado");
+  }
+
+  const originalName = String(file.originalname || "video.mp4");
+  const extension = originalName.includes(".") ? originalName.slice(originalName.lastIndexOf(".")).toLowerCase() : ".mp4";
+  const safeExtension = [".mp4", ".webm", ".mov"].includes(extension) ? extension : ".mp4";
+  const filePath = `${folder}/${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExtension}`;
+  const { error } = await supabase.storage
+    .from(bucketName)
+    .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+  if (error) throw error;
+  const { data } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+  return data.publicUrl;
+};
+
 const deleteImage = async (filePath: string) => {
   if (!supabase || !filePath) return;
   await supabase.storage.from(bucketName).remove([filePath]);
@@ -63,4 +81,4 @@ const getStoragePathFromUrl = (imageUrl: string) => {
   return separatorIndex === -1 ? null : bucketAndPath.slice(separatorIndex + 1);
 };
 
-module.exports = { uploadImage, uploadBuffer, optimizeImage, deleteImage, getStoragePathFromUrl };
+module.exports = { uploadImage, uploadVideo, uploadBuffer, optimizeImage, deleteImage, getStoragePathFromUrl };

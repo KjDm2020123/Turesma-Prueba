@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const pool = require("../../config/db");
-const { uploadImage, deleteImage, getStoragePathFromUrl } = require("../../config/storage");
+const { uploadImage, uploadVideo, deleteImage, getStoragePathFromUrl } = require("../../config/storage");
 
 // ── Almacenamiento en disco de las fotos de la galería de viajes ─────────────
 const galeriaDir = path.join(__dirname, "../../../uploads/galeria");
@@ -28,6 +28,18 @@ const uploadGaleriaMiddleware = multer({
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 }).single("imagen");
+
+const uploadVideoMiddleware = multer({
+  storage,
+  fileFilter: (_req: any, file: any, cb: any) => {
+    const allowedMimeTypes = ["video/mp4", "video/webm", "video/quicktime"];
+    if (!allowedMimeTypes.includes(String(file.mimetype || "").toLowerCase())) {
+      return cb(new Error("Formato inválido. Solo se permite MP4, WEBM o MOV"));
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 100 * 1024 * 1024 },
+}).single("video");
 
 // ── Admin: sube una foto de viaje y devuelve su URL pública ──────────────────
 const uploadGaleriaImagen = (req: any, res: any) => {
@@ -53,11 +65,25 @@ const uploadGaleriaImagen = (req: any, res: any) => {
   });
 };
 
+const uploadGaleriaVideo = (req: any, res: any) => {
+  uploadVideoMiddleware(req, res, async (error: any) => {
+    if (error) return res.status(400).json({ error: error.message || "No se pudo subir el video" });
+    if (!req.file) return res.status(400).json({ error: "Debes seleccionar un video" });
+    try {
+      const videoUrl = await uploadVideo(req.file);
+      return res.status(201).json({ message: "Video subido correctamente", videoUrl });
+    } catch (uploadError) {
+      console.error("Error subiendo video de galería a Supabase:", uploadError);
+      return res.status(502).json({ error: "No se pudo guardar el video" });
+    }
+  });
+};
+
 // ── Admin: lista TODAS las fotos de la galería (activas e inactivas) ──────────
 const listarGaleriaAdmin = async (_req: any, res: any) => {
   try {
     const result = await pool.query(
-      `SELECT id, imagen_url, titulo, descripcion, orden, activo, creado_en
+      `SELECT id, imagen_url, tipo, titulo, descripcion, orden, activo, creado_en
        FROM galeria_viajes
        ORDER BY orden ASC, creado_en DESC`
     );
@@ -72,19 +98,20 @@ const listarGaleriaAdmin = async (_req: any, res: any) => {
 const crearGaleria = async (req: any, res: any) => {
   try {
     const imagen_url = typeof req.body.imagen_url === "string" ? req.body.imagen_url.trim() : "";
+    const tipo = req.body.tipo === "video" ? "video" : "imagen";
     const titulo = typeof req.body.titulo === "string" ? req.body.titulo.trim().slice(0, 120) : null;
     const descripcion = typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 500) : null;
     const orden = Number.isFinite(Number(req.body.orden)) ? Number(req.body.orden) : 0;
 
     if (!imagen_url) {
-      return res.status(400).json({ error: "Debes subir una imagen primero" });
+      return res.status(400).json({ error: "Debes subir un archivo primero" });
     }
 
     const result = await pool.query(
-      `INSERT INTO galeria_viajes (imagen_url, titulo, descripcion, orden, activo)
-       VALUES ($1, $2, $3, $4, TRUE)
-       RETURNING id, imagen_url, titulo, descripcion, orden, activo, creado_en`,
-      [imagen_url, titulo || null, descripcion || null, orden]
+      `INSERT INTO galeria_viajes (imagen_url, tipo, titulo, descripcion, orden, activo)
+       VALUES ($1, $2, $3, $4, $5, TRUE)
+       RETURNING id, imagen_url, tipo, titulo, descripcion, orden, activo, creado_en`,
+      [imagen_url, tipo, titulo || null, descripcion || null, orden]
     );
     return res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -112,7 +139,7 @@ const actualizarGaleria = async (req: any, res: any) => {
            titulo = COALESCE($2, titulo),
            descripcion = COALESCE($3, descripcion)
        WHERE id = $4
-       RETURNING id, imagen_url, titulo, descripcion, orden, activo, creado_en`,
+      RETURNING id, imagen_url, tipo, titulo, descripcion, orden, activo, creado_en`,
       [activo, titulo ?? null, descripcion ?? null, id]
     );
     return res.status(200).json(result.rows[0]);
@@ -157,6 +184,7 @@ const eliminarGaleria = async (req: any, res: any) => {
 
 module.exports = {
   uploadGaleriaImagen,
+  uploadGaleriaVideo,
   listarGaleriaAdmin,
   crearGaleria,
   actualizarGaleria,

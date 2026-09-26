@@ -5,7 +5,7 @@ import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2,
+  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -13,6 +13,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 type Foto = {
   id: number;
   imagen_url: string;
+  tipo: "imagen" | "video";
   titulo: string | null;
   descripcion: string | null;
   orden: number;
@@ -28,14 +29,16 @@ export default function AdminGaleriaPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
-  // Formulario de nueva foto
+  // Formulario de nuevo contenido
   const [imagenUrl, setImagenUrl] = useState("");
+  const [tipoContenido, setTipoContenido] = useState<"imagen" | "video">("imagen");
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [actingId, setActingId] = useState<number | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const flash = (setter: (v: string) => void, value: string) => {
@@ -72,21 +75,41 @@ export default function AdminGaleriaPage() {
     finally { setSubiendo(false); }
   };
 
+  const handleVideo = async (file: File | null) => {
+    if (!file) return;
+    setErr(""); setSubiendo(true);
+    try {
+      const fd = new FormData();
+      fd.append("video", file);
+      const authToken = getAuthHeaders()["Authorization"];
+      const res = await fetch(`${API}/api/admin/uploads/galeria-video`, {
+        method: "POST",
+        body: fd,
+        headers: authToken ? { Authorization: authToken } : {},
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al subir el video");
+      setImagenUrl(json.videoUrl || "");
+      setVideoPreview(URL.createObjectURL(file));
+    } catch (e: any) { flash(setErr, e.message || "No se pudo subir el video"); }
+    finally { setSubiendo(false); }
+  };
+
   const handleGuardar = async () => {
-    if (!imagenUrl) { flash(setErr, "Primero sube una foto"); return; }
+    if (!imagenUrl) { flash(setErr, "Primero sube un archivo"); return; }
     setGuardando(true); setErr("");
     try {
       const res = await fetch(`${API}/api/admin/galeria`, {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ imagen_url: imagenUrl, titulo, descripcion }),
+        body: JSON.stringify({ imagen_url: imagenUrl, tipo: tipoContenido, titulo, descripcion }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al guardar");
       setFotos((p) => [json, ...p]);
-      setImagenUrl(""); setTitulo(""); setDescripcion("");
+      setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null);
       if (fileRef.current) fileRef.current.value = "";
-      flash(setMsg, "Foto publicada en la página principal");
+      flash(setMsg, `${tipoContenido === "video" ? "Video" : "Foto"} publicado en la página principal`);
     } catch (e: any) { flash(setErr, e.message || "No se pudo guardar"); }
     finally { setGuardando(false); }
   };
@@ -134,23 +157,31 @@ export default function AdminGaleriaPage() {
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3">
         <div className="bg-[#E31E24]/10 p-2 rounded-xl shrink-0"><Images size={20} className="text-[#E31E24]" /></div>
         <p className="text-sm text-slate-600 font-medium leading-relaxed">
-          Las fotos que subas aquí aparecen en la página principal, justo debajo de <span className="font-black italic">&ldquo;Nuestra Flota&rdquo;</span>, en la sección de viajes realizados. Puedes ocultarlas sin borrarlas con el botón de visibilidad.
+          Las fotos y videos que subas aquí aparecen en la página principal, justo debajo de <span className="font-black italic">&ldquo;Nuestra Flota&rdquo;</span>. Puedes ocultarlos sin borrarlos con el botón de visibilidad.
         </p>
       </div>
 
-      {/* SUBIR NUEVA FOTO */}
+      {/* SUBIR NUEVO CONTENIDO */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-4">Agregar foto de viaje</p>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Agregar contenido de viaje</p>
+          <div className="flex rounded-xl border border-slate-200 p-1 bg-slate-50">
+            <button type="button" onClick={() => { setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
+            <button type="button" onClick={() => { setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
+          </div>
+        </div>
         <div className="grid md:grid-cols-[240px_1fr] gap-5">
           {/* Zona de subida */}
           <div>
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleFile(e.target.files?.[0] || null)} />
+            <input ref={fileRef} type="file" accept={tipoContenido === "video" ? "video/mp4,video/webm,video/quicktime" : "image/jpeg,image/png,image/webp"} className="hidden" onChange={(e) => tipoContenido === "video" ? handleVideo(e.target.files?.[0] || null) : handleFile(e.target.files?.[0] || null)} />
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
               className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-[#E31E24] hover:bg-red-50/40 transition-all flex flex-col items-center justify-center gap-2 overflow-hidden relative"
             >
-              {imagenUrl ? (
+              {tipoContenido === "video" && videoPreview ? (
+                <video src={videoPreview} controls className="absolute inset-0 w-full h-full object-cover" />
+              ) : imagenUrl ? (
                 <img src={imagenUrl} alt="Vista previa" className="absolute inset-0 w-full h-full object-cover" />
               ) : subiendo ? (
                 <Loader2 className="animate-spin text-[#E31E24]" size={26} />
@@ -158,13 +189,13 @@ export default function AdminGaleriaPage() {
                 <>
                   <UploadCloud className="text-slate-300" size={30} />
                   <span className="text-xs font-bold text-slate-400">Haz clic para cargar</span>
-                  <span className="text-[10px] text-slate-300">JPG, PNG o WEBP · máx 5MB</span>
+                  <span className="text-[10px] text-slate-300">{tipoContenido === "video" ? "MP4, WEBM o MOV · máx 100MB" : "JPG, PNG o WEBP · máx 5MB"}</span>
                 </>
               )}
             </button>
             {imagenUrl && (
               <button type="button" onClick={() => { setImagenUrl(""); if (fileRef.current) fileRef.current.value = ""; }} className="mt-2 text-[11px] font-bold text-slate-400 hover:text-[#E31E24] transition-colors">
-                Quitar imagen
+                Quitar archivo
               </button>
             )}
           </div>
@@ -189,7 +220,7 @@ export default function AdminGaleriaPage() {
               className="flex items-center gap-2 bg-[#E31E24] hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {guardando ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              Publicar foto
+              Publicar {tipoContenido === "video" ? "video" : "foto"}
             </button>
           </div>
         </div>
@@ -198,22 +229,23 @@ export default function AdminGaleriaPage() {
       {/* GALERÍA ACTUAL */}
       <div>
         <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-4">
-          Fotos publicadas {fotos.length > 0 && <span className="text-slate-300">· {fotos.length}</span>}
+          Contenido publicado {fotos.length > 0 && <span className="text-slate-300">· {fotos.length}</span>}
         </p>
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#E31E24]" size={30} /></div>
         ) : fotos.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
             <Images size={40} className="text-slate-200 mx-auto mb-3" />
-            <p className="font-black text-slate-300 uppercase italic text-sm">Aún no hay fotos en la galería</p>
-            <p className="text-xs text-slate-400 mt-1">Sube la primera foto para que aparezca en la página principal.</p>
+            <p className="font-black text-slate-300 uppercase italic text-sm">Aún no hay contenido en la galería</p>
+            <p className="text-xs text-slate-400 mt-1">Sube una foto o video para que aparezca en la página principal.</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {fotos.map((f) => (
               <div key={f.id} className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${f.activo ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
-                <div className="relative aspect-[4/3] bg-slate-100 cursor-zoom-in" onClick={() => setZoomImg(f.imagen_url)}>
-                  <img src={f.imagen_url} alt={f.titulo || "Foto de viaje"} className="w-full h-full object-cover" />
+                <div className={`relative aspect-[4/3] bg-slate-100 ${f.tipo === "imagen" ? "cursor-zoom-in" : ""}`} onClick={() => f.tipo === "imagen" && setZoomImg(f.imagen_url)}>
+                  {f.tipo === "video" ? <video src={f.imagen_url} controls className="w-full h-full object-cover" /> : <img src={f.imagen_url} alt={f.titulo || "Foto de viaje"} className="w-full h-full object-cover" />}
+                  {f.tipo === "video" && <span className="absolute top-2 left-2 bg-black/70 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1"><Video size={11} /> Video</span>}
                   {!f.activo && (
                     <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Oculta</span>
                   )}

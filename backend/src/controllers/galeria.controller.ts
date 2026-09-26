@@ -14,7 +14,7 @@ const listarGaleriaPublica = async (_req: any, res: any) => {
     }
 
     const result = await pool.query(
-      `SELECT id, imagen_url, titulo, descripcion
+      `SELECT id, imagen_url, tipo, titulo, descripcion
        FROM galeria_viajes
        WHERE activo = TRUE
        ORDER BY orden ASC, creado_en DESC`

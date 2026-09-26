@@ -99,6 +99,7 @@ const {
 } = require("../controllers/admin/verificaciones.admin.controller");
 const {
   uploadGaleriaImagen,
+  uploadGaleriaVideo,
   listarGaleriaAdmin,
   crearGaleria,
   actualizarGaleria,
@@ -256,6 +257,7 @@ router.get("/ubicaciones", obtenerUbicacionesActuales);
 
 // ============ GALERÍA DE VIAJES (fotos para la landing pública) ============
 router.post("/uploads/galeria-imagen", uploadGaleriaImagen);
+router.post("/uploads/galeria-video", uploadGaleriaVideo);
 router.get("/galeria", listarGaleriaAdmin);
 router.post("/galeria", crearGaleria);
 router.patch("/galeria/:id", actualizarGaleria);
