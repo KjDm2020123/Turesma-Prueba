@@ -19,6 +19,9 @@ const pool = require("./config/db");
 const app = express();
 const uploadsRoot = path.join(__dirname, "../uploads");
 
+// Render se ejecuta detrás de un proxy que añade X-Forwarded-For.
+app.set("trust proxy", 1);
+
 if (!fs.existsSync(uploadsRoot)) {
   fs.mkdirSync(uploadsRoot, { recursive: true });
 }
