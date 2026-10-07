@@ -17,7 +17,7 @@ const {
   eliminarMiCuenta,
 } = require("../controllers/usuarios.controller");
 const { crearPagoReserva, listarPagosDeReserva, crearOrdenPaypal, capturarOrdenPaypal } = require("../controllers/pagos.controller");
-const { uploadComprobantePago, uploadCedula } = require("../controllers/uploads.controller");
+const { uploadComprobantePago } = require("../controllers/uploads.controller");
 const { enviarVerificacion, miVerificacion } = require("../controllers/verificacion.controller");
 const { listarGaleriaPublica } = require("../controllers/galeria.controller");
 const { listarViajesPublicos, reservarViajePublicado } = require("../controllers/viajes.controller");
@@ -44,7 +44,6 @@ router.get("/mis-reservas/:id/pagos", verifyToken, listarPagosDeReserva);
 router.post("/mis-reservas/:id/pagos/paypal/orden", verifyToken, crearOrdenPaypal);
 router.post("/mis-reservas/:id/pagos/paypal/capturar", verifyToken, capturarOrdenPaypal);
 router.post("/uploads/comprobante-pago", verifyToken, uploadComprobantePago);
-router.post("/uploads/cedula", verifyToken, uploadCedula);
 router.get("/verificacion", verifyToken, miVerificacion);
 router.post("/verificacion", verifyToken, enviarVerificacion);
 router.delete("/mi-cuenta", verifyToken, eliminarMiCuenta);

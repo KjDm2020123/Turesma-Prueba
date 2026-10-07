@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const { normalizeRole } = require("../config/catalogoHelpers");
 const { generateToken } = require("../middleware/auth.middleware");
+const { createEmailVerification } = require("../config/emailVerification");
 
 const PIN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_PIN_TTL_MINUTES || 10);
 
@@ -116,11 +117,12 @@ const register = async (req, res) => {
   const nombre = String(nombreRaw || "").trim();
   const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
   const telefono = typeof req.body.telefono === "string" ? req.body.telefono.trim() : "";
+  const cedula = typeof req.body.cedula === "string" ? req.body.cedula.trim() : "";
   const password = typeof req.body.password === "string" ? req.body.password : "";
   const fotoUrl = typeof req.body.foto_url === "string" ? req.body.foto_url.trim() : null;
 
-  if (!nombre || !email || !telefono || !password) {
-    return res.status(400).json({ error: "Debes enviar nombre, email, telefono y password" });
+  if (!nombre || !email || !telefono || !password || !cedula) {
+    return res.status(400).json({ error: "Debes enviar nombre, email, telefono, cedula y password" });
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -131,25 +133,31 @@ const register = async (req, res) => {
   if (password.length < 6) {
     return res.status(400).json({ error: "La contrasena debe tener al menos 6 caracteres" });
   }
+  if (!/^\d{10}$/.test(cedula)) {
+    return res.status(400).json({ error: "La cédula debe tener 10 dígitos" });
+  }
 
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     const rol = (await normalizeRole("cliente")) || "cliente";
 
     const result = await pool.query(
-      `INSERT INTO usuarios (nombre, email, telefono, password_hash, rol, imagen_url, activo)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
-       RETURNING id, nombre, email, telefono, rol, imagen_url, activo, creado_en`,
-      [nombre, email, telefono, passwordHash, rol, fotoUrl]
+      `INSERT INTO usuarios (nombre, email, telefono, cedula, password_hash, rol, imagen_url, activo, estado_verificacion)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pendiente')
+       RETURNING id, nombre, email, telefono, cedula, rol, imagen_url, activo, creado_en`,
+      [nombre, email, telefono, cedula, passwordHash, rol, fotoUrl]
     );
 
     const newUser = result.rows[0];
-    const token = generateToken({ id: newUser.id, email: newUser.email, rol: newUser.rol });
+    try {
+      await createEmailVerification(newUser.id, newUser.email, newUser.nombre);
+    } catch (mailError) {
+      console.error("Error enviando verificación por correo:", mailError);
+    }
 
     return res.status(201).json({
-      message: "Cuenta creada correctamente",
+      message: "Cuenta creada correctamente. Verifica tu correo antes de iniciar sesión.",
       user: newUser,
-      token,
     });
   } catch (error) {
     if (error.code === "23505") {
@@ -172,7 +180,11 @@ const login = async (req, res) => {
 
   try {
     const result = await pool.query(
-      "SELECT id, nombre, email, rol, imagen_url, password_hash FROM usuarios WHERE email = $1 LIMIT 1",
+      `SELECT id, nombre, email, rol, imagen_url, password_hash,
+              activo, COALESCE(estado_verificacion, 'no_verificado') AS estado_verificacion
+       FROM usuarios
+       WHERE LOWER(email) = LOWER($1)
+       LIMIT 1`,
       [email]
     );
 
@@ -191,6 +203,18 @@ const login = async (req, res) => {
       return res.status(401).json({ error: "Credenciales inválidas" });
     }
 
+    const normalizedRole = (await normalizeRole(user.rol)) || user.rol;
+    if (normalizedRole === "cliente" && user.estado_verificacion !== "verificado") {
+      return res.status(403).json({
+        error: "Debes verificar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.",
+        code: "EMAIL_NOT_VERIFIED",
+      });
+    }
+
+    if (user.activo === false) {
+      return res.status(403).json({ error: "Tu cuenta está desactivada. Contacta al administrador." });
+    }
+
     if (!isBcryptHash) {
       const hashedPassword = await bcrypt.hash(password, 10);
       await pool.query("UPDATE usuarios SET password_hash = $1 WHERE id = $2", [
@@ -198,8 +222,6 @@ const login = async (req, res) => {
         user.id,
       ]);
     }
-
-    const normalizedRole = (await normalizeRole(user.rol)) || user.rol;
 
     const safeUser = {
       id: user.id,

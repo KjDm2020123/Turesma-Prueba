@@ -14,6 +14,7 @@ import {
   Lock,
   Mail,
   Phone,
+  IdCard,
   User,
   Upload,
   X
@@ -36,6 +37,7 @@ export default function RegistroPage() {
     nombre: "",
     email: "",
     telefono: "",
+    cedula: "",
     password: "",
     confirmarPassword: "",
   });
@@ -94,6 +96,10 @@ export default function RegistroPage() {
       setError("Debes ingresar un numero de telefono");
       return;
     }
+    if (!/^\d{10}$/.test(form.cedula.trim())) {
+      setError("La cédula debe tener 10 dígitos");
+      return;
+    }
 
     setLoading(true);
 
@@ -107,6 +113,7 @@ export default function RegistroPage() {
           nombre: form.nombre.trim(),
           email: form.email.trim().toLowerCase(),
           telefono: form.telefono.trim(),
+          cedula: form.cedula.trim(),
           password: form.password,
           foto_url: fotoUrl,
         }),
@@ -203,6 +210,17 @@ export default function RegistroPage() {
                   placeholder="Ej. 099 123 4567"
                   className="w-full bg-white border border-gray-300 rounded-lg pl-11 pr-4 py-3 text-sm text-gray-900 outline-none focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10 transition-all"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-600">Número de cédula</label>
+                <div className="relative group">
+                  <IdCard size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#E31E24] transition-colors" />
+                  <input type="text" required inputMode="numeric" maxLength={10} value={form.cedula}
+                    onChange={(e) => setForm((prev) => ({ ...prev, cedula: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
+                    placeholder="10 dígitos"
+                    className="w-full bg-white border border-gray-300 rounded-lg pl-11 pr-4 py-3 text-sm text-gray-900 outline-none focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10 transition-all" />
+                </div>
               </div>
             </div>
 

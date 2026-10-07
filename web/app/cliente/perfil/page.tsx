@@ -3,16 +3,16 @@
 import { useEffect, useState } from "react";
 import {
   User, Mail, Phone, Lock, Camera, Loader2, Save,
-  CheckCircle2, ShieldCheck, IdCard, Upload, Clock, XCircle,
+  CheckCircle2, ShieldCheck, IdCard, Clock, XCircle,
 } from "lucide-react";
-import { getAuthHeaders, getStoredToken, getStoredUser, setStoredUser, handleUnauthorized } from "../../../lib/session";
+import { getAuthHeaders, getStoredUser, setStoredUser, handleUnauthorized } from "../../../lib/session";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type Perfil = { id: number; nombre: string; email: string; rol: string; telefono?: string | null; imagen_url?: string | null };
-type Verif = { estado_verificacion: string; cedula: string | null; cedula_url: string | null; notas_verificacion: string | null };
+type Verif = { estado_verificacion: string; cedula: string | null; notas_verificacion: string | null };
 
 const INPUT = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10 disabled:bg-slate-50 disabled:text-slate-400";
 
@@ -41,8 +41,6 @@ export default function ClientePerfilPage() {
   // Verificación de identidad
   const [verif, setVerif] = useState<Verif | null>(null);
   const [cedula, setCedula] = useState("");
-  const [cedulaUrl, setCedulaUrl] = useState<string | null>(null);
-  const [subiendoCedula, setSubiendoCedula] = useState(false);
   const [enviandoVerif, setEnviandoVerif] = useState(false);
 
   const load = async () => {
@@ -57,7 +55,7 @@ export default function ClientePerfilPage() {
       const vres = await fetch(`${API}/api/usuarios/verificacion`, { headers: getAuthHeaders() });
       if (vres.ok) {
         const vd: Verif = await vres.json();
-        setVerif(vd); setCedula(vd.cedula || ""); setCedulaUrl(vd.cedula_url || null);
+        setVerif(vd); setCedula(vd.cedula || "");
       }
     } catch { /* silencio */ }
     finally { setLoading(false); }
@@ -113,38 +111,19 @@ export default function ClientePerfilPage() {
     finally { setSaving(false); }
   };
 
-  const subirCedula = async (file: File | null) => {
-    if (!file) return;
-    setSubiendoCedula(true); setErr("");
-    try {
-      const token = getStoredToken();
-      const fd = new FormData(); fd.append("cedula", file);
-      const res = await fetch(`${API}/api/usuarios/uploads/cedula`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: fd,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Error al subir la cédula");
-      setCedulaUrl(data.imageUrl);
-    } catch (e: any) { setErr(e.message); }
-    finally { setSubiendoCedula(false); }
-  };
-
   const enviarVerif = async () => {
     setErr(""); setMsg("");
     if (!/^\d{10}$/.test(cedula.trim())) { setErr("La cédula debe tener 10 dígitos"); return; }
-    if (!cedulaUrl) { setErr("Sube la foto de tu cédula"); return; }
     setEnviandoVerif(true);
     try {
       const res = await fetch(`${API}/api/usuarios/verificacion`, {
         method: "POST", headers: getAuthHeaders(),
-        body: JSON.stringify({ cedula: cedula.trim(), cedula_url: cedulaUrl }),
+        body: JSON.stringify({ cedula: cedula.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo enviar");
       setMsg(data.message || "Documento enviado para verificación");
-      setVerif({ estado_verificacion: "pendiente", cedula: cedula.trim(), cedula_url: cedulaUrl, notas_verificacion: null });
+      setVerif({ estado_verificacion: "pendiente", cedula: cedula.trim(), notas_verificacion: null });
     } catch (e: any) { setErr(e.message); }
     finally { setEnviandoVerif(false); }
   };
@@ -197,11 +176,11 @@ export default function ClientePerfilPage() {
         ) : estado === "pendiente" ? (
           <div className="flex items-center gap-3 bg-amber-50 rounded-xl p-4 text-amber-700">
             <Clock size={22} className="shrink-0" />
-            <p className="text-sm font-medium">Tu documento está en revisión. Te avisaremos cuando el administrador confirme tu identidad.</p>
+            <p className="text-sm font-medium">Revisa tu correo y abre el enlace de verificación para confirmar tu identidad.</p>
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-500">Para solicitar servicios necesitas verificar tu identidad. Ingresa tu cédula y sube una foto clara de la misma.</p>
+            <p className="text-xs text-slate-500">Para solicitar servicios necesitas verificar tu identidad. Ingresa tu número de cédula y confirma tu correo electrónico.</p>
             {estado === "rechazado" && verif?.notas_verificacion && (
               <div className="flex items-start gap-2 bg-red-50 rounded-lg p-3 text-red-600 text-xs font-medium">
                 <XCircle size={16} className="shrink-0 mt-0.5" /> Rechazado: {verif.notas_verificacion}. Vuelve a intentarlo.
@@ -213,25 +192,8 @@ export default function ClientePerfilPage() {
                 <input value={cedula} onChange={e => setCedula(e.target.value.replace(/\D/g, "").slice(0, 10))} className={INPUT + " pl-9"} placeholder="10 dígitos" inputMode="numeric" />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-500">Foto de la cédula</label>
-              {cedulaUrl ? (
-                <div className="relative w-full h-40 rounded-xl overflow-hidden border border-emerald-200">
-                  <img src={cedulaUrl} alt="cédula" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => setCedulaUrl(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600"><XCircle size={16} /></button>
-                </div>
-              ) : (
-                <label className="cursor-pointer block">
-                  <div className="w-full h-32 rounded-xl border border-dashed border-slate-300 bg-slate-50 hover:border-[#E31E24] transition-all flex flex-col items-center justify-center gap-2">
-                    {subiendoCedula ? <><Loader2 size={22} className="text-[#E31E24] animate-spin" /><span className="text-xs text-slate-500 font-medium">Subiendo...</span></>
-                      : <><Upload size={22} className="text-slate-400" /><span className="text-xs text-slate-500 font-medium">Selecciona una foto de tu cédula</span></>}
-                  </div>
-                  <input type="file" accept="image/*" className="hidden" onChange={e => subirCedula(e.target.files?.[0] || null)} disabled={subiendoCedula} />
-                </label>
-              )}
-            </div>
             <button onClick={enviarVerif} disabled={enviandoVerif} className="w-full py-3 bg-[#E31E24] hover:bg-[#b3141a] text-white font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-              {enviandoVerif ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Enviar para verificación
+              {enviandoVerif ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Enviar enlace de verificación
             </button>
           </>
         )}
