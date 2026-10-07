@@ -81,7 +81,10 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS estado_verificacion VARCHAR(20) DEFAULT 'no_verificado',
     ADD COLUMN IF NOT EXISTS fecha_verificacion TIMESTAMP,
     ADD COLUMN IF NOT EXISTS verificado_por INT,
-    ADD COLUMN IF NOT EXISTS notas_verificacion TEXT;
+    ADD COLUMN IF NOT EXISTS notas_verificacion TEXT,
+    ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS email_verification_token_hash VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS email_verification_expires_at TIMESTAMP;
   `);
 
   await pool.query(`

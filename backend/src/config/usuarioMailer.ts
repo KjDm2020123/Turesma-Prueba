@@ -21,14 +21,14 @@ const enviarCorreoBienvenida = async ({ email, nombre }: { email?: string | null
   if (!email) return;
   const html = wrap("¡Bienvenido a Turesma! 🚌", `
     <p style="margin:0 0 12px;color:#374151;font-size:14px;line-height:1.6;">Hola ${nombre || "cliente"}, tu cuenta en <b>Turesma</b> fue creada correctamente. 🎉</p>
-    <p style="margin:0 0 12px;color:#374151;font-size:14px;line-height:1.6;">Ya puedes iniciar sesión y solicitar cotizaciones para tus viajes. Para reservar, primero verifica tu identidad subiendo tu cédula desde tu perfil.</p>
+    <p style="margin:0 0 12px;color:#374151;font-size:14px;line-height:1.6;">Ya puedes iniciar sesión y solicitar cotizaciones para tus viajes. Para reservar, primero confirma tu correo electrónico y registra tu número de cédula.</p>
     <p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">¡Gracias por unirte! 🚀</p>
   `);
   await enviarCorreo({
     to: email,
     subject: "Tu cuenta en Turesma fue creada ✅",
     html,
-    text: `Hola ${nombre || "cliente"}, tu cuenta en Turesma fue creada correctamente. Ya puedes iniciar sesión.\n\n— Este mensaje se envió de forma automática. Para más información comunícate al correo turesmasa@hotmail.com.`,
+    text: `Hola ${nombre || "cliente"}, tu cuenta en Turesma fue creada correctamente. Confirma tu correo electrónico para verificar tu identidad.\n\n— Este mensaje se envió de forma automática. Para más información comunícate al correo turesmasa@hotmail.com.`,
   });
 };
 

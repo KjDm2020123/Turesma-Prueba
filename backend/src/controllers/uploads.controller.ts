@@ -97,43 +97,7 @@ const uploadComprobantePago = (req, res) => {
   });
 };
 
-// ── Cédula / documento de identidad del cliente ──────────────────────────────
-const uploadCedulaMiddleware = multer({
-  storage: multer.memoryStorage(),
-  fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024,
-  },
-}).single("cedula");
-
-const uploadCedula = (req, res) => {
-  uploadCedulaMiddleware(req, res, async (error) => {
-    if (error) {
-      return res.status(400).json({ error: error.message || "No se pudo subir la cédula" });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: "Debes adjuntar una imagen de tu cédula" });
-    }
-
-    let imageUrl;
-    try {
-      imageUrl = await uploadImage(req.file, "cedulas");
-    } catch (uploadError) {
-      console.error("Error subiendo cédula a Supabase:", uploadError);
-      return res.status(502).json({ error: "No se pudo guardar la cédula" });
-    }
-
-    return res.status(201).json({
-      message: "Cédula subida correctamente",
-      imageUrl,
-      filename: imageUrl.split("/").pop(),
-    });
-  });
-};
-
 module.exports = {
   uploadPerfilImagen,
   uploadComprobantePago,
-  uploadCedula,
 };

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardList, Plus, RefreshCw, X } from "lucide-react";
@@ -146,11 +146,11 @@ export default function OperacionesPage() {
       <header className="flex flex-col gap-4 rounded-3xl bg-slate-950 p-6 text-white shadow-xl sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.25em] text-cyan-300">Gestión operativa</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight">Operaciones de transporte</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-300">Planifica, asigna y ejecuta servicios con validaciones de flota y trazabilidad.</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight">Despacho de servicios</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-300">Asigna y supervisa servicios confirmados con validaciones de flota y trazabilidad.</p>
         </div>
         <button onClick={() => setShowCreate(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300">
-          <Plus size={17} /> Nueva operación
+          <Plus size={17} /> Crear servicio
         </button>
       </header>
 
@@ -164,10 +164,10 @@ export default function OperacionesPage() {
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <div className="flex items-center gap-3"><ClipboardList className="text-cyan-600" size={20} /><h2 className="font-black text-slate-900">Agenda operativa</h2></div>
+          <div className="flex items-center gap-3"><ClipboardList className="text-cyan-600" size={20} /><h2 className="font-black text-slate-900">Servicios programados</h2></div>
           <button onClick={() => void load()} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Actualizar operaciones"><RefreshCw size={17} /></button>
         </div>
-        {loading ? <p className="p-8 text-center text-sm font-semibold text-slate-400">Cargando operaciones...</p> : operations.length === 0 ? <p className="p-8 text-center text-sm font-semibold text-slate-400">No hay operaciones registradas.</p> : (
+        {loading ? <p className="p-8 text-center text-sm font-semibold text-slate-400">Cargando servicios...</p> : operations.length === 0 ? <div className="p-10 text-center"><p className="text-sm font-black text-slate-500">No hay servicios programados</p><p className="mt-1 text-xs text-slate-400">Las reservas confirmadas aparecerán aquí para asignar conductor y vehículo.</p></div> : (
           <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Servicio</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Ruta</th><th className="px-5 py-3">Recursos</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{operations.map((operation) => <tr key={operation.id} className="align-top"><td className="px-5 py-4"><p className="font-black text-slate-900">#{operation.id} · {operation.tipo_servicio}</p><p className="mt-1 text-xs text-slate-500">{operation.pasajeros} pasajeros</p></td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{operation.fecha_programada}<br /><span className="text-xs">{operation.hora_inicio || "Sin hora"}{operation.hora_fin ? ` - ${operation.hora_fin}` : ""}</span></td><td className="max-w-xs px-5 py-4 text-slate-600">{operation.origen}<br /><span className="font-semibold text-slate-900">{operation.destino}</span></td><td className="px-5 py-4 text-xs text-slate-600">{operation.vehiculo_placa || "Sin vehículo"}<br />{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span></td><td className="space-y-2 px-5 py-4"><div className="flex flex-wrap gap-2">{["programada", "asignada"].includes(operation.estado) && <button onClick={() => setAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}{operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}{operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}</div></td></tr>)}</tbody></table></div>
         )}
       </section>

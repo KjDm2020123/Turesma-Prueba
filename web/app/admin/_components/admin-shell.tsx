@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -61,42 +61,46 @@ type MenuGroup = {
 const menuGroups: MenuGroup[] = [
   {
     id: "general", label: "General", icon: LayoutDashboard, items: [
-      { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/admin/inteligencia", label: "Torre de Control", icon: Brain },
+      { href: "/admin", label: "Reporte", icon: LayoutDashboard },
+      { href: "/admin/inteligencia", label: "Toma de decisiones", icon: Brain },
     ],
   },
   {
     id: "operaciones", label: "Operaciones", icon: Route, items: [
-      { href: "/admin/operaciones", label: "Operaciones", icon: ClipboardList },
+      { href: "/admin/operaciones", label: "Despacho", icon: ClipboardList },
       { href: "/admin/viajes", label: "Viajes publicados", icon: Ticket },
       { href: "/admin/cotizaciones", label: "Cotizaciones", icon: FileText },
       { href: "/admin/reservas", label: "Reservas", icon: Calendar },
       { href: "/admin/pagos", label: "Pagos", icon: CreditCard },
-      { href: "/admin/ruta", label: "Ruta en Vivo", icon: MapPin },
+      { href: "/admin/ruta", label: "Seguimiento en vivo", icon: MapPin },
     ],
   },
   {
-    id: "usuarios", label: "Usuarios", icon: Users, items: [
+    id: "personas", label: "Personas", icon: Users, items: [
       { href: "/admin/clientes", label: "Clientes", icon: Users },
       { href: "/admin/verificaciones", label: "Verificaciones", icon: IdCard },
-      { href: "/admin/vehiculos", label: "Vehículos", icon: Car },
       { href: "/admin/conductores", label: "Conductores", icon: UserCircle },
-      { href: "/admin/administrador", label: "Administrador", icon: ShieldCheck },
+      { href: "/admin/administrador", label: "Administradores", icon: ShieldCheck },
     ],
   },
   {
-    id: "analisis", label: "Análisis y Control", icon: TrendingUp, items: [
-      { href: "/admin/historial", label: "Balance Mensual", icon: BarChart3 },
-      { href: "/admin/rutas-analisis", label: "Análisis Rutas", icon: TrendingUp },
-      { href: "/admin/mantenimiento", label: "Historial Mant.", icon: Wrench },
-      { href: "/admin/cumplimiento", label: "Cumplimiento", icon: ClipboardCheck },
+    id: "flota", label: "Flota", icon: Bus, items: [
+      { href: "/admin/vehiculos", label: "Vehículos", icon: Car },
+      { href: "/admin/mantenimiento", label: "Mantenimiento", icon: Wrench },
+      { href: "/admin/cumplimiento", label: "Documentos y cumplimiento", icon: ClipboardCheck },
+    ],
+  },
+  {
+    id: "reportes", label: "Reportes", icon: TrendingUp, items: [
+      { href: "/admin/historial", label: "Balance anual", icon: BarChart3 },
+      { href: "/admin/rutas-analisis", label: "Rendimiento de rutas", icon: TrendingUp },
     ],
   },
   {
     id: "sistema", label: "Sistema", icon: Settings, items: [
       { href: "/admin/galeria", label: "Galería Web", icon: Images },
-      { href: "/admin/configuracion", label: "Perfil", icon: User },
-      { href: "/admin/tarifas", label: "Tarifas de cotización", icon: Calculator },
+      { href: "/admin/configuracion", label: "Mi perfil", icon: User },
+      { href: "/admin/tarifas", label: "Tabla de precios", icon: Calculator },
     ],
   },
 ];
