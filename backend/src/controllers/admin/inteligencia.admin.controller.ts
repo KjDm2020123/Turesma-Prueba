@@ -557,9 +557,153 @@ const getAnaliticaInteligente = async (_req: any, res: any) => {
   }
 };
 
+const recomendarAsignacion = async (req: any, res: any) => {
+  const fecha = typeof req.query.fecha === "string" ? req.query.fecha : new Date().toISOString().slice(0, 10);
+  const pasajeros = Number(req.query.pasajeros || 1);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !Number.isInteger(pasajeros) || pasajeros <= 0) {
+    return res.status(400).json({ success: false, error: "Fecha o cantidad de pasajeros inválida" });
+  }
+
+  try {
+    const result = await pool.query(`
+      WITH candidatos AS (
+        SELECT
+          v.id AS vehiculo_id, v.placa, v.modelo, v.tipo, v.capacidad,
+          u.id AS conductor_id, u.nombre AS conductor_nombre,
+          COALESCE(c.rating_promedio, 0)::numeric AS rating,
+          COUNT(DISTINCT r.id) FILTER (
+            WHERE r.estado NOT IN ('cancelada', 'finalizada')
+              AND r.fecha_reserva >= CURRENT_DATE - INTERVAL '30 days'
+          )::int AS carga_30_dias,
+          COALESCE(v.kilometraje, 0)::int AS kilometraje,
+          CASE
+            WHEN v.fecha_proximo_mantenimiento IS NOT NULL
+              AND v.fecha_proximo_mantenimiento <= $1::date + INTERVAL '7 days' THEN 0
+            ELSE 1
+          END AS mantenimiento_ok
+        FROM vehiculos v
+        LEFT JOIN usuarios u ON u.id = v.usuario_id
+        LEFT JOIN conductores c ON c.usuario_id = u.id
+        LEFT JOIN reservas r ON r.vehiculo_id = v.id
+        WHERE v.activo = true
+          AND v.estado = 'disponible'
+          AND v.capacidad >= $2
+          AND NOT EXISTS (
+            SELECT 1 FROM reservas ocupada
+            WHERE ocupada.vehiculo_id = v.id
+              AND ocupada.fecha_reserva = $1::date
+              AND ocupada.estado NOT IN ('cancelada', 'finalizada')
+          )
+        GROUP BY v.id, u.id, u.nombre, c.rating_promedio
+      )
+      SELECT *,
+        ROUND((
+          (LEAST(capacidad, 60) / 60.0) * 30
+          + (LEAST(rating, 5) / 5.0) * 25
+          + (mantenimiento_ok * 25)
+          + (GREATEST(0, 20 - LEAST(carga_30_dias, 20)))
+        )::numeric, 2) AS puntaje
+      FROM candidatos
+      ORDER BY puntaje DESC, carga_30_dias ASC, kilometraje ASC
+      LIMIT 5
+    `, [fecha, pasajeros]);
+
+    const opciones = result.rows;
+    if (!opciones.length) {
+      return res.status(404).json({
+        success: false,
+        error: "No hay vehículos disponibles que cumplan la capacidad y fecha solicitadas",
+      });
+    }
+
+    const recomendacion = {
+      fecha,
+      pasajeros,
+      vehiculo: opciones[0],
+      alternativas: opciones.slice(1),
+      criterios: ["capacidad", "disponibilidad", "mantenimiento", "calificación", "carga operativa"],
+    };
+
+    await pool.query(
+      `INSERT INTO decisiones_sistema (tipo_decision, entidad_id, recomendacion, factores)
+       VALUES ('asignacion_vehiculo', $1, $2::jsonb, $3::jsonb)`,
+      [
+        opciones[0].vehiculo_id,
+        JSON.stringify(recomendacion),
+        JSON.stringify({ fecha, pasajeros, opciones_evaluadas: opciones.length }),
+      ]
+    );
+
+    return res.json({ success: true, data: recomendacion });
+  } catch (error) {
+    console.error("Error generando recomendación de asignación:", error);
+    return res.status(500).json({ success: false, error: "No se pudo generar la recomendación" });
+  }
+};
+
+const getIndicesDesempeno = async (_req: any, res: any) => {
+  try {
+    const [vehiculos, conductores, rutas] = await Promise.all([
+      pool.query(`
+        SELECT v.id, v.placa, v.modelo,
+          COUNT(DISTINCT r.id) FILTER (WHERE r.estado NOT IN ('cancelada'))::int AS viajes,
+          COUNT(DISTINCT m.id)::int AS mantenimientos,
+          ROUND((
+            LEAST(COUNT(DISTINCT r.id) * 10, 40)
+            + CASE WHEN v.estado = 'disponible' THEN 30 WHEN v.estado = 'en_servicio' THEN 25 ELSE 10 END
+            + CASE WHEN v.fecha_proximo_mantenimiento IS NULL OR v.fecha_proximo_mantenimiento > CURRENT_DATE THEN 30 ELSE 10 END
+          )::numeric, 2) AS indice
+        FROM vehiculos v
+        LEFT JOIN reservas r ON r.vehiculo_id = v.id
+        LEFT JOIN mantenimiento_vehiculos m ON m.vehiculo_id = v.id
+        WHERE v.activo = true
+        GROUP BY v.id
+        ORDER BY indice DESC
+      `),
+      pool.query(`
+        SELECT u.id, u.nombre, COALESCE(c.rating_promedio, 0)::numeric AS rating,
+          COUNT(DISTINCT r.id) FILTER (WHERE r.estado NOT IN ('cancelada'))::int AS viajes,
+          ROUND((LEAST(COALESCE(c.rating_promedio, 0) * 12, 60)
+            + LEAST(COUNT(DISTINCT r.id) * 4, 40))::numeric, 2) AS indice
+        FROM usuarios u
+        JOIN conductores c ON c.usuario_id = u.id
+        LEFT JOIN reservas r ON r.conductor_id = u.id
+        WHERE u.activo = true
+        GROUP BY u.id, u.nombre, c.rating_promedio
+        ORDER BY indice DESC
+      `),
+      pool.query(`
+        SELECT origen, destino, COUNT(*) FILTER (WHERE estado <> 'cancelada')::int AS viajes,
+          COALESCE(ROUND(AVG(num_personas)::numeric, 2), 0) AS pasajeros_promedio,
+          COALESCE(ROUND(AVG(total)::numeric, 2), 0) AS ingreso_promedio
+        FROM reservas
+        WHERE origen IS NOT NULL AND destino IS NOT NULL
+        GROUP BY origen, destino
+        ORDER BY viajes DESC
+        LIMIT 50
+      `),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        vehiculos: vehiculos.rows,
+        conductores: conductores.rows,
+        rutas: rutas.rows,
+      },
+    });
+  } catch (error) {
+    console.error("Error obteniendo índices de desempeño:", error);
+    return res.status(500).json({ success: false, error: "No se pudieron obtener los índices" });
+  }
+};
+
 module.exports = {
   getInteligenciaDashboard,
   getAlertasInteligentes,
   getBadgesSidebar,
   getAnaliticaInteligente,
+  recomendarAsignacion,
+  getIndicesDesempeno,
 };

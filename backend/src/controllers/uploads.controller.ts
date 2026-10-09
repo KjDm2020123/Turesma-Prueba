@@ -3,6 +3,9 @@ export {};
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const pool = require("../config/db");
+const jwt = require("jsonwebtoken");
+const { JWT_SECRET } = require("../middleware/auth.middleware");
 const { uploadImage } = require("../config/storage");
 
 const fileFilter = (_req, file, cb) => {
@@ -86,8 +89,12 @@ const uploadComprobantePago = (req, res) => {
       return res.status(400).json({ error: "Debes adjuntar una imagen del comprobante" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/uploads/comprobantes/${req.file.filename}`;
+    const accessToken = jwt.sign(
+      { file: req.file.filename, uid: Number(req.user?.id) },
+      JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+    const imageUrl = `${req.protocol}://${req.get("host")}/api/usuarios/comprobantes/${encodeURIComponent(req.file.filename)}?token=${encodeURIComponent(accessToken)}`;
 
     return res.status(201).json({
       message: "Comprobante subido correctamente",
@@ -97,7 +104,46 @@ const uploadComprobantePago = (req, res) => {
   });
 };
 
+const serveComprobante = async (req, res) => {
+  const filename = path.basename(String(req.params.filename || ""));
+  if (!filename || filename !== req.params.filename) {
+    return res.status(400).json({ error: "Archivo inválido" });
+  }
+
+  try {
+    const accessToken = typeof req.query.token === "string" ? req.query.token : "";
+    if (accessToken) {
+      let claims;
+      try {
+        claims = jwt.verify(accessToken, JWT_SECRET);
+      } catch {
+        return res.status(403).json({ error: "El enlace del comprobante expiró o no es válido" });
+      }
+      if (claims.file !== filename) return res.status(403).json({ error: "Token de archivo inválido" });
+      return res.sendFile(path.join(comprobantesDir, filename));
+    }
+
+    const role = String(req.user?.rol || "").toLowerCase();
+    const userId = Number(req.user?.id);
+    const access = await pool.query(
+      `SELECT 1
+       FROM pagos_reserva p
+       WHERE p.comprobante_url LIKE $1
+         AND ($2 = 'admin' OR $2 = 'operativo' OR p.usuario_id = $3)
+       LIMIT 1`,
+      [`%/${filename}`, role, userId]
+    );
+    if (!access.rowCount) return res.status(404).json({ error: "Comprobante no encontrado" });
+
+    return res.sendFile(path.join(comprobantesDir, filename));
+  } catch (error) {
+    console.error("Error entregando comprobante:", error);
+    return res.status(500).json({ error: "No se pudo entregar el comprobante" });
+  }
+};
+
 module.exports = {
   uploadPerfilImagen,
   uploadComprobantePago,
+  serveComprobante,
 };

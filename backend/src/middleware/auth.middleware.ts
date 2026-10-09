@@ -59,6 +59,26 @@ const requireRole = (...roles: string[]) => {
   };
 };
 
+const requireSelfOrRole = (...roles: string[]) => {
+  const normalizedRoles = roles.map((role) => role.toLowerCase());
+
+  return (req: any, res: any, next: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    const currentId = Number(req.user.id);
+    const requestedId = Number(req.params.id);
+    const currentRole = String(req.user.rol || "").toLowerCase();
+
+    if (normalizedRoles.includes(currentRole) || currentId === requestedId) {
+      return next();
+    }
+
+    return res.status(403).json({ error: "No puedes acceder a recursos de otro usuario" });
+  };
+};
+
 const optionalAuth = (req: any, _res: any, next: any) => {
   const authHeader = req.headers.authorization;
 
@@ -79,6 +99,7 @@ module.exports = {
   generateToken,
   verifyToken,
   requireRole,
+  requireSelfOrRole,
   optionalAuth,
   JWT_SECRET,
 };

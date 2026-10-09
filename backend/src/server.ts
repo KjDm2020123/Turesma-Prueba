@@ -45,7 +45,9 @@ app.use(cors(allowedOrigins?.length ? { origin: allowedOrigins } : {}));
 // Las publicaciones pueden incluir varias URLs de imágenes. El archivo nunca
 // viaja dentro del JSON, pero el límite debe permitir galerías y metadatos.
 app.use(express.json({ limit: "10mb" }));
-app.use("/uploads", express.static(uploadsRoot));
+for (const publicFolder of ["galeria", "perfiles", "vehiculos", "viajes"]) {
+  app.use(`/uploads/${publicFolder}`, express.static(path.join(uploadsRoot, publicFolder)));
+}
 
 // Límite de peticiones a autenticación: frena ataques de fuerza bruta al login
 // y al envío de PIN de recuperación (por IP).

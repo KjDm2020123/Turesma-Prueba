@@ -49,6 +49,33 @@ type Analitica = {
   recomendaciones: string[];
 };
 
+type PerformanceData = {
+  vehiculos: Array<{ id: number; placa: string; modelo: string; viajes: number; mantenimientos: number; indice: number }>;
+  conductores: Array<{ id: number; nombre: string; rating: number; viajes: number; indice: number }>;
+  rutas: Array<{ origen: string; destino: string; viajes: number; pasajeros_promedio: number; ingreso_promedio: number }>;
+};
+
+type AssignmentRecommendation = {
+  fecha: string;
+  pasajeros: number;
+  vehiculo: {
+    placa: string;
+    modelo: string;
+    capacidad: number;
+    conductor_nombre?: string;
+    puntaje: number;
+    carga_30_dias: number;
+    mantenimiento_ok: number;
+  };
+  alternativas: Array<{
+    placa: string;
+    modelo: string;
+    conductor_nombre?: string;
+    puntaje: number;
+  }>;
+  criterios: string[];
+};
+
 const CARD = "bg-white rounded-2xl p-5 shadow-sm border border-gray-100";
 
 const PRIORIDAD_STYLE: Record<string, string> = {
@@ -67,6 +94,12 @@ export const IntelligenceDashboard = () => {
   const { checkingSession } = useAdminGuard();
   const [data, setData] = useState<DashboardData | null>(null);
   const [analitica, setAnalitica] = useState<Analitica | null>(null);
+  const [performance, setPerformance] = useState<PerformanceData | null>(null);
+  const [recommendation, setRecommendation] = useState<AssignmentRecommendation | null>(null);
+  const [assignmentDate, setAssignmentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [passengers, setPassengers] = useState(10);
+  const [loadingRecommendation, setLoadingRecommendation] = useState(false);
+  const [recommendationError, setRecommendationError] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -88,6 +121,35 @@ export const IntelligenceDashboard = () => {
       const aRes = await fetch(`${API_URL}/api/admin/inteligencia/analitica`, { headers: getAuthHeaders() });
       if (aRes.ok) setAnalitica(await aRes.json());
     } catch { /* silencio */ }
+    try {
+      const pRes = await fetch(`${API_URL}/api/admin/inteligencia/desempeno`, { headers: getAuthHeaders() });
+      if (pRes.ok) {
+        const payload = await pRes.json();
+        setPerformance(payload.data);
+      }
+    } catch { /* el dashboard principal no depende de este bloque */ }
+  };
+
+  const requestRecommendation = async () => {
+    setLoadingRecommendation(true);
+    setRecommendationError("");
+    try {
+      const query = new URLSearchParams({
+        fecha: assignmentDate,
+        pasajeros: String(Math.max(1, passengers)),
+      });
+      const response = await fetch(`${API_URL}/api/admin/inteligencia/asignacion-recomendada?${query}`, {
+        headers: getAuthHeaders(),
+      });
+      if (handleUnauthorized(response.status)) return;
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "No se pudo generar la recomendación");
+      setRecommendation(payload.data);
+    } catch (error) {
+      setRecommendationError(error instanceof Error ? error.message : "No se pudo generar la recomendación");
+    } finally {
+      setLoadingRecommendation(false);
+    }
   };
 
   useEffect(() => { if (!checkingSession) loadData(); }, [checkingSession]);
@@ -121,7 +183,6 @@ export const IntelligenceDashboard = () => {
 
   return (
     <section className="space-y-6 animate-in fade-in duration-700">
-
       {/* ═══════ ANÁLISIS INTELIGENTE (predicción · recomendaciones · proyección) ═══════ */}
       {analitica && (
         <div className="space-y-4">
@@ -213,6 +274,74 @@ export const IntelligenceDashboard = () => {
             <p className="text-3xl font-black italic tracking-tighter text-slate-900 mt-1">{item.val}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className={CARD}>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Asignación inteligente</p>
+              <p className="text-xs text-slate-400 mt-1">Recomendación explicable para la operación</p>
+            </div>
+            <Sparkles size={18} className="text-amber-400" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Fecha
+              <input type="date" value={assignmentDate} onChange={(event) => setAssignmentDate(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700" />
+            </label>
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+              Pasajeros
+              <input type="number" min={1} value={passengers} onChange={(event) => setPassengers(Number(event.target.value) || 1)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700" />
+            </label>
+          </div>
+          <button onClick={requestRecommendation} disabled={loadingRecommendation}
+            className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">
+            {loadingRecommendation ? "Analizando disponibilidad..." : "Generar recomendación"}
+          </button>
+          {recommendationError && <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-600">{recommendationError}</p>}
+          {recommendation && (
+            <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-black text-emerald-900">{recommendation.vehiculo.placa} · {recommendation.vehiculo.modelo}</p>
+                <span className="rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-black text-white">{recommendation.vehiculo.puntaje}/100</span>
+              </div>
+              <p className="mt-1 text-xs text-emerald-800">
+                Conductor: {recommendation.vehiculo.conductor_nombre || "Sin conductor asignado"} · Capacidad: {recommendation.vehiculo.capacidad}
+              </p>
+              <p className="mt-2 text-[11px] text-emerald-700">
+                Criterios: {recommendation.criterios.join(", ")}.
+              </p>
+              {recommendation.alternativas.length > 0 && (
+                <p className="mt-2 text-[11px] font-bold text-slate-500">
+                  Alternativa: {recommendation.alternativas[0].placa} ({recommendation.alternativas[0].puntaje}/100)
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className={CARD}>
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={16} className="text-[#E31E24]" />
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Índices de desempeño</p>
+          </div>
+          {!performance ? <p className="py-8 text-center text-xs text-slate-400">Cargando índices...</p> : (
+            <div className="space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Vehículos</p>
+              {performance.vehiculos.slice(0, 4).map((item) => (
+                <div key={item.id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                  <Bus size={14} className="text-slate-400" />
+                  <span className="flex-1 text-xs font-black text-slate-700">{item.placa} <span className="font-normal text-slate-400">{item.modelo}</span></span>
+                  <span className="text-xs font-black text-[#E31E24]">{item.indice}/100</span>
+                </div>
+              ))}
+              {performance.vehiculos.length === 0 && <p className="text-xs text-slate-400">Sin vehículos evaluables.</p>}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* COLA DE ACCIONES + PRÓXIMOS VENCIMIENTOS */}
