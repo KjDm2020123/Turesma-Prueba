@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   User, Mail, Phone, Lock, Camera, Loader2, Save,
   CheckCircle2, XCircle,
@@ -44,7 +45,7 @@ export default function AdminConfiguracionPage() {
   useEffect(() => {
     if (checkingSession) return;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [checkingSession]);
 
   const handlePhoto = async (file: File | null) => {
@@ -56,7 +57,7 @@ export default function AdminConfiguracionPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Error al subir la foto");
       setImagenUrl(data.imageUrl);
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setUploading(false); }
   };
 
@@ -77,7 +78,7 @@ export default function AdminConfiguracionPage() {
       const stored = getStoredUser();
       if (stored) setStoredUser({ ...stored, nombre: data.user.nombre, imagen_url: data.user.imagen_url });
       setPerfil(data.user);
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 
@@ -89,7 +90,7 @@ export default function AdminConfiguracionPage() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
         <div className="relative shrink-0">
           {imagenUrl ? (
-            <img src={imagenUrl} alt="perfil" className="w-24 h-24 rounded-2xl object-cover border border-slate-200" />
+            <Image src={imagenUrl} alt="Perfil" width={96} height={96} unoptimized className="w-24 h-24 rounded-2xl object-cover border border-slate-200" />
           ) : (
             <div className="w-24 h-24 rounded-2xl bg-slate-100 flex items-center justify-center"><User size={38} className="text-slate-300" /></div>
           )}

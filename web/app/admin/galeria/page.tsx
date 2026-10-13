@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useConfirm } from "../../../components/confirm-dialog";
@@ -71,7 +72,7 @@ export default function AdminGaleriaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al subir la imagen");
       setImagenUrl(json.imageUrl || "");
-    } catch (e: any) { flash(setErr, e.message || "No se pudo subir la imagen"); }
+    } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo subir la imagen"); }
     finally { setSubiendo(false); }
   };
 
@@ -91,7 +92,7 @@ export default function AdminGaleriaPage() {
       if (!res.ok) throw new Error(json.error || "Error al subir el video");
       setImagenUrl(json.videoUrl || "");
       setVideoPreview(URL.createObjectURL(file));
-    } catch (e: any) { flash(setErr, e.message || "No se pudo subir el video"); }
+    } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo subir el video"); }
     finally { setSubiendo(false); }
   };
 
@@ -110,7 +111,7 @@ export default function AdminGaleriaPage() {
       setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null);
       if (fileRef.current) fileRef.current.value = "";
       flash(setMsg, `${tipoContenido === "video" ? "Video" : "Foto"} publicado en la página principal`);
-    } catch (e: any) { flash(setErr, e.message || "No se pudo guardar"); }
+    } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo guardar"); }
     finally { setGuardando(false); }
   };
 
@@ -182,7 +183,7 @@ export default function AdminGaleriaPage() {
               {tipoContenido === "video" && videoPreview ? (
                 <video src={videoPreview} controls className="absolute inset-0 w-full h-full object-cover" />
               ) : imagenUrl ? (
-                <img src={imagenUrl} alt="Vista previa" className="absolute inset-0 w-full h-full object-cover" />
+                <Image src={imagenUrl} alt="Vista previa" fill sizes="240px" unoptimized className="object-cover" />
               ) : subiendo ? (
                 <Loader2 className="animate-spin text-[#E31E24]" size={26} />
               ) : (
@@ -244,7 +245,7 @@ export default function AdminGaleriaPage() {
             {fotos.map((f) => (
               <div key={f.id} className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${f.activo ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
                 <div className={`relative aspect-[4/3] bg-slate-100 ${f.tipo === "imagen" ? "cursor-zoom-in" : ""}`} onClick={() => f.tipo === "imagen" && setZoomImg(f.imagen_url)}>
-                  {f.tipo === "video" ? <video src={f.imagen_url} controls className="w-full h-full object-cover" /> : <img src={f.imagen_url} alt={f.titulo || "Foto de viaje"} className="w-full h-full object-cover" />}
+                  {f.tipo === "video" ? <video src={f.imagen_url} controls className="w-full h-full object-cover" /> : <Image src={f.imagen_url} alt={f.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />}
                   {f.tipo === "video" && <span className="absolute top-2 left-2 bg-black/70 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1"><Video size={11} /> Video</span>}
                   {!f.activo && (
                     <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Oculta</span>
@@ -287,7 +288,7 @@ export default function AdminGaleriaPage() {
       {zoomImg && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setZoomImg(null)}>
           <button className="absolute top-5 right-5 text-white/70 hover:text-white transition-colors" onClick={() => setZoomImg(null)}><X size={28} /></button>
-          <img src={zoomImg} alt="Foto de viaje" className="max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
+          <Image src={zoomImg} alt="Foto de viaje" width={1200} height={900} unoptimized className="max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>

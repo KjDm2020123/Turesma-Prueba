@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
-  Bus, ArrowRight, Calendar, Users, DollarSign, Loader2, RefreshCw,
+  Bus, ArrowRight, DollarSign, Loader2,
   Star, CheckCircle2, MapPin, Phone, Navigation, CreditCard, X,
   Building2, Link2, UploadCloud, Clock, AlertTriangle, ImageIcon,
 } from "lucide-react";
@@ -48,7 +49,7 @@ const ESTADO: Record<string, { label: string; cls: string }> = {
   cancelada: { label: "Cancelada", cls: "bg-red-50 text-red-600 border-red-200" },
 };
 
-const ESTADO_PAGO_STYLE: Record<string, { label: string; cls: string; icon: any }> = {
+const ESTADO_PAGO_STYLE: Record<string, { label: string; cls: string; icon: React.ComponentType<{ size?: number }> }> = {
   pendiente: { label: "Pago pendiente", cls: "bg-red-50 text-red-600 border-red-200", icon: AlertTriangle },
   parcial: { label: "Pago parcial", cls: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
   confirmado: { label: "Pago confirmado", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
@@ -102,7 +103,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
     finally { setLoadingPagos(false); }
   };
 
-  useEffect(() => { loadPagos(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { loadPagos();   }, []);
 
   const handleSubmit = async () => {
     setErr(""); setMsg("");
@@ -117,7 +118,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No se pudo iniciar el pago PayPal");
         window.location.assign(data.approval_url);
-      } catch (e: any) { setErr(e.message); setSending(false); }
+      } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); setSending(false); }
       return;
     }
 
@@ -146,7 +147,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
       setFile(null);
       loadPagos();
       onSuccess();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setUploading(false); setSending(false); }
   };
 
@@ -251,7 +252,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                   <div className="flex items-center gap-2 min-w-0">
                     {p.comprobante_url ? (
                       <a href={p.comprobante_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                        <img src={p.comprobante_url} alt="comprobante" className="w-9 h-9 rounded-lg object-cover border border-slate-200" />
+                        <Image src={p.comprobante_url} alt="Comprobante de pago" width={36} height={36} unoptimized className="w-9 h-9 rounded-lg object-cover border border-slate-200" />
                       </a>
                     ) : <ImageIcon size={16} className="text-slate-300 flex-shrink-0" />}
                     <div className="min-w-0">
@@ -312,7 +313,7 @@ export default function ClienteHistorialPage() {
       setReprogReserva(null);
       setMsg(data.message || "Fecha/hora actualizada. Avisamos al administrador y al conductor.");
       load();
-    } catch (e: any) { setReprogMsg(e.message); }
+    } catch (e) { setReprogMsg(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setReprogSaving(false); }
   };
 
@@ -379,7 +380,7 @@ export default function ClienteHistorialPage() {
       setMsg(data.message || "¡Gracias por calificar!");
       setRateId(null); setComentario(""); setStars(5);
       load();
-    } catch (e: any) { setMsg(e.message); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 

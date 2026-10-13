@@ -44,6 +44,8 @@ const {
   getAlertasInteligentes,
   getBadgesSidebar,
   getAnaliticaInteligente,
+  recomendarAsignacion,
+  getIndicesDesempeno,
   exportarReporteCSV,
   getTarifas,
   updateTarifas,
@@ -68,8 +70,10 @@ const {
   getRutasReportadasResumen,
 } = require("../controllers/admin/rutas-reportadas.admin.controller");
 const { uploadVehiculoImagen, uploadViajeImagenes } = require("../controllers/admin/uploads.admin.controller");
+const { serveComprobante } = require("../controllers/uploads.controller");
 const { listarPagosAdmin, aprobarPago, rechazarPago, actualizarLinkPago } = require("../controllers/admin/pagos.admin.controller");
 const { getDashboardData } = require("../controllers/admin/dashboard.admin.controller");
+const { getControlOperativo, getScenarioContext, simularEscenario, getAnomalias } = require("../controllers/admin/control-operativo.admin.controller");
 const { getHistorialMensual } = require("../controllers/admin/historial.admin.controller");
 const { getProformaCotizacion, enviarProformaCotizacion } = require("../controllers/admin/proforma.admin.controller");
 const {
@@ -139,6 +143,7 @@ router.put("/tarifas", updateTarifas);
 
 // ── DASHBOARD PRINCIPAL ───────────────────────────────────────────────────────
 router.get("/dashboard", getDashboardData);
+router.get("/control-operativo", getControlOperativo);
 router.get("/historial/mensual", getHistorialMensual);
 
 router.get("/operaciones", listarOperaciones);
@@ -155,6 +160,11 @@ router.delete("/viajes/:id", eliminarViajeAdmin);
 router.get("/inteligencia/dashboard", getInteligenciaDashboard);
 router.get("/inteligencia/alertas", getAlertasInteligentes);
 router.get("/inteligencia/analitica", getAnaliticaInteligente);
+router.get("/inteligencia/asignacion-recomendada", recomendarAsignacion);
+router.get("/inteligencia/desempeno", getIndicesDesempeno);
+router.post("/inteligencia/simular", simularEscenario);
+router.get("/inteligencia/contexto-escenarios", getScenarioContext);
+router.get("/inteligencia/anomalias", getAnomalias);
 router.get("/badges-sidebar", getBadgesSidebar);
 
 // Verificación de identidad de clientes
@@ -254,6 +264,7 @@ router.get("/cotizaciones/cliente/:usuario_id", listarMisCotizaciones);
 
 // ============ UBICACIÓN EN VIVO DE VEHÍCULOS ============
 router.get("/ubicaciones", obtenerUbicacionesActuales);
+router.get("/pagos/comprobantes/:filename", serveComprobante);
 
 // ============ GALERÍA DE VIAJES (fotos para la landing pública) ============
 router.post("/uploads/galeria-imagen", uploadGaleriaImagen);

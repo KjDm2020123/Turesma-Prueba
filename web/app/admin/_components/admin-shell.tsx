@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
@@ -16,7 +17,6 @@ import {
   Bus,
   ShieldCheck,
   Zap,
-  AlertTriangle,
   TrendingUp,
   UserCircle,
   Car,
@@ -31,7 +31,8 @@ import {
   CreditCard,
   Calculator,
   IdCard,
-  Images
+  Images,
+  SlidersHorizontal
   ,Ticket
 } from "lucide-react";
 import { clearStoredUser, getStoredUser } from "../../../lib/session";
@@ -63,6 +64,7 @@ const menuGroups: MenuGroup[] = [
     id: "general", label: "General", icon: LayoutDashboard, items: [
       { href: "/admin", label: "Reporte", icon: LayoutDashboard },
       { href: "/admin/inteligencia", label: "Toma de decisiones", icon: Brain },
+      { href: "/admin/simulador", label: "Simulador de escenarios", icon: SlidersHorizontal },
     ],
   },
   {
@@ -359,7 +361,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
               </div>
               {user?.imagen_url ? (
                 <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                  <img src={user.imagen_url} alt={user?.nombre} className="w-full h-full object-cover" />
+                  <Image src={user.imagen_url} alt={user?.nombre || "Administrador"} fill sizes="40px" className="object-cover" unoptimized />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-[#E31E24] flex items-center justify-center text-white shadow-sm">
@@ -371,7 +373,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         </header>
 
         {/* SECTION CONTENT */}
-        <section className="p-3 md:p-10 flex-1 overflow-y-auto">
+        <section className="min-w-0 overflow-x-hidden p-3 md:p-10 flex-1 overflow-y-auto">
           <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 space-y-8">
             
             {/* TÍTULO SECCIÓN CON INDICADOR ROJO */}
@@ -382,7 +384,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
             </div>
 
             {/* CONTENEDOR PRINCIPAL - DISEÑO LIMPIO Y MODERNO */}
-            <div className="bg-white rounded-lg md:rounded-[2.5rem] border border-gray-200 shadow-sm md:shadow-2xl min-h-[420px] md:min-h-[600px] overflow-hidden p-4 md:p-8 border-b-4 md:border-b-8 border-[#E31E24] w-full">
+            <div className="min-w-0 bg-white rounded-lg md:rounded-[2.5rem] border border-gray-200 shadow-sm md:shadow-2xl min-h-[420px] md:min-h-[600px] overflow-hidden p-4 md:p-8 border-b-4 md:border-b-8 border-[#E31E24] w-full">
               {children}
             </div>
             <AdminChatbot />

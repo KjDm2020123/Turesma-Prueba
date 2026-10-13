@@ -2,8 +2,8 @@
 
 import { useConductorPanel } from "../_components/use-conductor-panel";
 import {
-  Bell, Loader2, RefreshCw, MapPin, Users, DollarSign,
-  CheckCircle, X, Clock, CalendarDays, ShieldCheck, ShieldAlert,
+  Bell, Loader2, MapPin, Users, DollarSign,
+  CheckCircle, X, CalendarDays, ShieldCheck, ShieldAlert,
 } from "lucide-react";
 
 const ESTADO_COLOR: Record<string, string> = {
@@ -25,7 +25,7 @@ const ESTADO_LABEL: Record<string, string> = {
 export default function SolicitudesPage() {
   const {
     panel, loadingPanel, actionLoadingId, msg, err,
-    loadPanel, callAction, formatFecha, checkingSession,
+    callAction, formatFecha, checkingSession,
   } = useConductorPanel();
 
   if (checkingSession) {

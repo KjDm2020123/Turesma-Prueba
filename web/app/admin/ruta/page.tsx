@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders, handleUnauthorized } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
-import { MapPin, RefreshCw, Bus, Loader2, Navigation, Clock, ArrowRight } from "lucide-react";
+import { MapPin, Bus, Loader2, Navigation, Clock, ArrowRight } from "lucide-react";
 import { calcularRuta, formatDuracion } from "../../../lib/leaflet";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -67,7 +67,6 @@ export default function AdminRutaPage() {
   const [etas, setEtas] = useState<Record<number, { min: number; km: number }>>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   // Resalta la ruta seleccionada (roja y gruesa) y atenúa las demás. Lee el id
   // desde el ref para poder llamarse también desde callbacks asíncronos.
@@ -121,7 +120,6 @@ export default function AdminRutaPage() {
       if (handleUnauthorized(res.status)) return;
       if (res.ok) setUbicaciones(await res.json());
     } catch { /* silencio */ }
-    finally { setLoading(false); }
   };
 
   useAutoRefresh(load, { enabled: !checkingSession, intervalMs: POLL_MS });

@@ -67,6 +67,30 @@ export const setStoredToken = (token: string) => {
   localStorage.setItem(TOKEN_KEY, token);
 };
 
+export const refreshStoredUser = async (): Promise<SessionUser | null> => {
+  const token = getStoredToken();
+  if (!token) return null;
+
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const response = await fetch(`${apiUrl}/api/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data?.user || data.user.activo === false) return null;
+
+    setStoredUser(data.user);
+    return data.user as SessionUser;
+  } catch {
+    return null;
+  }
+};
+
 // Decodifica el JWT (sin verificar firma) y comprueba si ya expiró.
 // Sirve para echar al usuario al login antes de hacer llamadas que fallarían con 401.
 export const isTokenExpired = (): boolean => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
@@ -8,9 +9,8 @@ import { descargarCSV } from "../../../lib/download";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  UserCircle, Plus, Edit3, Trash2, RefreshCw, X, Search,
-  CheckCircle, AlertCircle, Star, FileText, Phone,
-  Loader2, Car, Award, TrendingUp, UploadCloud, Download
+  UserCircle, Plus, Edit3, Trash2, X, Search,
+  CheckCircle, AlertCircle, Star, Loader2, Car, UploadCloud, Download
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -159,7 +159,7 @@ export default function AdminConductoresPage() {
         return "";
       }
       return json.imageUrl || json.url || "";
-    } catch (e) {
+    } catch {
       setErr("No se pudo subir el archivo");
       return "";
     } finally {
@@ -317,7 +317,7 @@ export default function AdminConductoresPage() {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0">
                       {((c as any).foto_conductor) ? (
-                        <img src={(c as any).foto_conductor} alt={c.nombre} className="w-full h-full object-cover" />
+                        <Image src={(c as any).foto_conductor} alt={c.nombre} fill sizes="80px" unoptimized className="object-cover" />
                       ) : (
                         <div className="w-full h-full bg-[#E31E24]/10 flex items-center justify-center text-[#E31E24] font-black text-sm">
                           {c.nombre.slice(0, 2).toUpperCase()}
@@ -367,7 +367,7 @@ export default function AdminConductoresPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
                           {((c as any).foto_conductor) ? (
-                            <img src={(c as any).foto_conductor} alt={c.nombre} className="w-full h-full object-cover" />
+                            <Image src={(c as any).foto_conductor} alt={c.nombre} fill sizes="80px" unoptimized className="object-cover" />
                           ) : (
                             <div className="w-full h-full bg-[#E31E24]/10 flex items-center justify-center text-[#E31E24] font-black text-sm">
                               {c.nombre.slice(0, 2).toUpperCase()}
@@ -481,7 +481,7 @@ export default function AdminConductoresPage() {
                     </div>
                     {uploadingPhoto && <Loader2 className="animate-spin absolute right-3 top-3 text-[#E31E24]" size={16} />}
                     {form.foto_conductor && (
-                      <img src={form.foto_conductor} alt="conductor" className="mt-3 w-24 h-24 object-cover rounded-md" />
+                      <Image src={form.foto_conductor} alt="Conductor" width={96} height={96} unoptimized className="mt-3 w-24 h-24 object-cover rounded-md" />
                     )}
                   </div>
                 </div>

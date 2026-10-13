@@ -109,14 +109,15 @@ export function ClienteChatbot() {
     const text = value.trim();
     if (!text) return;
 
+    const messageId = crypto.randomUUID();
     const userMessage: ChatMessage = {
-      id: `${Date.now()}-user`,
+      id: `${messageId}-user`,
       role: "user",
       text,
     };
 
     const assistantMessage: ChatMessage = {
-      id: `${Date.now()}-assistant`,
+      id: `${messageId}-assistant`,
       role: "assistant",
       text: getBotReply(text),
     };

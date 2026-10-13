@@ -104,7 +104,9 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/comunicacion/notificaciones?userId=${userId}`);
+      const res = await fetch(`${API_URL}/api/comunicacion/notificaciones`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) {
         setUnreadCount(0);
         setItems([]);
@@ -142,8 +144,7 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
     try {
       const res = await fetch(`${API_URL}/api/comunicacion/notificaciones/leidas`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        headers: getAuthHeaders(),
       });
 
       if (!res.ok) return;
@@ -177,7 +178,6 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
       fetch(`${API_URL}/api/comunicacion/notificaciones/${item.id}/leida`, {
         method: "PATCH",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ userId }),
       }).catch(() => { /* silencio */ });
     }
 

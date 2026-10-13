@@ -13,8 +13,10 @@ export default function VerificarCorreoPage() {
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") || "";
     if (!token) {
-      setStatus("error");
-      setMessage("El enlace de verificación no contiene un token válido.");
+      Promise.resolve().then(() => {
+        setStatus("error");
+        setMessage("El enlace de verificación no contiene un token válido.");
+      });
       return;
     }
     fetch(`${API}/api/auth/verify-email?token=${encodeURIComponent(token)}`)

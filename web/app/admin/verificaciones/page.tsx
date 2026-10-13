@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
@@ -59,7 +60,7 @@ export default function AdminVerificacionesPage() {
       if (!res.ok) throw new Error(data.error || "No se pudo aprobar");
       setMsg("Identidad verificada correctamente");
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
   };
 
@@ -75,7 +76,7 @@ export default function AdminVerificacionesPage() {
       setMsg("Verificación rechazada");
       setRechazarId(null); setNotaRechazo("");
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
   };
 
@@ -126,7 +127,7 @@ export default function AdminVerificacionesPage() {
 
               {v.cedula_url ? (
                 <button onClick={() => setZoomImg(v.cedula_url)} className="block w-full">
-                  <img src={v.cedula_url} alt="cédula" className="w-full h-40 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-all" />
+                  <Image src={v.cedula_url} alt="Cédula" width={320} height={160} unoptimized className="w-full h-40 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-all" />
                 </button>
               ) : (
                 <div className="w-full h-40 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-200"><ImageIcon size={24} className="text-slate-300" /></div>
@@ -183,7 +184,7 @@ export default function AdminVerificacionesPage() {
       {zoomImg && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4" onClick={() => setZoomImg(null)}>
           <button onClick={() => setZoomImg(null)} className="absolute top-4 right-4 text-white p-2 hover:bg-white/10 rounded-full"><X size={28} /></button>
-          <img src={zoomImg} alt="cédula" className="max-w-full max-h-full rounded-2xl" />
+          <Image src={zoomImg} alt="Cédula" width={1200} height={900} unoptimized className="max-w-full max-h-full rounded-2xl" />
         </div>
       )}
     </div>

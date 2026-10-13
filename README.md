@@ -31,6 +31,40 @@ La API queda en `http://localhost:4000` y el frontend en `http://localhost:3000`
 
 Configura las variables de `backend/.env` con datos locales o del proveedor de PostgreSQL. Para el frontend, `web/.env.local` debe contener la URL de la API.
 
+## Inteligencia operativa
+
+El panel administrativo incluye analítica descriptiva y recomendaciones basadas en
+datos reales de reservas, flota y mantenimiento. Las rutas protegidas disponibles
+son:
+
+- `GET /api/admin/inteligencia/dashboard`
+- `GET /api/admin/inteligencia/analitica`
+- `GET /api/admin/inteligencia/asignacion-recomendada?fecha=YYYY-MM-DD&pasajeros=N`
+- `GET /api/admin/inteligencia/desempeno`
+- `GET /api/admin/control-operativo`
+- `GET /api/admin/inteligencia/anomalias`
+- `POST /api/admin/inteligencia/simular`
+
+El simulador también está disponible desde el módulo independiente
+`/admin/simulador`, con escenarios predeterminados, validación de parámetros,
+comparación gráfica entre situación actual y proyectada, nivel de riesgo,
+recomendación automática y supuestos del cálculo.
+
+El centro de control operativo consolida las operaciones del día, asignaciones
+pendientes, disponibilidad de flota, mantenimiento, pagos y un semáforo general.
+El simulador es de solo lectura: acepta porcentajes de variación de tarifa,
+demanda, combustible y días del periodo para proyectar reservas, ingresos,
+margen y riesgo sin modificar datos reales. La detección de anomalías analiza
+cancelaciones, pagos antiguos, utilización de vehículos y rutas con baja demanda.
+
+La recomendación de asignación considera capacidad, disponibilidad, mantenimiento,
+calificación del conductor y carga operativa. Cada recomendación se registra en
+`decisiones_sistema` para permitir trazabilidad y evaluación posterior.
+
+Los comprobantes de pago ya no se sirven como archivos estáticos públicos. Se
+entregan mediante URLs temporales o rutas autorizadas, mientras que las imágenes
+públicas se limitan a las carpetas de galería, perfiles, vehículos y viajes.
+
 ## Comprobaciones
 
 ```powershell

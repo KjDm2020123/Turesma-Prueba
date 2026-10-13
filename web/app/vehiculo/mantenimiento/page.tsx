@@ -33,7 +33,7 @@ type Proximo = {
 const TIPOS = ["preventivo", "correctivo", "cambio_aceite", "frenos", "llantas", "motor", "revision_general", "otro"];
 const INPUT = "w-full rounded-2xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white";
 
-const URGENCIA_STYLE: Record<string, { bg: string; text: string; label: string; icon: any }> = {
+const URGENCIA_STYLE: Record<string, { bg: string; text: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }>; }> = {
   vencido: { bg: "bg-red-50 border-red-200", text: "text-red-600", label: "Vencido", icon: AlertTriangle },
   urgente: { bg: "bg-amber-50 border-amber-200", text: "text-amber-600", label: "Urgente", icon: Clock },
   proximo: { bg: "bg-blue-50 border-blue-200", text: "text-blue-600", label: "Próximo", icon: Calendar },
@@ -77,7 +77,7 @@ export default function ConductorMantenimientoPage() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userId]);
+  useEffect(() => { load();   }, [userId]);
 
   const openModal = () => {
     setForm({
@@ -112,7 +112,7 @@ export default function ConductorMantenimientoPage() {
       setMsg("Mantenimiento registrado correctamente");
       setModalOpen(false);
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 

@@ -5,7 +5,7 @@ import { LocationSharing } from "../_components/location-sharing";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import {
   User, MapPin, Users, Zap, Clock, Check, X,
-  Loader2, RefreshCw, Bus, CheckCircle, Calendar, Navigation, Flag
+  Loader2, Bus, CheckCircle, Calendar, Navigation, Flag
 } from "lucide-react";
 
 // Fecha larga en español (ej. "lunes, 21 de julio de 2026").
@@ -58,7 +58,7 @@ const ESTADO_ICON: Record<string, React.ReactNode> = {
 };
 
 export default function ConductorActivasPage() {
-  const { checkingSession, panel, msg, err, loadPanel, loadingPanel, user, callAction, actionLoadingId } = useConductorPanel();
+  const { checkingSession, panel, msg, err, user, callAction, actionLoadingId } = useConductorPanel();
 
   if (checkingSession) return (
     <div className="flex h-64 items-center justify-center">
@@ -116,7 +116,7 @@ export default function ConductorActivasPage() {
         </div>
       ) : (
         <div className="grid gap-5">
-          {panel.activas.map((r, i) => {
+          {panel.activas.map((r) => {
             const badgeCls = ESTADO_BADGE[r.estado] || ESTADO_BADGE.pendiente;
             const badgeIcon = ESTADO_ICON[r.estado] || null;
 

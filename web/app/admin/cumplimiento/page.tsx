@@ -91,7 +91,7 @@ export default function AdminCumplimientoPage() {
       setCalModalOpen(false);
       flash(setMsg, "Calendario de matriculación actualizado");
       load(true);
-    } catch (e: any) { flash(setErr, e.message); }
+    } catch (e) { flash(setErr, e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSavingCal(false); }
   };
 

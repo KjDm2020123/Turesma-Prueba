@@ -24,5 +24,5 @@ export function useAutoRefresh(callback: () => void | Promise<void>, options: Us
     }, options.intervalMs ?? 5000);
 
     return () => window.clearInterval(interval);
-  }, [options.enabled, options.intervalMs]);
+  }, [options.enabled, options.intervalMs, options.immediate]);
 }

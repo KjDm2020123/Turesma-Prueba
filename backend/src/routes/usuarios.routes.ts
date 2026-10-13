@@ -1,7 +1,7 @@
 export {};
 
 const express = require("express");
-const { verifyToken } = require("../middleware/auth.middleware");
+const { verifyToken, requireRole, optionalAuth } = require("../middleware/auth.middleware");
 const {
   crearUsuario,
   listarUsuarios,
@@ -17,7 +17,7 @@ const {
   eliminarMiCuenta,
 } = require("../controllers/usuarios.controller");
 const { crearPagoReserva, listarPagosDeReserva, crearOrdenPaypal, capturarOrdenPaypal } = require("../controllers/pagos.controller");
-const { uploadComprobantePago } = require("../controllers/uploads.controller");
+const { uploadComprobantePago, serveComprobante } = require("../controllers/uploads.controller");
 const { enviarVerificacion, miVerificacion } = require("../controllers/verificacion.controller");
 const { listarGaleriaPublica } = require("../controllers/galeria.controller");
 const { listarViajesPublicos, reservarViajePublicado } = require("../controllers/viajes.controller");
@@ -44,11 +44,12 @@ router.get("/mis-reservas/:id/pagos", verifyToken, listarPagosDeReserva);
 router.post("/mis-reservas/:id/pagos/paypal/orden", verifyToken, crearOrdenPaypal);
 router.post("/mis-reservas/:id/pagos/paypal/capturar", verifyToken, capturarOrdenPaypal);
 router.post("/uploads/comprobante-pago", verifyToken, uploadComprobantePago);
+router.get("/comprobantes/:filename", optionalAuth, serveComprobante);
 router.get("/verificacion", verifyToken, miVerificacion);
 router.post("/verificacion", verifyToken, enviarVerificacion);
 router.delete("/mi-cuenta", verifyToken, eliminarMiCuenta);
 
-router.get("/", listarUsuarios);
-router.post("/", crearUsuario);
+router.get("/", verifyToken, requireRole("admin"), listarUsuarios);
+router.post("/", verifyToken, requireRole("admin"), crearUsuario);
 
 module.exports = router;

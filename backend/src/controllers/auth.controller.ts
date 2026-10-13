@@ -431,6 +431,7 @@ const getMe = async (req: any, res: any) => {
       `SELECT id, nombre, email, rol, telefono, imagen_url, activo, creado_en
        FROM usuarios
        WHERE id = $1
+         AND activo = true
        LIMIT 1`,
       [userId]
     );

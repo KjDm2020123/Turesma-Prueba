@@ -43,13 +43,4 @@ if (process.env.DATABASE_URL) {
   });
 }
 
-// Test de conexión
-pool.query("SELECT NOW()", (err: any) => {
-  if (err) {
-    console.error(" Error conectando a PostgreSQL:", err);
-  } else {
-    console.log(" PostgreSQL conectado exitosamente");
-  }
-});
-
 module.exports = pool;

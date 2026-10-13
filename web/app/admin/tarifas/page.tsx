@@ -69,7 +69,7 @@ export default function AdminTarifasPage() {
       if (!res.ok) throw new Error(data?.error || "No se pudieron guardar las tarifas");
       setTarifas(normalizarTarifas(data));
       setMsg("Tarifas actualizadas. Los clientes verán los cambios automáticamente.");
-    } catch (e: any) { setErr(e.message || "No se pudieron guardar las tarifas"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudieron guardar las tarifas"); }
     finally { setSaving(false); }
   };
 

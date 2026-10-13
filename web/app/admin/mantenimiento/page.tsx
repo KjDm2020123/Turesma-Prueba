@@ -272,7 +272,7 @@ export default function AdminHistorialMantenimientoPage() {
       if (!res.ok) throw new Error(j.error || "No se pudo procesar");
       setMantAccion(null);
       load(true);
-    } catch (e: any) { setMantErr(e.message || "Error"); }
+    } catch (e) { setMantErr(e instanceof Error ? e.message : "Error"); }
     finally { setMantSaving(false); }
   };
 
