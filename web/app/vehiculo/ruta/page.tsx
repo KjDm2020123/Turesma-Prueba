@@ -74,7 +74,7 @@ export default function ConductorRegistrarRutaPage() {
       setUltimaReserva(data.reserva?.id || null);
       setForm({ cliente_id: "", fecha_viaje: hoyISO(), num_personas: "1", valor_cobrado: "", notas: "" });
       setOrigin(null); setDestination(null);
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSending(false); }
   };
 

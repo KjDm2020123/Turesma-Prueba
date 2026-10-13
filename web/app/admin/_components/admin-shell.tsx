@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
@@ -16,7 +17,6 @@ import {
   Bus,
   ShieldCheck,
   Zap,
-  AlertTriangle,
   TrendingUp,
   UserCircle,
   Car,
@@ -361,7 +361,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
               </div>
               {user?.imagen_url ? (
                 <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                  <img src={user.imagen_url} alt={user?.nombre} className="w-full h-full object-cover" />
+                  <Image src={user.imagen_url} alt={user?.nombre || "Administrador"} fill sizes="40px" className="object-cover" unoptimized />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-[#E31E24] flex items-center justify-center text-white shadow-sm">

@@ -8,11 +8,16 @@ const parsePositiveInt = (value) => {
   return parsed;
 };
 
+const getAuthenticatedUserId = (req) => {
+  const userId = parsePositiveInt(req.user?.id);
+  return userId;
+};
+
 const listContactos = async (req, res) => {
-  const userId = parsePositiveInt(req.query.userId);
+  const userId = getAuthenticatedUserId(req);
 
   if (!userId) {
-    return res.status(400).json({ error: "Debes enviar userId válido" });
+    return res.status(401).json({ error: "Sesión inválida" });
   }
 
   try {
@@ -98,11 +103,13 @@ const listContactos = async (req, res) => {
 };
 
 const listMensajes = async (req, res) => {
-  const userId = parsePositiveInt(req.query.userId);
+  const userId = getAuthenticatedUserId(req);
   const contactId = parsePositiveInt(req.query.contactId);
 
   if (!userId || !contactId) {
-    return res.status(400).json({ error: "Debes enviar userId y contactId válidos" });
+    return res.status(userId ? 400 : 401).json({
+      error: userId ? "Debes enviar contactId válido" : "Sesión inválida",
+    });
   }
 
   try {
@@ -134,13 +141,17 @@ const listMensajes = async (req, res) => {
 };
 
 const sendMensaje = async (req, res) => {
-  const senderUserId = parsePositiveInt(req.body.sender_user_id);
+  const senderUserId = getAuthenticatedUserId(req);
   const recipientUserId = parsePositiveInt(req.body.recipient_user_id);
   const mensaje = String(req.body.mensaje || "").trim();
   const reservaId = req.body.reserva_id ? parsePositiveInt(req.body.reserva_id) : null;
 
   if (!senderUserId || !recipientUserId || !mensaje) {
-    return res.status(400).json({ error: "Debes enviar sender_user_id, recipient_user_id y mensaje" });
+    return res.status(senderUserId ? 400 : 401).json({
+      error: senderUserId
+        ? "Debes enviar recipient_user_id y mensaje"
+        : "Sesión inválida",
+    });
   }
 
   if (senderUserId === recipientUserId) {
@@ -184,10 +195,10 @@ const sendMensaje = async (req, res) => {
 };
 
 const listNotificaciones = async (req, res) => {
-  const userId = parsePositiveInt(req.query.userId);
+  const userId = getAuthenticatedUserId(req);
 
   if (!userId) {
-    return res.status(400).json({ error: "Debes enviar userId válido" });
+    return res.status(401).json({ error: "Sesión inválida" });
   }
 
   try {
@@ -232,10 +243,12 @@ const listNotificaciones = async (req, res) => {
 
 const markNotificacionLeida = async (req, res) => {
   const notifId = parsePositiveInt(req.params.id);
-  const userId = parsePositiveInt(req.body.userId);
+  const userId = getAuthenticatedUserId(req);
 
   if (!notifId || !userId) {
-    return res.status(400).json({ error: "Debes enviar un id de notificación y userId válidos" });
+    return res.status(userId ? 400 : 401).json({
+      error: userId ? "Debes enviar un id de notificación válido" : "Sesión inválida",
+    });
   }
 
   try {
@@ -261,10 +274,10 @@ const markNotificacionLeida = async (req, res) => {
 };
 
 const markAllNotificacionesLeidas = async (req, res) => {
-  const userId = parsePositiveInt(req.body.userId);
+  const userId = getAuthenticatedUserId(req);
 
   if (!userId) {
-    return res.status(400).json({ error: "Debes enviar userId válido" });
+    return res.status(401).json({ error: "Sesión inválida" });
   }
 
   try {

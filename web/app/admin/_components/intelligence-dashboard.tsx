@@ -111,8 +111,8 @@ export const IntelligenceDashboard = () => {
       if (handleUnauthorized(res.status)) return;
       if (!res.ok) throw new Error("No se pudo cargar el centro de inteligencia");
       setData(await res.json());
-    } catch (e: any) {
-      setErr(e?.message || "No se pudo cargar el centro de inteligencia");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo cargar el centro de inteligencia");
     } finally {
       setLoading(false);
     }

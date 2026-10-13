@@ -235,7 +235,7 @@ function AdminCotizacionesContent() {
       win.document.write(html);
       win.document.close();
       load(true);
-    } catch (e: any) { setErr(e.message || "No se pudo generar la proforma"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo generar la proforma"); }
     finally { setProformaBusyId(null); }
   };
 
@@ -255,7 +255,7 @@ function AdminCotizacionesContent() {
       if (!res.ok) throw new Error(j.error || "No se pudo enviar la proforma");
       setMsg(j.message || "Proforma enviada al cliente");
       load(true);
-    } catch (e: any) { setErr(e.message || "No se pudo enviar la proforma"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo enviar la proforma"); }
     finally { setProformaBusyId(null); }
   };
 
@@ -285,7 +285,7 @@ function AdminCotizacionesContent() {
     if (!Number.isInteger(id) || id <= 0) return;
     pendingFocusId.current = id;
     setFiltro("todas");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [searchParams]);
 
   // Una vez cargada la lista, si hay una cotización pendiente de enfocar, la abrimos.
@@ -313,7 +313,7 @@ function AdminCotizacionesContent() {
       setMsg("Contraoferta enviada al cliente. Espera su respuesta.");
       setSelected(null);
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 
@@ -331,7 +331,7 @@ function AdminCotizacionesContent() {
       setMsg(`✅ Cotización aprobada. Reserva #${data.reserva_id} creada.`);
       setSelected(null);
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 
@@ -349,7 +349,7 @@ function AdminCotizacionesContent() {
       setMsg("Cotización rechazada.");
       setSelected(null);
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 

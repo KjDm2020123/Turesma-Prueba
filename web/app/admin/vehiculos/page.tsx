@@ -1,15 +1,16 @@
 "use client";
 
 import { FormEvent, PointerEvent, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { descargarCSV } from "../../../lib/download";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Bus, Plus, Edit3, Trash2, RefreshCw, X, Search,
-  CheckCircle, AlertCircle, Clock, Wrench, Car,
-  Users, Loader2, ChevronDown, UploadCloud, Download, GripVertical
+  Bus, Plus, Edit3, Trash2, X, Search,
+  CheckCircle, AlertCircle, Wrench, Car,
+  Users, Loader2, UploadCloud, Download, GripVertical
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -354,7 +355,7 @@ export default function AdminVehiculosPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
                     {v.imagen_url ? (
-                      <img src={v.imagen_url} alt={v.placa} className="w-11 h-11 rounded-xl object-cover border border-slate-100 shrink-0" />
+                      <Image src={v.imagen_url} alt={v.placa} width={44} height={44} unoptimized className="w-11 h-11 rounded-xl object-cover border border-slate-100 shrink-0" />
                     ) : (
                       <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
                         <Car size={20} className="text-slate-400" />
@@ -419,7 +420,7 @@ export default function AdminVehiculosPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {v.imagen_url ? (
-                          <img src={v.imagen_url} alt={v.placa} className="w-10 h-10 rounded-xl object-cover border border-slate-100" />
+                          <Image src={v.imagen_url} alt={v.placa} width={40} height={40} unoptimized className="w-10 h-10 rounded-xl object-cover border border-slate-100" />
                         ) : (
                           <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
                             <Car size={20} className="text-slate-400" />
@@ -439,7 +440,7 @@ export default function AdminVehiculosPage() {
                       {v.conductor_nombre ? (
                         <div className="flex items-center gap-2">
                           {v.conductor_imagen_url ? (
-                            <img src={v.conductor_imagen_url} alt={v.conductor_nombre} className="w-7 h-7 rounded-lg object-cover border border-slate-200" />
+                            <Image src={v.conductor_imagen_url} alt={v.conductor_nombre} width={28} height={28} unoptimized className="w-7 h-7 rounded-lg object-cover border border-slate-200" />
                           ) : (
                             <div className="w-7 h-7 rounded-lg bg-[#E31E24]/10 flex items-center justify-center">
                               <Users size={12} className="text-[#E31E24]" />
@@ -549,7 +550,7 @@ export default function AdminVehiculosPage() {
                   <UploadCloud className="mx-auto text-slate-300 mb-2" size={28} />
                   <p className="text-xs font-bold text-slate-400">Haz clic para cargar foto</p>
                   {uploadingImg && <Loader2 className="animate-spin mx-auto mt-2 text-[#E31E24]" size={18} />}
-                  {form.imagen_url && <img src={form.imagen_url} alt="preview" className="mt-3 h-28 w-full object-cover rounded-xl" />}
+                  {form.imagen_url && <Image src={form.imagen_url} alt="Vista previa" width={640} height={112} unoptimized className="mt-3 h-28 w-full object-cover rounded-xl" />}
                 </div>
                 {imageToCrop && (
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-900 p-4 text-white">
@@ -561,10 +562,13 @@ export default function AdminVehiculosPage() {
                       onPointerUp={() => setDraggingCrop(false)}
                       onPointerCancel={() => setDraggingCrop(false)}
                     >
-                      <img
+                      <Image
                         ref={cropImageRef}
                         src={imageToCrop}
                         alt="Vista previa del encuadre"
+                        fill
+                        sizes="640px"
+                        unoptimized
                         className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
                         style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${cropZoom})` }}
                       />

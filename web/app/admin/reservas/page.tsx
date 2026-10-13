@@ -5,9 +5,9 @@ import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import {
-  Calendar, Plus, Edit3, Trash2, RefreshCw, X, Search,
+  Calendar, Plus, Edit3, Trash2, X, Search,
   CheckCircle, Clock, AlertCircle, Loader2, User, Car,
-  MapPin, ArrowRight, ChevronDown, CreditCard
+  MapPin, ArrowRight, CreditCard
 } from "lucide-react";
 import { MapPicker, Punto } from "../../../components/map-picker";
 import { VehiculoCalendario } from "../../../components/vehiculo-calendario";
@@ -237,8 +237,8 @@ export default function AdminReservasPage() {
       setMsg(`Estado actualizado a "${nuevoEstado}"`);
       setEstadoModal(null);
       load();
-    } catch (e: any) {
-      setErr(e.message || "Error al cambiar estado");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al cambiar estado");
     } finally {
       setEstadoLoading(false);
     }

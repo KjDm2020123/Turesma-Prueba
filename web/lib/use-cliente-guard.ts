@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearStoredUser, getRolePath, getStoredToken, getStoredUser, isTokenExpired, normalizeRole, SessionUser } from "./session";
+import { clearStoredUser, getRolePath, getStoredToken, getStoredUser, isTokenExpired, normalizeRole, refreshStoredUser, SessionUser } from "./session";
 
 export function useClienteGuard() {
   const router = useRouter();
@@ -10,7 +10,7 @@ export function useClienteGuard() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const checkSession = () => {
+    const checkSession = async () => {
       const currentUser = getStoredUser();
       // Sin usuario, sin token, o token expirado → cerrar sesión y volver al login.
       if (!currentUser || !getStoredToken() || isTokenExpired()) {
@@ -19,13 +19,20 @@ export function useClienteGuard() {
         return;
       }
 
-      const role = normalizeRole(currentUser.rol);
+      const verifiedUser = await refreshStoredUser();
+      if (!verifiedUser) {
+        clearStoredUser();
+        router.replace("/");
+        return;
+      }
+
+      const role = normalizeRole(verifiedUser.rol);
       if (role !== "cliente") {
         router.replace(getRolePath(role));
         return;
       }
 
-      setUser(currentUser);
+      setUser(verifiedUser);
       setCheckingSession(false);
     };
 

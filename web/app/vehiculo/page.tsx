@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useConductorPanel } from "./_components/use-conductor-panel";
 import {
-  ArrowRight, Zap, History, TrendingUp, RefreshCw,
-  MapPin, Users, DollarSign, Star, Loader2,
-  CheckCircle, Clock, User, Bell, Bus, Wrench,
-  Shield, ChevronRight, Activity,
+  Zap, History, TrendingUp,
+  MapPin, Loader2, CheckCircle, Bell, Bus, ChevronRight,
 } from "lucide-react";
 export default function ConductorInicioPage() {
   const {
-    checkingSession, user, greeting, panel, vehiculo,
-    loadPanel, loadingPanel, actualizarEstadoGeneral,
+    checkingSession, panel, vehiculo, actualizarEstadoGeneral,
     msg: panelMsg, err: panelErr,
   } = useConductorPanel();
 
@@ -118,7 +115,7 @@ export default function ConductorInicioPage() {
 
             {vehiculo.imagen_url && (
               <div className="mt-3 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 h-40 sm:h-52">
-                <img src={vehiculo.imagen_url} alt={vehiculo.placa} className="w-full h-full object-contain" />
+                <Image src={vehiculo.imagen_url} alt={vehiculo.placa} fill sizes="320px" unoptimized className="object-contain" />
               </div>
             )}
           </div>

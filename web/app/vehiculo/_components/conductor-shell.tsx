@@ -1,24 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   Bell,
-  ChevronRight,
   LayoutDashboard,
   LogOut,
   Menu,
   MapPinned,
   Zap,
   X,
-  Bus,
   User,
   Truck,
   History,
   Wrench,
 } from "lucide-react";
-import { clearStoredUser, getStoredUser } from "../../../lib/session";
+import { clearStoredUser } from "../../../lib/session";
 import { ConductorPanelProvider, useConductorPanelState } from "./use-conductor-panel";
 import { NotificationBell } from "../../../components/notification-bell";
 
@@ -48,11 +47,11 @@ export function ConductorShell({ children }: ConductorShellProps) {
   const panelState = useConductorPanelState();
   const { newSolicitudesCount, user } = panelState;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
-
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  const isHydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   const isActive = (href: string) => {
     if (href === "/vehiculo") return pathname === "/vehiculo";
@@ -231,7 +230,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
               </div>
               {user?.imagen_url ? (
                 <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-lg shadow-red-600/20 transform transition-transform hover:scale-105 border-2 border-red-400">
-                  <img src={user.imagen_url} alt={user?.nombre} className="w-full h-full object-cover" />
+                  <Image src={user.imagen_url} alt={user?.nombre || "Conductor"} fill sizes="40px" unoptimized className="object-cover" />
                 </div>
               ) : (
                 <div className="w-11 h-11 rounded-2xl bg-[#E31E24] flex items-center justify-center text-white shadow-lg shadow-red-600/20 transform transition-transform hover:scale-105">

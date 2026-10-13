@@ -1,6 +1,7 @@
 "use client";
 
 import React, { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   MapPin, Calendar, Users, Car, FileText, Clock, CheckCircle2,
   XCircle, Loader2, RefreshCw, Send, ArrowRight,
@@ -65,7 +66,6 @@ export default function ClienteCotizarPage() {
   const userId = user?.id;
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [loadingCot, setLoadingCot] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(true);
   const [sending, setSending] = useState(false);
@@ -103,7 +103,7 @@ export default function ClienteCotizarPage() {
       setRespMsg(data.message || "Listo");
       setCounterId(null); setCounterVal("");
       loadCotizaciones();
-    } catch (e: any) { setRespMsg(e.message); }
+    } catch (e) { setRespMsg(e instanceof Error ? e.message : "Error inesperado"); }
   };
 
   const [form, setForm] = useState({
@@ -149,7 +149,7 @@ export default function ClienteCotizarPage() {
   };
 
   // Al abrir la página, intenta ubicar al cliente automáticamente.
-  useEffect(() => { locateMyLocation(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { locateMyLocation();   }, []);
 
   const loadVehiculos = async () => {
     try {
@@ -163,13 +163,11 @@ export default function ClienteCotizarPage() {
 
   const loadCotizaciones = async (silencioso = false) => {
     if (!userId) return;
-    if (!silencioso) setLoadingCot(true);
     try {
       const res = await fetch(`${API}/api/cotizaciones/mias`, { headers: getAuthHeaders() });
       if (handleUnauthorized(res.status)) return;
       if (res.ok) setCotizaciones(await res.json());
     } catch { /* silencio */ }
-    finally { setLoadingCot(false); }
   };
 
   const loadTarifas = async () => {
@@ -202,8 +200,8 @@ export default function ClienteCotizarPage() {
       setAlternatives(Array.isArray(data.alternatives) ? data.alternatives : []);
       setAssistantMsg(data.message || "Revisa estas opciones para tu viaje.");
       if (data.recommendation) setForm(p => ({ ...p, vehiculo_id: String(data.recommendation.id) }));
-    } catch (e: any) {
-      setAssistantErr(e.message || "No se pudo consultar al asistente");
+    } catch (e) {
+      setAssistantErr(e instanceof Error ? e.message : "No se pudo consultar al asistente");
     } finally { setAssistantLoading(false); }
   };
 
@@ -266,7 +264,7 @@ export default function ClienteCotizarPage() {
       setOrigin(null); setDestination(null);
       locateMyLocation();
       loadCotizaciones();
-    } catch (e: any) { setFormErr(e.message); }
+    } catch (e) { setFormErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSending(false); }
   };
 
@@ -369,7 +367,7 @@ export default function ClienteCotizarPage() {
                       <button key={v.id} type="button" onClick={() => setForm(p => ({ ...p, vehiculo_id: sel ? "" : String(v.id), tipo_vehiculo: sel ? "" : String(v.tipo || "van").toLowerCase() }))}
                         className={`text-left rounded-2xl border-2 overflow-hidden transition-all ${sel ? "border-[#E31E24] ring-2 ring-red-100" : "border-slate-100 hover:border-slate-300"}`}>
                         <div className="h-20 bg-slate-100 relative">
-                          {v.imagen_url ? <img src={v.imagen_url} alt={v.placa} className="w-full h-full object-cover" /> :
+                          {v.imagen_url ? <Image src={v.imagen_url} alt={v.placa} fill sizes="240px" unoptimized className="object-cover" /> :
                             <div className="w-full h-full flex items-center justify-center"><Bus size={26} className="text-slate-300" /></div>}
                           {sel && <div className="absolute top-1.5 right-1.5 bg-[#E31E24] text-white rounded-full p-1"><CheckCircle2 size={12} /></div>}
                         </div>

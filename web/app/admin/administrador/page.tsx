@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
-import { getAuthHeaders, getStoredUser } from "../../../lib/session";
+import { getStoredUser } from "../../../lib/session";
+import {
+  deleteAdminUser,
+  listAdminUsers,
+  resetAdminUserPassword,
+  saveAdminUser,
+} from "../../../lib/admin-users";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { useConfirm } from "../../../components/confirm-dialog";
-import {
-  ShieldCheck, User, Save, Loader2, RefreshCw,
-  Plus, Trash2, Edit3, X, UserPlus, Key,
-} from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+import { User, Loader2, Trash2, Edit3, X, UserPlus, Key } from "lucide-react";
 
 type AdminUser = {
   id: number;
@@ -38,13 +39,10 @@ export default function AdminAdministradorPage() {
   const [newPass, setNewPass] = useState("");
   const [form, setForm] = useState({ nombre: "", email: "", telefono: "", password: "" });
   const currentUser = getStoredUser();
-  const h = getAuthHeaders();
-
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     try {
-      const res = await fetch(`${API}/api/admin/usuarios`, { headers: h });
-      const raw: any[] = res.ok ? await res.json() : [];
+      const raw = await listAdminUsers();
       setAdmins(raw.filter((u) => u.rol === "admin"));
     } catch { setErr("Error al cargar administradores"); }
     finally { setLoading(false); }
@@ -70,17 +68,17 @@ export default function AdminAdministradorPage() {
     e.preventDefault();
     setSaving(true); setErr(""); setMsg("");
     try {
-      const body: any = { nombre: form.nombre, email: form.email, telefono: form.telefono, rol: "admin" };
-      if (!editId) body.password = form.password || form.email + "Admin123";
-      const url = editId ? `${API}/api/admin/usuarios/${editId}` : `${API}/api/admin/usuarios`;
-      const method = editId ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: h, body: JSON.stringify(body) });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Error al guardar");
+      await saveAdminUser(editId, {
+        nombre: form.nombre,
+        email: form.email,
+        telefono: form.telefono,
+        rol: "admin",
+        ...(!editId ? { password: form.password || form.email + "Admin123" } : {}),
+      });
       setMsg(editId ? "Administrador actualizado" : "Administrador creado correctamente");
       setModal(false);
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 
@@ -88,28 +86,21 @@ export default function AdminAdministradorPage() {
     if (id === currentUser?.id) { setErr("No puedes eliminarte a ti mismo"); return; }
     if (!(await confirmar({ title: "Eliminar administrador", message: "¿Eliminar este administrador?", confirmText: "Eliminar", tone: "danger" }))) return;
     try {
-      const res = await fetch(`${API}/api/admin/usuarios/${id}`, { method: "DELETE", headers: h });
-      if (!res.ok) throw new Error("Error al eliminar");
+      await deleteAdminUser(id);
       setMsg("Administrador eliminado");
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
   };
 
   const handleResetPass = async () => {
     if (!passModal || !newPass) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/admin/usuarios/${passModal}/recuperar-password`, {
-        method: "PATCH",
-        headers: h,
-        body: JSON.stringify({ nueva_password: newPass }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Error");
+      await resetAdminUserPassword(passModal, newPass);
       setMsg("Contraseña actualizada");
       setPassModal(null);
       setNewPass("");
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 

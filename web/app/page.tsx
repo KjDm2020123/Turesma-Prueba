@@ -200,8 +200,7 @@ export default function RootPage() {
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex h-full items-center bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Turesma S.A · Transporte Turístico" className="h-16 sm:h-20 w-auto" />
+            <Image src="/logo.png" alt="Turesma S.A · Transporte Turístico" width={180} height={80} className="h-16 sm:h-20 w-auto" priority />
           </div>
 
           {/* Menú Escritorio */}
@@ -246,9 +245,11 @@ export default function RootPage() {
       {/* HERO SECTION */}
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden pt-20">
         <div className="absolute inset-0 z-0 bg-[#0a0a0a]">
-          <img
+          <Image
             src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop"
             alt="Bus de turismo"
+            fill
+            sizes="100vw"
             className="h-full w-full object-cover opacity-40 transition-transform duration-[10s] hover:scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />

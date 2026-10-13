@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, DollarSign, ShoppingCart, Users, Car,
-  Loader2, RefreshCw, UserCircle, AlertTriangle, Download,
+  Loader2, UserCircle, AlertTriangle, Download,
 } from "lucide-react";
 import { descargarCSV } from "../../../lib/download";
 
@@ -101,8 +101,8 @@ export const AnalyticsDashboard = () => {
       if (handleUnauthorized(res.status)) return;
       if (!res.ok) throw new Error("Error al cargar datos");
       setData(await res.json());
-    } catch (e: any) {
-      setErr(e.message);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudieron cargar los datos");
     } finally {
       setLoading(false);
     }

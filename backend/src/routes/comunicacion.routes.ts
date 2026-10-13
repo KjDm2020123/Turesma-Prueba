@@ -1,6 +1,7 @@
 export {};
 
 const express = require("express");
+const { verifyToken } = require("../middleware/auth.middleware");
 const {
   listContactos,
   listMensajes,
@@ -12,6 +13,7 @@ const {
 
 const router = express.Router();
 
+router.use(verifyToken);
 router.get("/contactos", listContactos);
 router.get("/mensajes", listMensajes);
 router.post("/mensajes", sendMensaje);

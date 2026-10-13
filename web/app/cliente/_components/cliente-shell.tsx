@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   Bus,
   FileText,
@@ -36,17 +37,29 @@ type ClienteShellProps = {
   children: React.ReactNode;
 };
 
+let storedUserSnapshot: ReturnType<typeof getStoredUser> | null | undefined;
+
+function getClientUserSnapshot() {
+  if (storedUserSnapshot === undefined) {
+    storedUserSnapshot = getStoredUser();
+  }
+  return storedUserSnapshot;
+}
+
 export function ClienteShell({ children }: ClienteShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [user, setUser] = useState<ReturnType<typeof getStoredUser> | null>(null);
-
-  useEffect(() => {
-    setUser(getStoredUser());
-    setIsHydrated(true);
-  }, []);
+  const isHydrated = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
+  const user = useSyncExternalStore<ReturnType<typeof getStoredUser> | null>(
+    () => () => undefined,
+    getClientUserSnapshot,
+    () => null,
+  );
 
   const badges = useClienteBadges(isHydrated);
 
@@ -223,7 +236,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
               </div>
               {user?.imagen_url ? (
                 <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                  <img src={user.imagen_url} alt={user?.nombre} className="w-full h-full object-cover" />
+                  <Image src={user.imagen_url} alt={user?.nombre || "Cliente"} fill sizes="40px" unoptimized className="object-cover" />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-[#E31E24] flex items-center justify-center text-white shadow-sm">

@@ -5,7 +5,7 @@ import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import {
-  RefreshCw, Loader2, MapPin, ArrowRight, Route,
+  Loader2, MapPin, ArrowRight, Route,
   DollarSign, Users, Award, Flame,
 } from "lucide-react";
 import {

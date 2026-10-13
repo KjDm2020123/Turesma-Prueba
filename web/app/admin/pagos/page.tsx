@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
@@ -64,7 +65,7 @@ export default function AdminPagosPage() {
     finally { setLoading(false); }
   };
 
-  const loadReservasParaLink = async (silencioso = false) => {
+  const loadReservasParaLink = async () => {
     try {
       const res = await fetch(`${API}/api/admin/reservas`, { headers: getAuthHeaders() });
       if (!res.ok) return;
@@ -81,7 +82,7 @@ export default function AdminPagosPage() {
 
   useEffect(() => { if (!checkingSession) { load(); loadReservasParaLink(); } }, [checkingSession, filtro]);
 
-  useAutoRefresh(() => { load(true); loadReservasParaLink(true); }, { enabled: !checkingSession, immediate: false });
+  useAutoRefresh(() => { load(true); loadReservasParaLink(); }, { enabled: !checkingSession, immediate: false });
 
   const aprobar = async (id: number) => {
     setActingId(id); setErr(""); setMsg("");
@@ -91,7 +92,7 @@ export default function AdminPagosPage() {
       if (!res.ok) throw new Error(data.error || "No se pudo aprobar");
       setMsg("Pago aprobado correctamente");
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
   };
 
@@ -107,7 +108,7 @@ export default function AdminPagosPage() {
       setMsg("Pago rechazado");
       setRechazarId(null); setNotaRechazo("");
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
   };
 
@@ -123,7 +124,7 @@ export default function AdminPagosPage() {
       setMsg(`Link de pago enviado para la reserva #${linkReservaId}`);
       setLinkReservaId(""); setLinkPago("");
       loadReservasParaLink();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSavingLink(false); }
   };
 
@@ -206,7 +207,7 @@ export default function AdminPagosPage() {
 
               {p.comprobante_url ? (
                 <button onClick={() => setZoomImg(p.comprobante_url)} className="block w-full">
-                  <img src={p.comprobante_url} alt="comprobante" className="w-full h-32 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-all" />
+                  <Image src={p.comprobante_url} alt="Comprobante de pago" width={320} height={128} unoptimized className="w-full h-32 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-all" />
                 </button>
               ) : (
                 <div className="w-full h-32 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-200"><ImageIcon size={24} className="text-slate-300" /></div>
@@ -261,7 +262,7 @@ export default function AdminPagosPage() {
       {zoomImg && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4" onClick={() => setZoomImg(null)}>
           <button onClick={() => setZoomImg(null)} className="absolute top-4 right-4 text-white p-2 hover:bg-white/10 rounded-full"><X size={28} /></button>
-          <img src={zoomImg} alt="comprobante" className="max-w-full max-h-full rounded-2xl" />
+          <Image src={zoomImg} alt="Comprobante de pago" width={1200} height={900} unoptimized className="max-w-full max-h-full rounded-2xl" />
         </div>
       )}
     </div>

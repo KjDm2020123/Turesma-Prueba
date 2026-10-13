@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
+import {
+  deleteAdminUser,
+  listAdminUsers,
+  resetAdminUserPassword,
+  saveAdminUser,
+} from "../../../lib/admin-users";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Users, Plus, X, Search, Loader2, RefreshCw, Trash2,
+  Users, Plus, X, Search, Loader2, Trash2,
   Edit3, Eye, ShoppingCart, DollarSign, Key, Printer, FileText,
 } from "lucide-react";
 
@@ -53,8 +60,6 @@ export default function AdminClientesPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
-  const h = getAuthHeaders();
-
   const openDetalle = async (c: Cliente) => {
     setDetalle(c); setDetalleReservas([]); setShowPassInput(false); setNewPass("");
     setLoadingDetalle(true);
@@ -71,14 +76,10 @@ export default function AdminClientesPage() {
     if (!detalle || newPass.length < 6) { setErr("La contraseña debe tener al menos 6 caracteres"); return; }
     setSaving(true); setErr(""); setMsg("");
     try {
-      const res = await fetch(`${API}/api/admin/usuarios/${detalle.id}/recuperar-password`, {
-        method: "PATCH", headers: getAuthHeaders(), body: JSON.stringify({ nueva_password: newPass }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Error");
+      await resetAdminUserPassword(detalle.id, newPass);
       setMsg(`Contraseña de ${detalle.nombre} actualizada`);
       setShowPassInput(false); setNewPass("");
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 
@@ -135,15 +136,14 @@ export default function AdminClientesPage() {
     if (!silencioso) setLoading(true);
     try {
       // Cargamos usuarios con rol cliente
-      const res = await fetch(`${API}/api/admin/usuarios?rol=cliente`, { headers: h });
-      const raw: any[] = res.ok ? await res.json() : [];
+      const raw = await listAdminUsers("cliente");
       // Para cada cliente, intentamos obtener sus reservas
       const clientesConStats = await Promise.all(
         raw
           .filter((u) => u.rol === "cliente")
           .map(async (u) => {
             try {
-              const rRes = await fetch(`${API}/api/admin/reservas?usuario_id=${u.id}`, { headers: h });
+              const rRes = await fetch(`${API}/api/admin/reservas?usuario_id=${u.id}`, { headers: getAuthHeaders() });
               const reservas: any[] = rRes.ok ? await rRes.json() : [];
               const arr = Array.isArray(reservas) ? reservas : (reservas as any).data ?? [];
               return {
@@ -195,30 +195,29 @@ export default function AdminClientesPage() {
 
     setSaving(true);
     try {
-      const body: Record<string, unknown> = { ...form, rol: "cliente" };
-      if (!editId || formPass) body.password = formPass;
-      const url = editId ? `${API}/api/admin/usuarios/${editId}` : `${API}/api/admin/usuarios`;
-      const method = editId ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: h, body: JSON.stringify(body) });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Error al guardar");
+      await saveAdminUser(editId, {
+        nombre: form.nombre || "",
+        email: form.email || "",
+        telefono: form.telefono || "",
+        rol: "cliente",
+        ...(!editId || formPass ? { password: formPass } : {}),
+      });
       setMsg(editId
         ? "Cliente actualizado"
         : `Cliente creado. Ingresa con el correo ${form.email} y la contraseña asignada.`);
       setModal(false);
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
   };
 
   const handleDelete = async (id: number) => {
     if (!(await confirmar({ title: "Eliminar cliente", message: "¿Eliminar este cliente?", confirmText: "Eliminar", tone: "danger" }))) return;
     try {
-      const res = await fetch(`${API}/api/admin/usuarios/${id}`, { method: "DELETE", headers: h });
-      if (!res.ok) throw new Error("Error al eliminar");
+      await deleteAdminUser(id);
       setMsg("Cliente eliminado");
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
   };
 
   if (checkingSession) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#E31E24]" size={32} /></div>;
@@ -290,7 +289,7 @@ export default function AdminClientesPage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
                     {c.imagen_url ? (
-                      <img src={c.imagen_url} alt={c.nombre} className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0" />
+                      <Image src={c.imagen_url} alt={c.nombre} width={44} height={44} unoptimized className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0" />
                     ) : (
                       <div className="w-11 h-11 rounded-xl bg-[#E31E24] flex items-center justify-center text-white font-black text-sm shrink-0">
                         {c.nombre.slice(0, 2).toUpperCase()}
@@ -334,7 +333,7 @@ export default function AdminClientesPage() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         {c.imagen_url ? (
-                          <img src={c.imagen_url} alt={c.nombre} className="w-9 h-9 rounded-xl object-cover border border-slate-200" />
+                          <Image src={c.imagen_url} alt={c.nombre} width={36} height={36} unoptimized className="w-9 h-9 rounded-xl object-cover border border-slate-200" />
                         ) : (
                           <div className="w-9 h-9 rounded-xl bg-[#E31E24] flex items-center justify-center text-white font-black text-sm">
                             {c.nombre.slice(0, 2).toUpperCase()}
@@ -452,7 +451,7 @@ export default function AdminClientesPage() {
             </div>
             <div className="flex items-center gap-4 mb-5">
               {detalle.imagen_url ? (
-                <img src={detalle.imagen_url} alt={detalle.nombre} className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-200" />
+                <Image src={detalle.imagen_url} alt={detalle.nombre} width={64} height={64} unoptimized className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-200" />
               ) : (
                 <div className="w-16 h-16 rounded-2xl bg-[#E31E24] flex items-center justify-center text-white font-black text-2xl">{detalle.nombre.slice(0, 2).toUpperCase()}</div>
               )}

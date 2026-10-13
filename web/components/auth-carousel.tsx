@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { Bus } from "lucide-react";
 
@@ -52,11 +53,13 @@ export default function AuthCarousel() {
   return (
     <div className="relative hidden lg:flex lg:w-[42%] h-screen overflow-hidden bg-black shrink-0 flex-col justify-between p-10">
       {imagenes.map((img, i) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <Image
           key={img.src}
           src={img.src}
           alt={img.alt}
+          fill
+          sizes="42vw"
+          unoptimized
           className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out ${
             i === index ? "opacity-100" : "opacity-0"
           }`}

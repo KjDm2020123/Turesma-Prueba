@@ -2,11 +2,11 @@
 
 import { useConductorPanel } from "../_components/use-conductor-panel";
 import {
-  History, Loader2, RefreshCw, MapPin, Users,
+  History, Loader2, Users,
   DollarSign, CalendarDays, CheckCircle, XCircle, Clock,
 } from "lucide-react";
 
-const ESTADO_STYLE: Record<string, { color: string; icon: any; label: string }> = {
+const ESTADO_STYLE: Record<string, { color: string; icon: React.ComponentType<{ size?: number }>; label: string }> = {
   finalizada: { color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle, label: "Finalizada" },
   cancelada:  { color: "bg-red-100 text-red-600 border-red-200",             icon: XCircle,    label: "Cancelada"  },
   en_curso:   { color: "bg-purple-100 text-purple-700 border-purple-200",    icon: Clock,      label: "En curso"   },
@@ -17,7 +17,7 @@ const ESTADO_STYLE: Record<string, { color: string; icon: any; label: string }> 
 export default function HistorialPage() {
   const {
     panel, loadingPanel, checkingSession,
-    loadPanel, formatFecha,
+    formatFecha,
   } = useConductorPanel();
 
   if (checkingSession) {
