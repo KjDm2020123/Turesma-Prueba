@@ -8,6 +8,7 @@ type UseAutoRefreshOptions = {
 
 export function useAutoRefresh(callback: () => void | Promise<void>, options: UseAutoRefreshOptions) {
   const callbackRef = useRef(callback);
+  const runningRef = useRef(false);
 
   useEffect(() => {
     callbackRef.current = callback;
@@ -16,13 +17,28 @@ export function useAutoRefresh(callback: () => void | Promise<void>, options: Us
   useEffect(() => {
     if (!options.enabled) return;
 
-    if (options.immediate !== false) {
-      callbackRef.current();
-    }
-    const interval = window.setInterval(() => {
-      void callbackRef.current();
-    }, options.intervalMs ?? 5000);
+    let disposed = false;
+    const run = () => {
+      if (disposed || runningRef.current || document.visibilityState === "hidden") return;
+      runningRef.current = true;
+      Promise.resolve()
+        .then(() => callbackRef.current())
+        .finally(() => {
+        runningRef.current = false;
+        });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") run();
+    };
 
-    return () => window.clearInterval(interval);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    if (options.immediate !== false) run();
+    const interval = window.setInterval(run, options.intervalMs ?? 5000);
+
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearInterval(interval);
+    };
   }, [options.enabled, options.intervalMs, options.immediate]);
 }
