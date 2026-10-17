@@ -151,6 +151,7 @@ export const AnalyticsDashboard = () => {
     name: ESTADO_LABEL[r.estado] ?? r.estado,
     value: r.total,
   }));
+  const totalReservasPorEstado = pieData.reduce((total, estado) => total + estado.value, 0);
 
   const vehiculosBar = vehiculos.map((v) => ({
     name: v.placa,
@@ -342,27 +343,37 @@ export const AnalyticsDashboard = () => {
           {pieData.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-xs text-slate-300 font-bold">Sin reservas aún</div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={52}
-                  outerRadius={84}
-                  paddingAngle={3}
-                  dataKey="value"
-                  label={({ percent }: any) => `${((percent ?? 0) * 100).toFixed(0)}%`}
-                  labelLine={false}
-                >
-                  {pieData.map((_, i) => (
-                    <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div>
+              <ResponsiveContainer width="100%" height={190}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={84}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 px-2 pt-1">
+                {pieData.map((estado, i) => (
+                  <div key={estado.name} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: COLORS_PIE[i % COLORS_PIE.length] }} />
+                    <span>{estado.name}</span>
+                    <span className="text-slate-900">
+                      {totalReservasPorEstado > 0 ? `${Math.round((estado.value / totalReservasPorEstado) * 100)}%` : "0%"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </ChartCard>
       </div>
