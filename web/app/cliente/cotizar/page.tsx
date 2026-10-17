@@ -360,20 +360,58 @@ export default function ClienteCotizarPage() {
             <div className="space-y-2">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Car size={12} /> 1. Elige el vehículo</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {vehiculos.map(v => {
                     const sel = form.vehiculo_id === String(v.id);
                     return (
-                      <button key={v.id} type="button" onClick={() => setForm(p => ({ ...p, vehiculo_id: sel ? "" : String(v.id), tipo_vehiculo: sel ? "" : String(v.tipo || "van").toLowerCase() }))}
-                        className={`text-left rounded-2xl border-2 overflow-hidden transition-all ${sel ? "border-[#E31E24] ring-2 ring-red-100" : "border-slate-100 hover:border-slate-300"}`}>
-                        <div className="h-20 bg-slate-100 relative">
-                          {v.imagen_url ? <Image src={v.imagen_url} alt={v.placa} fill sizes="240px" unoptimized className="object-cover" /> :
-                            <div className="w-full h-full flex items-center justify-center"><Bus size={26} className="text-slate-300" /></div>}
-                          {sel && <div className="absolute top-1.5 right-1.5 bg-[#E31E24] text-white rounded-full p-1"><CheckCircle2 size={12} /></div>}
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, vehiculo_id: sel ? "" : String(v.id), tipo_vehiculo: sel ? "" : String(v.tipo || "van").toLowerCase() }))}
+                        aria-pressed={sel}
+                        className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 ${
+                          sel
+                            ? "border-[#E31E24] ring-2 ring-[#E31E24]/15 shadow-lg shadow-red-100"
+                            : "border-slate-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                        }`}
+                      >
+                        <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
+                          {v.imagen_url ? (
+                            <Image
+                              src={v.imagen_url}
+                              alt={`${v.modelo || v.tipo} ${v.placa}`}
+                              fill
+                              sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                              unoptimized
+                              className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+                              <Bus size={36} strokeWidth={1.5} className="text-slate-400" />
+                            </div>
+                          )}
+                          <span className="absolute bottom-3 left-3 rounded-lg bg-slate-950/75 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-white shadow backdrop-blur-sm">
+                            {v.placa}
+                          </span>
+                          {sel && (
+                            <span className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#E31E24] text-white shadow-lg ring-2 ring-white">
+                              <CheckCircle2 size={18} />
+                            </span>
+                          )}
                         </div>
-                        <div className="p-2">
-                          <p className="text-xs font-black text-slate-800 uppercase italic tracking-tighter truncate">{v.placa}</p>
-                          <p className="text-[10px] text-slate-400 truncate">{v.modelo || v.tipo} · {v.capacidad || "?"} pax</p>
+                        <div className="space-y-2.5 p-4">
+                          <h3 className="truncate text-base font-black tracking-tight text-slate-900">
+                            {v.modelo || v.tipo || "Vehículo"}
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold capitalize text-slate-600">
+                              {v.tipo || "Transporte"}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+                              <Users size={13} className="text-slate-400" />
+                              {v.capacidad || "—"} pasajeros
+                            </span>
+                          </div>
                         </div>
                       </button>
                     );
