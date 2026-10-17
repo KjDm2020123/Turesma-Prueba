@@ -236,7 +236,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
               </div>
               {user?.imagen_url ? (
                 <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                  <Image src={user.imagen_url} alt={user?.nombre || "Cliente"} fill sizes="40px" unoptimized className="object-cover" />
+                  <Image src={user.imagen_url} alt={user?.nombre || "Cliente"} fill sizes="40px" className="object-cover" />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-[#E31E24] flex items-center justify-center text-white shadow-sm">

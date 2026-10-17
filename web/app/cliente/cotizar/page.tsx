@@ -382,7 +382,6 @@ export default function ClienteCotizarPage() {
                               alt={`${v.modelo || v.tipo} ${v.placa}`}
                               fill
                               sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                              unoptimized
                               className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                             />
                           ) : (

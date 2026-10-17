@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import {
   Bus, ArrowRight, DollarSign, Loader2,
@@ -10,10 +11,13 @@ import {
 import { getAuthHeaders, getStoredToken, handleUnauthorized } from "../../../lib/session";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
-import { LiveTripMap } from "../../../components/live-trip-map";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const LiveTripMap = dynamic(
+  () => import("../../../components/live-trip-map").then((module) => module.LiveTripMap),
+  { loading: () => <div className="h-64 animate-pulse rounded-2xl bg-slate-100" /> },
+);
 
 // Cuenta bancaria de la empresa para pagos por transferencia. Cámbiala aquí
 // por los datos reales — se muestra tal cual al cliente en el modal de pago.
@@ -252,7 +256,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                   <div className="flex items-center gap-2 min-w-0">
                     {p.comprobante_url ? (
                       <a href={p.comprobante_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                        <Image src={p.comprobante_url} alt="Comprobante de pago" width={36} height={36} unoptimized className="w-9 h-9 rounded-lg object-cover border border-slate-200" />
+                        <Image src={p.comprobante_url} alt="Comprobante de pago" width={36} height={36} sizes="36px" className="w-9 h-9 rounded-lg object-cover border border-slate-200" />
                       </a>
                     ) : <ImageIcon size={16} className="text-slate-300 flex-shrink-0" />}
                     <div className="min-w-0">
@@ -451,8 +455,8 @@ export default function ClienteHistorialPage() {
                   </div>
                 )}
 
-                {/* SEGUIMIENTO EN VIVO (viaje confirmado o en curso) */}
-                {(r.estado === "en_curso" || r.estado === "confirmada") && (
+                {/* El mapa solo se habilita cuando el viaje realmente está en curso. */}
+                {r.estado === "en_curso" && (
                   <div className="mt-3">
                     {trackId === r.id ? (
                       <div className="space-y-2">
@@ -461,8 +465,8 @@ export default function ClienteHistorialPage() {
                       </div>
                     ) : (
                       <button onClick={() => setTrackId(r.id)}
-                        className={`w-full mt-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${r.estado === "en_curso" ? "bg-blue-600 text-white hover:bg-blue-700 animate-pulse" : "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100"}`}>
-                        <Navigation size={14} /> {r.estado === "en_curso" ? "Seguir mi viaje en vivo" : "Ver ubicación del vehículo"}
+                        className="w-full mt-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all bg-blue-600 text-white hover:bg-blue-700">
+                        <Navigation size={14} /> Seguir mi viaje en vivo
                       </button>
                     )}
                   </div>
