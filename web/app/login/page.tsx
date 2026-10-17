@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -25,8 +25,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ email: string; password: string }>({ email: "", password: "" });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const checkSession = () => {
@@ -45,14 +48,30 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    const nextFieldErrors = {
+      email: !email.trim()
+        ? "Ingresa tu correo electrónico."
+        : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+          ? "Escribe un correo electrónico válido."
+          : "",
+      password: password.length === 0 ? "Ingresa tu contraseña." : "",
+    };
+    setFieldErrors(nextFieldErrors);
     setError("");
+
+    if (nextFieldErrors.email || nextFieldErrors.password) {
+      if (nextFieldErrors.email) emailInputRef.current?.focus();
+      else passwordInputRef.current?.focus();
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const response = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       const data = await response.json();
@@ -84,9 +103,9 @@ export default function LoginPage() {
     <main className="flex min-h-screen bg-slate-50 font-sans">
       <AuthCarousel />
 
-      <div className="flex min-h-screen flex-1 items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
-        <div className="w-full max-w-[440px]">
-          <div className="mb-8 flex items-center justify-between">
+      <div className="login-content flex min-h-screen flex-1 items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
+        <div className="login-content-inner auth-form-scroll-inner w-full max-w-[440px]">
+          <div className="mb-5 flex items-center justify-between sm:mb-6">
             <Link href="/" className="inline-flex items-center gap-2 rounded-lg text-sm font-bold text-slate-500 transition-colors hover:text-[#E31E24] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 group">
               <ArrowLeft size={17} className="transition-transform group-hover:-translate-x-1" />
               Volver al inicio
@@ -94,8 +113,8 @@ export default function LoginPage() {
             <span className="hidden text-xs font-bold uppercase tracking-[0.16em] text-slate-400 sm:inline">Acceso seguro</span>
           </div>
 
-          <div className="rounded-[2rem] border border-slate-200/80 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-9">
-            <div className="mb-7 lg:hidden">
+          <div className="rounded-[2rem] border border-slate-200/80 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
+            <div className="mb-5 lg:hidden">
               <Link href="/" className="inline-flex items-center gap-2.5">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E31E24] text-white shadow-md shadow-red-200">
                   <Bus size={21} />
@@ -104,11 +123,11 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            <div className="mb-8">
+            <div className="mb-6">
               <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#E31E24]">Bienvenido de nuevo</p>
               <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">Inicia sesión</h1>
               <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              Ingresa tus credenciales para acceder a tu cuenta de Turesma.
+                Ingresa tus credenciales para acceder a tu cuenta de Turesma.
               </p>
             </div>
 
@@ -119,23 +138,37 @@ export default function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="login-email" className="text-xs font-bold text-slate-700">Correo electrónico</label>
                 <div className="group relative">
                   <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#E31E24]" />
                   <input
                     id="login-email"
+                    ref={emailInputRef}
                     name="email"
                     type="email"
                     autoComplete="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    aria-invalid={Boolean(fieldErrors.email)}
+                    aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setFieldErrors((current) => ({ ...current, email: "" }));
+                      setError("");
+                    }}
                     placeholder="usuario@turesma.com"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#E31E24] focus:bg-white focus:ring-4 focus:ring-red-100"
+                    className={`w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:bg-white focus:ring-4 ${
+                      fieldErrors.email
+                        ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                        : "border-slate-200 focus:border-[#E31E24] focus:ring-red-100"
+                    }`}
                   />
                 </div>
+                {fieldErrors.email && <p id="login-email-error" className="text-xs font-semibold text-red-600" role="alert">{fieldErrors.email}</p>}
               </div>
 
               <div className="space-y-2">
@@ -149,14 +182,25 @@ export default function LoginPage() {
                   <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#E31E24]" />
                   <input
                     id="login-password"
+                    ref={passwordInputRef}
                     name="password"
                     type={showPassword ? "text" : "password"}
                     autoComplete="current-password"
                     required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setFieldErrors((current) => ({ ...current, password: "" }));
+                      setError("");
+                    }}
                     placeholder="Ingresa tu contraseña"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-12 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#E31E24] focus:bg-white focus:ring-4 focus:ring-red-100"
+                    className={`w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-12 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:bg-white focus:ring-4 ${
+                      fieldErrors.password
+                        ? "border-red-400 focus:border-red-500 focus:ring-red-100"
+                        : "border-slate-200 focus:border-[#E31E24] focus:ring-red-100"
+                    }`}
                   />
                   <button
                     type="button"
@@ -168,11 +212,13 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                {fieldErrors.password && <p id="login-password-error" className="text-xs font-semibold text-red-600" role="alert">{fieldErrors.password}</p>}
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
+                aria-live="polite"
                 className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#E31E24] py-3.5 text-sm font-black text-white shadow-lg shadow-red-200/70 transition-all hover:-translate-y-0.5 hover:bg-[#b3141a] hover:shadow-red-300/70 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-200 active:translate-y-0 disabled:cursor-wait disabled:opacity-70"
               >
                 {loading ? (

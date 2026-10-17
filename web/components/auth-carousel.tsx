@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FocusEvent } from "react";
 import { Bus } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -12,6 +12,7 @@ type ImagenCarrusel = { src: string; alt: string };
 export default function AuthCarousel() {
   const [imagenes, setImagenes] = useState<ImagenCarrusel[]>([]);
   const [index, setIndex] = useState(0);
+  const [pausado, setPausado] = useState(false);
 
   // Usa la misma fuente publica que el carrusel "Nuestra Flota" de la pagina
   // de inicio, para que cualquier vehiculo que el admin agregue, edite o
@@ -36,15 +37,29 @@ export default function AuthCarousel() {
   }, []);
 
   useEffect(() => {
-    if (imagenes.length < 2) return;
+    if (imagenes.length < 2 || pausado) return;
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (motionPreference.matches) return;
     const id = setInterval(() => {
       setIndex((prev) => (prev + 1) % imagenes.length);
     }, 5000);
     return () => clearInterval(id);
-  }, [imagenes.length]);
+  }, [imagenes.length, pausado]);
+
+  const handleFocusLeave = (event: FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setPausado(false);
+    }
+  };
 
   return (
-    <aside className="relative hidden h-screen w-[42%] shrink-0 overflow-hidden bg-[#081126] lg:block">
+    <aside
+      className="relative hidden h-screen w-[42%] shrink-0 overflow-hidden bg-[#081126] lg:block"
+      onMouseEnter={() => setPausado(true)}
+      onMouseLeave={() => setPausado(false)}
+      onFocusCapture={() => setPausado(true)}
+      onBlurCapture={handleFocusLeave}
+    >
       {imagenes.map((img, i) => (
         <Image
           key={img.src}
@@ -82,21 +97,25 @@ export default function AuthCarousel() {
         </div>
       </Link>
 
-      <div className="absolute bottom-24 left-10 right-10 z-10">
-        <p className="mb-3 text-xs font-black uppercase tracking-[0.25em] text-yellow-400">Turesma S.A.</p>
-        <h2 className="max-w-lg text-4xl font-black italic leading-tight tracking-tight text-white xl:text-5xl">
+      <div className="auth-carousel-copy absolute inset-x-8 top-[31%] z-10 max-w-lg rounded-3xl border border-white/10 bg-[#071126]/35 p-6 shadow-2xl shadow-black/10 backdrop-blur-sm sm:inset-x-10 sm:p-8">
+        <p className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-yellow-400">Turesma S.A.</p>
+        <h2 className="text-3xl font-black italic leading-[1.08] tracking-tight text-white xl:text-5xl">
           Tu próximo viaje empieza aquí.
         </h2>
-        <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-white/75">
-          Transporte turístico y ejecutivo con comodidad, puntualidad y seguridad en cada recorrido.
+        <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-white/85">
+          Transporte turístico y ejecutivo con comodidad, puntualidad y seguridad.
         </p>
       </div>
 
-      <div className="absolute bottom-10 left-10 z-10 flex items-center gap-2" aria-label="Imágenes de la flota">
+      <div className="absolute bottom-10 left-10 z-10 flex items-center gap-2" role="group" aria-label="Seleccionar imagen de la flota">
         {imagenes.map((img, i) => (
-          <span
+          <button
             key={img.src}
-            className={`h-1.5 rounded-full transition-all duration-500 ${
+            type="button"
+            onClick={() => setIndex(i)}
+            aria-label={`Mostrar imagen ${i + 1} de ${imagenes.length}`}
+            aria-current={i === index ? "true" : undefined}
+            className={`h-2 rounded-full transition-all duration-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white ${
               i === index ? "w-8 bg-yellow-400" : "w-1.5 bg-white/40"
             }`}
           />

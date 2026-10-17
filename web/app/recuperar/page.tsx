@@ -9,7 +9,8 @@ import {
   Loader2,
   Lock,
   Mail,
-  ShieldCheck
+  ShieldCheck,
+  Bus
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -97,36 +98,39 @@ export default function RecuperarPasswordPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f8f9fa] px-4 py-10">
-      {/* ELEMENTOS DE FONDO INSPIRADOS EN EL LOGO */}
-      <div className="absolute left-[-5%] top-[-5%] h-[400px] w-[400px] rounded-full bg-yellow-400/20 blur-[100px]" />
-      <div className="absolute bottom-[-5%] right-[-5%] h-[400px] w-[400px] rounded-full bg-green-500/10 blur-[100px]" />
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-5 py-8 font-sans sm:px-8">
+      <div className="w-full max-w-[440px]">
+      <section className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-8">
+        <Link href="/login" className="mb-7 inline-flex items-center gap-2 rounded-lg text-sm font-bold text-slate-500 transition-colors hover:text-[#E31E24] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100">
+          <ArrowLeft size={17} />
+          Volver al inicio de sesión
+        </Link>
 
-      <section className="relative z-10 w-full max-w-md rounded-3xl border-b-8 border-[#E31E24] bg-white shadow-2xl overflow-hidden">
-        
-        {/* CABECERA CON IDENTIDAD TURESMA */}
-        <div className="bg-[#E31E24] p-6 text-center">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-lg border-2 border-yellow-400">
-            <KeyRound size={28} className="text-[#E31E24]" />
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#E31E24] text-white shadow-md shadow-red-200">
+            <Bus size={22} />
           </div>
-          <h1 className="text-xl font-black uppercase tracking-wider text-white">Seguridad Turesma</h1>
+          <div>
+            <p className="text-base font-black italic tracking-tight text-slate-900">TURESMA <span className="text-[10px] not-italic text-[#E31E24]">S.A.</span></p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Acceso seguro</p>
+          </div>
         </div>
 
-        <div className="p-7 md:p-9">
-          <div className="mb-6 text-center">
-            <h2 className="text-lg font-bold text-slate-900">¿Olvidaste tu contraseña?</h2>
-            <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-tighter">Recuperación de acceso al sistema</p>
-          </div>
+        <div className="mb-6">
+          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.2em] text-[#E31E24]">Recuperar acceso</p>
+          <h1 className="text-3xl font-black tracking-tight text-slate-950">¿Olvidaste tu contraseña?</h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">Te enviaremos un PIN para verificar tu correo y crear una contraseña nueva.</p>
+        </div>
 
           {error ? (
-            <div className="mb-4 flex items-center gap-2 rounded-xl border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 animate-pulse">
+            <div role="alert" className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
               <AlertCircle size={16} className="shrink-0" />
               <span>{error}</span>
             </div>
           ) : null}
 
           {message ? (
-            <div className="mb-4 flex items-center gap-2 rounded-xl border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+            <div role="status" className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
               <ShieldCheck size={16} className="shrink-0" />
               <span>{message}</span>
             </div>
@@ -134,16 +138,20 @@ export default function RecuperarPasswordPage() {
 
           {!pinRequested ? (
             <form onSubmit={handleRequestPin} className="space-y-5">
-              <div className="space-y-1">
-                <label className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Correo Electrónico</label>
+              <div className="space-y-2">
+                <label htmlFor="recovery-email" className="text-xs font-bold text-slate-700">Correo electrónico</label>
                 <div className="relative group">
                   <Mail size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#E31E24] transition-colors" />
                   <input
+                    id="recovery-email"
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 py-3.5 pl-12 pr-4 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24]"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#E31E24] focus:bg-white focus:ring-4 focus:ring-red-100"
                     placeholder="correo@turesma.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     required
                   />
                 </div>
@@ -152,35 +160,39 @@ export default function RecuperarPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#E31E24] to-[#b3141a] py-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:from-black hover:to-black shadow-lg shadow-red-100 disabled:opacity-70"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E31E24] py-3.5 text-sm font-black text-white shadow-lg shadow-red-200/70 transition-all hover:bg-[#b3141a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-200 disabled:cursor-wait disabled:opacity-70"
               >
                 {loading ? <Loader2 size={18} className="animate-spin" /> : "Enviar PIN de Seguridad"}
               </button>
             </form>
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-4">
-              <div className="space-y-1">
-                <label className="px-1 text-[10px] font-black uppercase text-slate-400">Verificar Email</label>
+              <div className="space-y-2">
+                <label htmlFor="recovery-email-confirm" className="text-xs font-bold text-slate-700">Correo electrónico</label>
                 <div className="relative">
                   <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
                   <input
+                    id="recovery-email-confirm"
                     type="email"
                     value={email}
                     disabled
-                    className="w-full rounded-xl border-2 border-slate-50 bg-slate-50/50 py-3 pl-12 text-sm font-bold text-slate-400"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3.5 pl-12 pr-4 text-sm text-slate-500"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="px-1 text-[10px] font-black uppercase text-slate-400">PIN de 6 Dígitos</label>
+              <div className="space-y-2">
+                <label htmlFor="recovery-pin" className="text-xs font-bold text-slate-700">PIN de 6 dígitos</label>
                 <div className="relative group">
                   <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#E31E24]" />
                   <input
+                    id="recovery-pin"
                     type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
                     value={pin}
-                    onChange={(event) => setPin(event.target.value)}
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 py-3 pl-12 text-sm font-black tracking-[0.5em] outline-none focus:border-[#E31E24]"
+                    onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-12 text-sm font-black tracking-[0.5em] text-slate-900 outline-none transition-all focus:border-[#E31E24] focus:bg-white focus:ring-4 focus:ring-red-100"
                     placeholder="000000"
                     maxLength={6}
                     required
@@ -188,15 +200,17 @@ export default function RecuperarPasswordPage() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="px-1 text-[10px] font-black uppercase text-slate-400">Nueva Contraseña</label>
+              <div className="space-y-2">
+                <label htmlFor="recovery-new-password" className="text-xs font-bold text-slate-700">Nueva contraseña</label>
                 <div className="relative group">
                   <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#E31E24]" />
                   <input
+                    id="recovery-new-password"
                     type="password"
+                    autoComplete="new-password"
                     value={newPassword}
                     onChange={(event) => setNewPassword(event.target.value)}
-                    className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 py-3 pl-12 text-sm font-bold outline-none focus:border-[#E31E24]"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-12 text-sm text-slate-900 outline-none transition-all focus:border-[#E31E24] focus:bg-white focus:ring-4 focus:ring-red-100"
                     minLength={6}
                     placeholder="••••••••"
                     required
@@ -207,7 +221,7 @@ export default function RecuperarPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#E31E24] to-[#b3141a] py-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:from-black hover:to-black"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E31E24] py-3.5 text-sm font-black text-white shadow-lg shadow-red-200/70 transition-all hover:bg-[#b3141a] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-200 disabled:cursor-wait disabled:opacity-70"
               >
                 {loading ? <Loader2 size={18} className="animate-spin" /> : "Actualizar Contraseña"}
               </button>
@@ -221,30 +235,15 @@ export default function RecuperarPasswordPage() {
                   setError("");
                   setMessage("");
                 }}
-                className="w-full py-2 text-[10px] font-black uppercase tracking-tighter text-slate-400 hover:text-[#E31E24] transition-colors"
+                className="w-full rounded-lg py-2 text-xs font-bold text-slate-500 transition-colors hover:text-[#E31E24] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100"
               >
                 ¿No recibiste el PIN? Intentar de nuevo
               </button>
             </form>
           )}
 
-          <div className="mt-8 border-t border-slate-100 pt-6">
-            <Link
-              href="/login"
-              className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-[#E31E24] transition-colors"
-            >
-              <ArrowLeft size={16} />
-              Volver al inicio de sesión
-            </Link>
-          </div>
-        </div>
       </section>
-
-      {/* FOOTER PEQUEÑO */}
-      <div className="absolute bottom-4 text-center">
-         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-           Soporte Técnico Turesma S.A.
-         </p>
+      <p className="mt-5 text-center text-[11px] font-medium text-slate-400">Turesma S.A. · Transporte turístico y ejecutivo</p>
       </div>
     </main>
   );
