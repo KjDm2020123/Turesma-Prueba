@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import { useState, useSyncExternalStore, useRef } from "react";
 import {
   Bell,
   LayoutDashboard,
@@ -20,6 +20,7 @@ import {
 import { clearStoredUser } from "../../../lib/session";
 import { ConductorPanelProvider, useConductorPanelState } from "./use-conductor-panel";
 import { NotificationBell } from "../../../components/notification-bell";
+import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 
 type MenuItemType = {
   href: string;
@@ -43,15 +44,17 @@ const menuItems: MenuItemType[] = [
 
 export function ConductorShell({ children }: ConductorShellProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const panelState = useConductorPanelState();
-  const { newSolicitudesCount, user } = panelState;
+  const { newSolicitudesCount, user, checkingSession } = panelState;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const isHydrated = useSyncExternalStore(
     () => () => undefined,
     () => true,
     () => false,
   );
+  useMobileMenuAccessibility(isMobileMenuOpen, setIsMobileMenuOpen, mobileMenuRef, mobileMenuTriggerRef);
 
   const isActive = (href: string) => {
     if (href === "/vehiculo") return pathname === "/vehiculo";
@@ -65,11 +68,11 @@ export function ConductorShell({ children }: ConductorShellProps) {
 
   const handleLogout = () => {
     clearStoredUser();
-    router.replace("/login");
+    window.location.assign("/api/auth/logout");
   };
 
-  if (!isHydrated) {
-    return <div className="min-h-screen bg-[#f8f9fa]" />;
+  if (!isHydrated || checkingSession) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]" role="status" aria-live="polite">Verificando sesión...</div>;
   }
 
   return (
@@ -134,7 +137,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
             <div className="flex items-center gap-3 mb-4">
               <div className="relative">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-slate-700 to-slate-800 flex items-center justify-center text-sm font-black border border-white/10 text-white" suppressHydrationWarning>
-                  {isHydrated && user ? String(user.nombre || "CO").slice(0, 2).toUpperCase() : "CO"}
+                  {user ? String(user.nombre || "CO").slice(0, 2).toUpperCase() : "CO"}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-[#0b0f1a] rounded-full shadow-lg"></div>
               </div>
@@ -157,7 +160,16 @@ export function ConductorShell({ children }: ConductorShellProps) {
       </aside>
 
       {/* ═══════════ MOBILE SIDEBAR ═══════════ */}
-      <aside className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}>
+      <aside
+        id="conductor-mobile-navigation"
+        ref={mobileMenuRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menú de navegación del conductor"
+        aria-hidden={!isMobileMenuOpen}
+        inert={!isMobileMenuOpen}
+        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}
+      >
         <div className="p-8 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-[#E31E24] rounded-lg flex items-center justify-center font-bold">
@@ -165,7 +177,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
             </div>
             <span className="font-black italic tracking-tighter uppercase">Turesma</span>
           </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors"><X size={20} /></button>
+          <button type="button" onClick={() => setIsMobileMenuOpen(false)} aria-label="Cerrar menú" className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2 transition-colors hover:bg-white/5"><X size={20} /></button>
         </div>
         <nav className="p-6 space-y-3">
           {menuItems.map((item) => {
@@ -175,7 +187,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${isActive(item.href) ? "bg-[#E31E24] text-white" : "text-gray-500 hover:bg-white/5"}`}
+                className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${isActive(item.href) ? "bg-[#E31E24] text-white" : "text-gray-300 hover:bg-white/5"}`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon size={20} />
@@ -193,7 +205,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
         <div className="absolute bottom-0 left-0 right-0 border-t border-white/5 p-4">
           <button
             onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-500 hover:bg-white/5 hover:text-red-400 transition-all"
+            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-300 hover:bg-white/5 hover:text-red-400 transition-all"
           >
             <LogOut size={20} />
             <span className="font-bold text-sm uppercase tracking-tight">Cerrar sesión</span>
@@ -207,7 +219,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
         {/* HEADER SUPERIOR — GLASSMORPHISM */}
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200 px-3 py-2 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm h-14 sm:h-16">
           <div className="flex items-center gap-3">
-            <button className="lg:hidden p-2 text-[#E31E24] hover:bg-red-50 rounded-xl transition-all" onClick={() => setIsMobileMenuOpen(true)} aria-label="Abrir menú">
+            <button ref={mobileMenuTriggerRef} className="lg:hidden flex min-h-11 min-w-11 items-center justify-center rounded-xl p-2 text-[#E31E24] transition-all hover:bg-red-50" onClick={() => setIsMobileMenuOpen(true)} type="button" aria-label="Abrir menú" aria-expanded={isMobileMenuOpen} aria-controls="conductor-mobile-navigation">
               <Menu size={24} />
             </button>
             {/* Logo + sección (visible en móvil, donde el sidebar está oculto) */}
@@ -264,6 +276,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
       {isMobileMenuOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-[60]"
+          aria-hidden="true"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}

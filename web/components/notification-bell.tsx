@@ -6,6 +6,7 @@ import { Bell, CheckCheck, MessageCircle, X } from "lucide-react";
 import { getAuthHeaders } from "../lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const NOTIFICATIONS_POLL_MS = 30000;
 
 type NotificationItem = {
   id: number;
@@ -160,14 +161,27 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   };
 
   useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 5000);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") loadNotifications();
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
     };
+    const startPolling = () => {
+      if (document.visibilityState !== "visible" || interval) return;
+      loadNotifications();
+      interval = setInterval(loadNotifications, NOTIFICATIONS_POLL_MS);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") startPolling();
+      else stopPolling();
+    };
+
+    startPolling();
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      clearInterval(interval);
+      stopPolling();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

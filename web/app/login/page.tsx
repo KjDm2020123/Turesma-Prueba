@@ -17,8 +17,6 @@ import {
 import { getRolePath, getStoredUser, setStoredUser, setStoredToken } from "../../lib/session";
 import AuthCarousel from "../../components/auth-carousel";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -68,7 +66,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
@@ -161,7 +159,7 @@ export default function LoginPage() {
                       setError("");
                     }}
                     placeholder="usuario@turesma.com"
-                    className={`w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:bg-white focus:ring-4 ${
+                    className={`w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-4 text-base text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:bg-white focus:ring-4 sm:text-sm ${
                       fieldErrors.email
                         ? "border-red-400 focus:border-red-500 focus:ring-red-100"
                         : "border-slate-200 focus:border-[#E31E24] focus:ring-red-100"
@@ -196,7 +194,7 @@ export default function LoginPage() {
                       setError("");
                     }}
                     placeholder="Ingresa tu contraseña"
-                    className={`w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-12 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:bg-white focus:ring-4 ${
+                    className={`w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-12 text-base text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:bg-white focus:ring-4 sm:text-sm ${
                       fieldErrors.password
                         ? "border-red-400 focus:border-red-500 focus:ring-red-100"
                         : "border-slate-200 focus:border-[#E31E24] focus:ring-red-100"

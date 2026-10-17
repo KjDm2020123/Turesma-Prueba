@@ -140,6 +140,9 @@ export default function RootPage() {
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
   const flotaRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMenuWasOpen = useRef(false);
   const fotosGaleria = galeria.filter((contenido) => contenido.tipo !== "video");
   const videosGaleria = galeria.filter((contenido) => contenido.tipo === "video");
 
@@ -167,6 +170,25 @@ export default function RootPage() {
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [fotosGaleria.length]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      if (mobileMenuWasOpen.current) mobileMenuTriggerRef.current?.focus();
+      mobileMenuWasOpen.current = false;
+      return;
+    }
+
+    mobileMenuWasOpen.current = true;
+    mobileMenuRef.current?.querySelector<HTMLElement>("a[href]")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+        mobileMenuTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
 
   // Desplaza el carrusel de flota una "tarjeta" a izq/der. Si ya está al final,
   // vuelve al inicio (loop infinito) para que el auto-avance no se detenga.
@@ -311,8 +333,9 @@ export default function RootPage() {
           </div>
 
           <button
+            ref={mobileMenuTriggerRef}
             type="button"
-            className="text-[#E31E24] md:hidden"
+            className="flex min-h-11 min-w-11 items-center justify-center text-[#E31E24] md:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={mobileMenuOpen}
@@ -324,7 +347,7 @@ export default function RootPage() {
 
         {/* Menú Móvil */}
         {mobileMenuOpen && (
-          <div id="mobile-navigation" className="mobile-menu-panel md:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
+          <div id="mobile-navigation" ref={mobileMenuRef} role="region" aria-label="Navegación móvil" className="mobile-menu-panel md:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className={navLinkClass("nosotros", true)} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className={navLinkClass("flota", true)} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
             <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className={navLinkClass("servicios", true)} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
@@ -871,7 +894,8 @@ export default function RootPage() {
                     type="button"
                     onClick={() => setOpenFaqIndex((current) => (current === index ? null : index))}
                     aria-expanded={isOpen}
-                    className="relative flex w-full items-center pr-7 text-[#0b1220] focus-visible:outline-none"
+                    aria-controls={`faq-answer-${index}`}
+                    className="relative flex min-h-11 w-full items-center pr-7 text-[#0b1220] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E31E24] focus-visible:ring-offset-2"
                   >
                     <span className="block w-full text-left text-base font-black italic uppercase tracking-tight md:text-[1.1rem]">
                       {faq.question}
@@ -883,6 +907,9 @@ export default function RootPage() {
                   </button>
 
                   <div
+                    id={`faq-answer-${index}`}
+                    aria-hidden={!isOpen}
+                    inert={!isOpen}
                     className={`grid overflow-hidden transition-all duration-500 ease-[cubic-bezier(.22,1,.36,1)] ${
                       isOpen ? "mt-4 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0"
                     }`}
@@ -953,17 +980,21 @@ export default function RootPage() {
           top: 0,
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
         })}
+        type="button"
+        aria-label="Volver al inicio de la página"
         className={`fixed bottom-8 right-8 z-50 rounded-2xl bg-black p-4 text-white shadow-2xl transition-all hover:bg-[#E31E24] ${showScrollTop ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}
       >
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+        <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
       </button>
 
       <a
         href={`https://wa.me/${TELEFONO_EMPRESA}`}
         target="_blank"
+        rel="noreferrer"
+        aria-label="Contactar a Turesma por WhatsApp"
         className="fixed bottom-8 left-8 z-50 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-2xl transition-transform hover:scale-110 active:scale-95"
       >
-        <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24"><path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.4 0 .01 5.39 0 12.02c0 2.1.55 4.16 1.6 5.98L0 24l6.16-1.58a11.95 11.95 0 0 0 5.85 1.49h.01c6.63 0 12.02-5.39 12.03-12.02 0-3.22-1.25-6.24-3.53-8.41ZM12.02 21.4h-.01a9.4 9.4 0 0 1-4.78-1.3l-.34-.2-3.66.94.98-3.57-.22-.37a9.42 9.42 0 0 1-1.45-5.03c.01-5.21 4.25-9.45 9.47-9.45 2.53 0 4.9.99 6.68 2.77a9.36 9.36 0 0 1 2.77 6.68c-.01 5.22-4.25 9.46-9.44 9.46Zm5.47-7.46c-.3-.15-1.78-.88-2.06-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.95 1.18-.17.2-.35.23-.65.08-.3-.15-1.26-.46-2.4-1.48-.89-.8-1.49-1.78-1.67-2.08-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.03-.53-.08-.15-.68-1.64-.93-2.24-.24-.58-.49-.5-.68-.51h-.58c-.2 0-.53.07-.81.37-.28.3-1.05 1.02-1.05 2.49 0 1.47 1.08 2.89 1.23 3.09.15.2 2.11 3.23 5.11 4.53.71.31 1.26.49 1.69.63.71.23 1.36.19 1.87.11.57-.09 1.76-.72 2.01-1.42.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z" /></svg>
+        <svg aria-hidden="true" className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24"><path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.4 0 .01 5.39 0 12.02c0 2.1.55 4.16 1.6 5.98L0 24l6.16-1.58a11.95 11.95 0 0 0 5.85 1.49h.01c6.63 0 12.02-5.39 12.03-12.02 0-3.22-1.25-6.24-3.53-8.41ZM12.02 21.4h-.01a9.4 9.4 0 0 1-4.78-1.3l-.34-.2-3.66.94.98-3.57-.22-.37a9.42 9.42 0 0 1-1.45-5.03c.01-5.21 4.25-9.45 9.47-9.45 2.53 0 4.9.99 6.68 2.77a9.36 9.36 0 0 1 2.77 6.68c-.01 5.22-4.25 9.46-9.44 9.46Zm5.47-7.46c-.3-.15-1.78-.88-2.06-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.95 1.18-.17.2-.35.23-.65.08-.3-.15-1.26-.46-2.4-1.48-.89-.8-1.49-1.78-1.67-2.08-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.03-.53-.08-.15-.68-1.64-.93-2.24-.24-.58-.49-.5-.68-.51h-.58c-.2 0-.53.07-.81.37-.28.3-1.05 1.02-1.05 2.49 0 1.47 1.08 2.89 1.23 3.09.15.2 2.11 3.23 5.11 4.53.71.31 1.26.49 1.69.63.71.23 1.36.19 1.87.11.57-.09 1.76-.72 2.01-1.42.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z" /></svg>
       </a>
     </main>
   );
