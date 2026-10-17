@@ -144,7 +144,7 @@ export default function RootPage() {
   const videosGaleria = galeria.filter((contenido) => contenido.tipo === "video");
 
   useEffect(() => {
-    const elements = document.querySelectorAll<HTMLElement>('[data-reveal]');
+    const elements = document.querySelectorAll<HTMLElement>('.home-page [data-reveal]');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (reduceMotion) {
@@ -166,24 +166,25 @@ export default function RootPage() {
 
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, []);
+  }, [fotosGaleria.length]);
 
   // Desplaza el carrusel de flota una "tarjeta" a izq/der. Si ya está al final,
   // vuelve al inicio (loop infinito) para que el auto-avance no se detenga.
   const scrollFlota = (dir: "left" | "right") => {
     const el = flotaRef.current;
     if (!el) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     const card = el.querySelector<HTMLElement>("[data-flota-card]");
     const amount = card ? card.offsetWidth + 24 : el.clientWidth * 0.8;
     const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
     const atStart = el.scrollLeft <= 4;
 
     if (dir === "right" && atEnd) {
-      el.scrollTo({ left: 0, behavior: "smooth" });
+      el.scrollTo({ left: 0, behavior });
     } else if (dir === "left" && atStart) {
-      el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+      el.scrollTo({ left: el.scrollWidth, behavior });
     } else {
-      el.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
+      el.scrollBy({ left: dir === "left" ? -amount : amount, behavior });
     }
   };
 
@@ -268,7 +269,8 @@ export default function RootPage() {
 
     const navOffset = 96;
     const top = section.getBoundingClientRect().top + window.scrollY - navOffset;
-    window.scrollTo({ top, behavior: "smooth" });
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    window.scrollTo({ top, behavior });
     window.history.replaceState(null, "", `#${sectionId}`);
 
     if (shouldCloseMenu) closeMenu();
@@ -280,7 +282,7 @@ export default function RootPage() {
     } transition-colors hover:text-[#E31E24]`;
 
   return (
-    <main className="bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
+    <main className="home-page bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
       <link rel="preload" as="image" href={HERO_IMAGE_URL} fetchPriority="high" />
 
       {/* NAVBAR */}
@@ -300,10 +302,10 @@ export default function RootPage() {
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
-            <Link href="/login" className="rounded-xl border-2 border-gray-100 px-6 py-2.5 text-sm font-bold text-gray-700 transition-all hover:border-[#E31E24] hover:text-[#E31E24]">
+            <Link href="/login" className="home-button rounded-xl border-2 border-gray-100 px-6 py-2.5 text-sm font-bold text-gray-700 transition-all hover:border-[#E31E24] hover:text-[#E31E24]">
               Ingresar
             </Link>
-            <Link href="/registro" className="rounded-xl bg-[#E31E24] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
+            <Link href="/registro" className="home-button rounded-xl bg-[#E31E24] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
               Registrarse
             </Link>
           </div>
@@ -329,8 +331,8 @@ export default function RootPage() {
             <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className={navLinkClass("requerimiento", true)} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className={navLinkClass("contacto", true)} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
             <div className="pt-4 flex flex-col gap-3">
-              <Link href="/login" className="text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
-              <Link href="/registro" className="text-center rounded-xl bg-[#E31E24] py-3 font-bold text-white">Registrarse</Link>
+              <Link href="/login" className="home-button text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
+              <Link href="/registro" className="home-button text-center rounded-xl bg-[#E31E24] py-3 font-bold text-white">Registrarse</Link>
             </div>
           </div>
         )}
@@ -355,10 +357,10 @@ export default function RootPage() {
               Soluciones de transporte de alta gama en Manta. Puntualidad, confort y seguridad en cada kilómetro del Ecuador.
             </p>
             <div className="hero-intro hero-intro-actions flex flex-wrap gap-4">
-              <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="group flex items-center gap-3 rounded-2xl bg-white px-8 py-4 font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400">
+              <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="home-button group flex items-center gap-3 rounded-2xl bg-white px-8 py-4 font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400">
                 Ver Flota <ChevronRight className="transition-transform group-hover:translate-x-1" />
               </a>
-              <a href={`https://wa.me/${TELEFONO_EMPRESA}`} target="_blank" className="rounded-2xl border-2 border-white/20 bg-white/5 px-8 py-4 font-black uppercase tracking-widest text-white backdrop-blur-md transition-all hover:bg-white/10">
+              <a href={`https://wa.me/${TELEFONO_EMPRESA}`} target="_blank" rel="noreferrer" className="home-button rounded-2xl border-2 border-white/20 bg-white/5 px-8 py-4 font-black uppercase tracking-widest text-white backdrop-blur-md transition-all hover:bg-white/10">
                 Contactar Asesor
               </a>
             </div>
@@ -383,7 +385,7 @@ export default function RootPage() {
               { label: "Puntualidad", icon: Clock3, color: "text-orange-500", bg: "bg-orange-50" },
               { label: "Logística", icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
             ].map((f, i) => (
-              <div key={i} className="group text-center">
+              <div key={i} className="home-card group text-center">
                 <div className={`mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[2rem] ${f.bg} transition-all group-hover:rotate-6 group-hover:scale-110`}>
                   <f.icon className={f.color} size={32} />
                 </div>
@@ -490,7 +492,7 @@ export default function RootPage() {
                     <div
                       key={v.id}
                       data-flota-card
-                      className="flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl transition-all hover:shadow-2xl hover:-translate-y-1 sm:w-[360px]"
+                      className="home-card flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl hover:shadow-2xl sm:w-[360px]"
                     >
                       <Image
                         src={v.imagen_url || IMAGEN_FALLBACK}
@@ -540,7 +542,7 @@ export default function RootPage() {
           )}
 
           <div className="mt-12 text-center">
-            <Link href="/login" className="inline-flex items-center gap-3 rounded-2xl bg-[#E31E24] px-8 py-4 font-black uppercase tracking-widest text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
+            <Link href="/login" className="home-button inline-flex items-center gap-3 rounded-2xl bg-[#E31E24] px-8 py-4 font-black uppercase tracking-widest text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
               Reservar un vehículo <ChevronRight size={20} />
             </Link>
           </div>
@@ -550,7 +552,7 @@ export default function RootPage() {
       {/* SECCIÓN GALERÍA DE VIAJES (fotos publicadas por el admin) */}
       {fotosGaleria.length > 0 && (
         <section id="galeria" className="py-24 bg-white border-t border-gray-50">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
             <div className="mb-16 text-center">
               <h2 className="text-4xl font-black italic tracking-tighter text-[#E31E24] md:text-6xl uppercase">Nuestros Viajes</h2>
               <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
@@ -561,7 +563,7 @@ export default function RootPage() {
               {fotosGaleria.map((foto) => (
                 <figure
                   key={foto.id}
-                  className="group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
+                  className="home-card group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
                 >
                   {foto.tipo === "video" ? (
                     <video src={foto.imagen_url} controls preload="metadata" playsInline className="w-full h-full object-cover" />
@@ -572,7 +574,7 @@ export default function RootPage() {
                       fill
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       priority={foto.id === fotosGaleria[0]?.id}
-                      className="object-cover transition-transform duration-700 group-hover:scale-110"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   )}
                   {(foto.titulo || foto.descripcion) && (
@@ -641,15 +643,15 @@ export default function RootPage() {
              <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-[2rem] bg-gray-50 border-b-4 border-[#E31E24] hover:bg-gray-100 transition-all">
+            <div className="home-card p-8 rounded-[2rem] bg-gray-50 border-b-4 border-[#E31E24] hover:bg-gray-100">
               <h3 className="text-2xl font-black italic text-gray-900 mb-4 uppercase">Traslados Ejecutivos</h3>
               <p className="text-gray-600 font-medium leading-relaxed">Puntualidad absoluta para viajes de negocios, traslados al aeropuerto y logística corporativa.</p>
             </div>
-            <div className="p-8 rounded-[2rem] bg-gray-50 border-b-4 border-yellow-400 hover:bg-gray-100 transition-all">
+            <div className="home-card p-8 rounded-[2rem] bg-gray-50 border-b-4 border-yellow-400 hover:bg-gray-100">
               <h3 className="text-2xl font-black italic text-gray-900 mb-4 uppercase">Tours Turísticos</h3>
               <p className="text-gray-600 font-medium leading-relaxed">Guías certificados y rutas personalizadas por la costa manabita y todo el Ecuador.</p>
             </div>
-            <div className="p-8 rounded-[2rem] bg-gray-50 border-b-4 border-green-600 hover:bg-gray-100 transition-all">
+            <div className="home-card p-8 rounded-[2rem] bg-gray-50 border-b-4 border-green-600 hover:bg-gray-100">
               <h3 className="text-2xl font-black italic text-gray-900 mb-4 uppercase">Logística de Eventos</h3>
               <p className="text-gray-600 font-medium leading-relaxed">Coordinación de transporte para congresos, bodas y eventos institucionales masivos.</p>
             </div>
@@ -682,7 +684,7 @@ export default function RootPage() {
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <article key={item.title} className="group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                <article key={item.title} className="home-card group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm hover:shadow-xl">
                   <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-2xl ${item.bg} transition-transform group-hover:rotate-6`}>
                     <Icon size={23} className={item.color} />
                   </div>
@@ -704,10 +706,10 @@ export default function RootPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row md:flex-col lg:flex-row">
-              <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white hover:text-[#E31E24]">
+              <Link href="/login" className="home-button inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white hover:text-[#E31E24]">
                 Cotizar en línea <ChevronRight size={16} />
               </Link>
-              <a href={`https://wa.me/${TELEFONO_EMPRESA}?text=${encodeURIComponent("Hola TURESMA, tengo un requerimiento de transporte personalizado.")}`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10">
+              <a href={`https://wa.me/${TELEFONO_EMPRESA}?text=${encodeURIComponent("Hola TURESMA, tengo un requerimiento de transporte personalizado.")}`} target="_blank" rel="noreferrer" className="home-button inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10">
                 Cuéntanos tu requerimiento
               </a>
             </div>
@@ -794,7 +796,7 @@ export default function RootPage() {
                   { title: "Seguros de Pasajeros", desc: "Cobertura completa y cumplimiento de toda la normativa legal.", icon: <BadgeCheck className="text-green-600" /> },
                   { title: "Atención 24 Horas", desc: "Soporte y coordinación logística los 365 días del año.", icon: <Activity className="text-blue-600" /> }
                 ].map((item, index) => (
-                  <div key={index} className="flex gap-4 p-5 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300">
+                  <div key={index} className="home-card flex gap-4 p-5 rounded-2xl border border-gray-100 hover:shadow-xl">
                     <div className="mt-1 shrink-0">{item.icon}</div>
                     <div>
                       <h4 className="font-black text-gray-800 uppercase text-sm tracking-tight">{item.title}</h4>
@@ -861,7 +863,7 @@ export default function RootPage() {
               return (
                 <article
                   key={index}
-                  className={`rounded-xl border bg-white px-4 py-5 shadow-sm transition-all duration-500 ${
+                  className={`home-card rounded-xl border bg-white px-4 py-5 shadow-sm transition-all duration-500 ${
                     isOpen ? "border-[#E31E24]/30 shadow-md" : "border-gray-200"
                   }`}
                 >
@@ -947,7 +949,10 @@ export default function RootPage() {
 
       {/* BOTONES FLOTANTES */}
       <button
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        onClick={() => window.scrollTo({
+          top: 0,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        })}
         className={`fixed bottom-8 right-8 z-50 rounded-2xl bg-black p-4 text-white shadow-2xl transition-all hover:bg-[#E31E24] ${showScrollTop ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}
       >
         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>

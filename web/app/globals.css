@@ -25,47 +25,83 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-[data-reveal] {
+.home-page [data-reveal] {
   opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 650ms ease, transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(18px);
+  transition: opacity 520ms ease, transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-[data-reveal].is-visible {
+.home-page [data-reveal].is-visible {
   opacity: 1;
   transform: translateY(0);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-reveal] {
-    opacity: 1;
-    transform: none;
-    transition: none;
+.home-card {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
+}
+
+.home-button {
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-card:hover {
+    transform: translateY(-4px);
+  }
+
+  .home-button:hover {
+    transform: translateY(-2px);
   }
 }
 
-.hero-intro {
+.home-button:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page *,
+  .home-page *::before,
+  .home-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .home-page [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+
+  .home-page .home-card:hover,
+  .home-page .home-button:hover,
+  .home-page .home-button:active {
+    transform: none !important;
+  }
+}
+
+.home-page .hero-intro {
   animation: hero-enter 750ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.hero-intro-title {
+.home-page .hero-intro-title {
   animation-delay: 120ms;
 }
 
-.hero-intro-copy {
+.home-page .hero-intro-copy {
   animation-delay: 280ms;
 }
 
-.hero-intro-actions {
+.home-page .hero-intro-actions {
   animation-delay: 440ms;
 }
 
-.hero-background-image {
+.home-page .hero-background-image {
   background-position: center;
   background-size: cover;
 }
 
-.mobile-menu-panel {
+.home-page .mobile-menu-panel {
   animation: mobile-menu-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transform-origin: top;
 }
@@ -95,8 +131,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-intro,
-  .mobile-menu-panel {
+  .home-page .hero-intro,
+  .home-page .mobile-menu-panel {
     animation: none;
   }
 }
