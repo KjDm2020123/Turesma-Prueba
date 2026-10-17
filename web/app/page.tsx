@@ -45,6 +45,7 @@ type GaleriaFoto = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop";
 
 // Número oficial de la empresa (formato internacional sin +). Cambiarlo aquí
 // actualiza el botón flotante, el CTA del hero y el pie de página a la vez.
@@ -61,6 +62,7 @@ type PublicDataCache = {
 
 export default function RootPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [vehiculos, setVehiculos] = useState<VehiculoPublico[]>([]);
@@ -166,6 +168,13 @@ export default function RootPage() {
     const updateScrollButton = () => {
       const shouldShow = window.scrollY > 300;
       setShowScrollTop((current) => (current === shouldShow ? current : shouldShow));
+      const activationLine = window.innerHeight * 0.35;
+      const sectionIds = ["nosotros", "flota", "servicios", "requerimiento", "contacto"];
+      const currentSection = sectionIds.reduce<string | null>((active, id) => {
+        const section = document.getElementById(id);
+        return section && section.getBoundingClientRect().top <= activationLine ? id : active;
+      }, null);
+      setActiveSection((current) => current === currentSection ? current : currentSection);
       ticking = false;
     };
     const onScroll = () => {
@@ -175,6 +184,7 @@ export default function RootPage() {
       }
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    updateScrollButton();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -193,9 +203,15 @@ export default function RootPage() {
     if (shouldCloseMenu) closeMenu();
   };
 
+  const navLinkClass = (sectionId: string, mobile = false) =>
+    `${mobile ? "block text-lg font-bold" : "text-sm font-bold uppercase tracking-widest"} ${
+      activeSection === sectionId ? "text-[#E31E24]" : "text-gray-600"
+    } transition-colors hover:text-[#E31E24]`;
+
   return (
     <main className="bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
-      
+      <link rel="preload" as="image" href={HERO_IMAGE_URL} fetchPriority="high" />
+
       {/* NAVBAR */}
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -205,11 +221,11 @@ export default function RootPage() {
 
           {/* Menú Escritorio */}
           <div className="hidden items-center gap-8 md:flex">
-            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Nosotros</a>
-            <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Flota</a>
-            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Servicios</a>
-            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Soluciones</a>
-            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Contacto</a>
+            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className={navLinkClass("nosotros")} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
+            <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className={navLinkClass("flota")} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
+            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className={navLinkClass("servicios")} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
+            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className={navLinkClass("requerimiento")} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
+            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className={navLinkClass("contacto")} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
@@ -221,19 +237,26 @@ export default function RootPage() {
             </Link>
           </div>
 
-          <button type="button" className="text-[#E31E24] md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          <button
+            type="button"
+            className="text-[#E31E24] md:hidden"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+          >
             {mobileMenuOpen ? <X size={32} /> : <MenuIcon size={32} />}
           </button>
         </div>
 
         {/* Menú Móvil */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-b border-gray-100 p-6 space-y-4 shadow-xl animate-in slide-in-from-top duration-300">
-            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Nosotros</a>
-            <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Flota</a>
-            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Servicios</a>
-            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Soluciones</a>
-            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Contacto</a>
+          <div id="mobile-navigation" className="mobile-menu-panel md:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
+            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className={navLinkClass("nosotros", true)} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
+            <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className={navLinkClass("flota", true)} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
+            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className={navLinkClass("servicios", true)} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
+            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className={navLinkClass("requerimiento", true)} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
+            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className={navLinkClass("contacto", true)} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
             <div className="pt-4 flex flex-col gap-3">
               <Link href="/login" className="text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
               <Link href="/registro" className="text-center rounded-xl bg-[#E31E24] py-3 font-bold text-white">Registrarse</Link>
@@ -244,26 +267,23 @@ export default function RootPage() {
 
       {/* HERO SECTION */}
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden pt-20">
-        <div className="absolute inset-0 z-0 bg-[#0a0a0a]">
-          <Image
-            src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop"
-            alt="Bus de turismo"
-            fill
-            sizes="100vw"
-            className="h-full w-full object-cover opacity-40 transition-transform duration-[10s] hover:scale-110"
-          />
+        <div
+          className="hero-background-image absolute inset-0 z-0 bg-[#0a0a0a]"
+          style={{ backgroundImage: `url("${HERO_IMAGE_URL}")` }}
+        >
+          <div className="absolute inset-0 bg-black/60" />
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
         </div>
         
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:flex lg:items-center">
           <div className="lg:w-2/3">
-            <h1 className="mb-6 text-5xl font-black leading-[1.1] tracking-tight text-white md:text-8xl italic">
+            <h1 className="hero-intro hero-intro-title mb-6 text-5xl font-black leading-[1.1] tracking-tight text-white md:text-8xl italic">
               VIAJA CON <span className="text-yellow-400">EXCELENCIA.</span>
             </h1>
-            <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-gray-300 md:text-2xl">
+            <p className="hero-intro hero-intro-copy mb-10 max-w-2xl text-xl font-medium leading-relaxed text-gray-300 md:text-2xl">
               Soluciones de transporte de alta gama en Manta. Puntualidad, confort y seguridad en cada kilómetro del Ecuador.
             </p>
-            <div className="flex flex-wrap gap-4">
+            <div className="hero-intro hero-intro-actions flex flex-wrap gap-4">
               <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="group flex items-center gap-3 rounded-2xl bg-white px-8 py-4 font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400">
                 Ver Flota <ChevronRight className="transition-transform group-hover:translate-x-1" />
               </a>
