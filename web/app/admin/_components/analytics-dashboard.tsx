@@ -11,9 +11,9 @@ import {
 } from "recharts";
 import {
   TrendingUp, DollarSign, ShoppingCart, Users, Car,
-  Loader2, UserCircle, AlertTriangle, Download,
+  Loader2, UserCircle, AlertTriangle, Download, FileSpreadsheet,
 } from "lucide-react";
-import { descargarCSV } from "../../../lib/download";
+import { descargarCSV, descargarExcel } from "../../../lib/download";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -78,6 +78,7 @@ export const AnalyticsDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [exportando, setExportando] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   // Filtro de fechas
   const [filtro, setFiltro] = useState<FiltroFecha>("todo");
@@ -121,6 +122,15 @@ export const AnalyticsDashboard = () => {
     const result = await descargarCSV(`/api/admin/reportes/exportar-csv?tipo=reservas${qs}`, "reporte_reservas.csv");
     if (!result.ok) setErr(result.error || "No se pudo exportar");
     setExportando(false);
+  };
+
+  const exportarExcel = async () => {
+    setExportandoExcel(true);
+    const r = rango();
+    const qs = r ? `&desde=${r.desde}&hasta=${r.hasta}` : "";
+    const result = await descargarExcel(`/api/admin/reportes/exportar-csv?tipo=reservas&formato=xlsx${qs}`, "reporte_reservas.xlsx");
+    if (!result.ok) setErr(result.error || "No se pudo exportar");
+    setExportandoExcel(false);
   };
 
   if (checkingSession || loading) {
@@ -193,11 +203,18 @@ export const AnalyticsDashboard = () => {
             Datos en tiempo real · TURESMA S.A.
           </p>
         </div>
-        <button onClick={exportarCSV} disabled={exportando}
-          className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
-          {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-          Exportar CSV
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={exportarCSV} disabled={exportando}
+            className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
+            {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            Exportar CSV
+          </button>
+          <button onClick={exportarExcel} disabled={exportandoExcel}
+            className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
+            {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+            Excel con diseño
+          </button>
+        </div>
       </div>
 
       {/* ── FILTRO DE FECHAS ───────────────────────────────────────── */}

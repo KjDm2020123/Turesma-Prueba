@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
+import { escapeReportHtml, openPrintableReport } from "../../../lib/print-report";
 import {
   deleteAdminUser,
   listAdminUsers,
@@ -84,18 +85,17 @@ export default function AdminClientesPage() {
   };
 
   const verFactura = (c: Cliente, r: ReservaCliente) => {
-    const w = window.open("", "_blank", "width=760,height=900");
-    if (!w) return;
     const fecha = r.fecha_reserva ? new Date(r.fecha_reserva).toLocaleDateString("es-EC") : "—";
     const total = Number(r.total || 0).toFixed(2);
-    w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Factura #${r.id} - Turesma</title>
+    const logoUrl = `${window.location.origin}/logo.png`;
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Factura #${r.id} - Turesma</title>
       <style>
         *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
         body{margin:0;padding:40px;color:#1a1a1a}
-        .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #E31E24;padding-bottom:20px}
+        .head{display:flex;flex-direction:column;align-items:center;text-align:center;border-bottom:4px solid #E31E24;padding-bottom:20px}
         .logo{font-size:30px;font-weight:900;font-style:italic;color:#E31E24;letter-spacing:-1px}
         .sub{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:2px}
-        .doc{text-align:right} .doc h2{margin:0;font-size:24px} .doc p{margin:2px 0;font-size:12px;color:#666}
+        .doc{text-align:center;margin-top:12px} .doc h2{margin:0;font-size:24px} .doc p{margin:2px 0;font-size:12px;color:#666}
         .grid{display:flex;gap:20px;margin-top:24px}
         .box{flex:1;background:#f6f7f9;border-radius:12px;padding:16px}
         .box .t{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#999;margin-bottom:6px}
@@ -108,28 +108,28 @@ export default function AdminClientesPage() {
         @media print{.noprint{display:none}}
       </style></head><body>
       <div class="head">
-        <div><div class="logo">TURESMA <span style="font-size:12px">S.A</span></div><div class="sub">Transporte Turístico</div></div>
-        <div class="doc"><h2>FACTURA</h2><p>No. ${String(r.id).padStart(6, "0")}</p><p>Fecha emisión: ${new Date().toLocaleDateString("es-EC")}</p></div>
+        <div><img class="report-logo" src="${logoUrl}" alt="Turesma" onerror="this.style.display='none'"/><div class="logo">TURESMA <span style="font-size:12px">S.A</span></div><div class="sub">Transporte Turístico</div></div>
+        <div class="doc"><h2>FACTURA</h2><p>No. ${escapeReportHtml(String(r.id).padStart(6, "0"))}</p><p>Fecha emisión: ${new Date().toLocaleDateString("es-EC")}</p></div>
       </div>
       <div class="grid">
-        <div class="box"><div class="t">Cliente</div><b>${c.nombre}</b><br>${c.email}<br>${c.telefono || ""}</div>
-        <div class="box"><div class="t">Servicio</div>Fecha del viaje: <b>${fecha}</b><br>Estado: <span class="badge">${r.estado || "—"}</span></div>
+        <div class="box"><div class="t">Cliente</div><b>${escapeReportHtml(c.nombre)}</b><br>${escapeReportHtml(c.email)}<br>${escapeReportHtml(c.telefono || "")}</div>
+        <div class="box"><div class="t">Servicio</div>Fecha del viaje: <b>${escapeReportHtml(fecha)}</b><br>Estado: <span class="badge">${escapeReportHtml(r.estado || "—")}</span></div>
       </div>
       <table>
         <thead><tr><th>Descripción</th><th>Ruta</th><th>Pasajeros</th><th>Vehículo</th><th style="text-align:right">Valor</th></tr></thead>
         <tbody><tr>
           <td>Servicio de transporte turístico</td>
-          <td>${r.origen || "—"} → ${r.destino || "—"}</td>
-          <td>${r.num_personas || 1}</td>
-          <td>${r.vehiculo_placa || "—"}</td>
+          <td>${escapeReportHtml(r.origen || "—")} → ${escapeReportHtml(r.destino || "—")}</td>
+          <td>${escapeReportHtml(r.num_personas || 1)}</td>
+          <td>${escapeReportHtml(r.vehiculo_placa || "—")}</td>
           <td style="text-align:right">$${total}</td>
         </tr></tbody>
       </table>
       <div class="total"><div class="t" style="font-size:11px;color:#999">Total a pagar</div><div class="amt">$${total}</div></div>
       <div class="ft">Gracias por confiar en Turesma S.A. · Documento generado electrónicamente</div>
       <div class="noprint" style="text-align:center;margin-top:30px"><button onclick="window.print()" style="background:#E31E24;color:#fff;border:none;padding:12px 30px;border-radius:10px;font-weight:900;cursor:pointer;text-transform:uppercase;letter-spacing:1px">Imprimir / Guardar PDF</button></div>
-      </body></html>`);
-    w.document.close();
+      </body></html>`;
+    openPrintableReport(html, "width=760,height=900");
   };
 
   const load = async (silencioso = false) => {

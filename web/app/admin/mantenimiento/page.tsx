@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
+import { escapeReportHtml, openPrintableReport } from "../../../lib/print-report";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import {
   Wrench, Search, Loader2,
@@ -153,7 +154,7 @@ export default function AdminHistorialMantenimientoPage() {
     const enTaller = vehiculosReporte.filter(v => v.estado === "mantenimiento").length;
 
     const badge = (texto: string, color: string, bg: string) =>
-      `<span style="background:${bg};color:${color};padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap">${texto}</span>`;
+      `<span style="background:${bg};color:${color};padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap">${escapeReportHtml(texto)}</span>`;
 
     const filasInventario = vehiculosReporte.map(v => {
       const p = proximos.find(x => x.vehiculo_id === v.id);
@@ -167,9 +168,9 @@ export default function AdminHistorialMantenimientoPage() {
         ? badge("1 alerta", "#b45309", "#fef3c7")
         : badge("Ninguna", "#475569", "#f1f5f9");
       return `<tr>
-        <td><b>${v.placa}</b></td>
-        <td>${v.modelo || v.tipo || "—"}</td>
-        <td>${v.conductor_nombre || "Sin conductor"}</td>
+        <td><b>${escapeReportHtml(v.placa)}</b></td>
+        <td>${escapeReportHtml(v.modelo || v.tipo || "—")}</td>
+        <td>${escapeReportHtml(v.conductor_nombre || "Sin conductor")}</td>
         <td>${p?.kilometraje ? Number(p.kilometraje).toLocaleString() + " km" : "—"}</td>
         <td>${estadoBadge}</td>
         <td>${critBadge}</td>
@@ -181,17 +182,17 @@ export default function AdminHistorialMantenimientoPage() {
       const veh = vehiculos.find(v => v.id === m.vehiculo_id);
       const tipoBadge = badge(m.tipo.replace("_", " "), "#1d4ed8", "#dbeafe");
       return `<tr>
-        <td>${new Date(m.fecha_realizada || m.fecha_programada).toLocaleDateString("es-EC")}</td>
-        <td><b>${m.vehiculo_placa || veh?.placa || "—"}</b></td>
-        <td>${m.vehiculo_modelo || veh?.modelo || "—"}</td>
+        <td>${escapeReportHtml(new Date(m.fecha_realizada || m.fecha_programada).toLocaleDateString("es-EC"))}</td>
+        <td><b>${escapeReportHtml(m.vehiculo_placa || veh?.placa || "—")}</b></td>
+        <td>${escapeReportHtml(m.vehiculo_modelo || veh?.modelo || "—")}</td>
         <td>${tipoBadge}</td>
-        <td>${m.tecnico || "—"}</td>
-        <td>${m.descripcion || "—"}</td>
+        <td>${escapeReportHtml(m.tecnico || "—")}</td>
+        <td>${escapeReportHtml(m.descripcion || "—")}</td>
         <td style="color:#047857;font-weight:700">${m.costo ? "$" + Number(m.costo).toFixed(2) : "—"}</td>
       </tr>`;
     }).join("");
 
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${titulo}</title>
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${escapeReportHtml(titulo)}</title>
       <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
         body{padding:36px;color:#1a1a1a}
@@ -212,8 +213,9 @@ export default function AdminHistorialMantenimientoPage() {
         @media print{.noprint{display:none}}
       </style></head><body>
       <div class="head">
+        <img class="report-logo" src="${window.location.origin}/logo.png" alt="Turesma" onerror="this.style.display='none'"/>
         <p class="brand">Turesma S.A. — Gestión de flota vehicular</p>
-        <h1>${titulo}</h1>
+        <h1>${escapeReportHtml(titulo)}</h1>
         <p>Generado el ${hoy.toLocaleDateString("es-EC", { day: "2-digit", month: "long", year: "numeric" })} a las ${hoy.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}</p>
       </div>
 
@@ -246,10 +248,8 @@ export default function AdminHistorialMantenimientoPage() {
       </div>
       </body></html>`;
 
-    const win = window.open("", "_blank");
+    const win = openPrintableReport(html);
     if (!win) return;
-    win.document.write(html);
-    win.document.close();
   };
 
   const abrirAccion = (p: Proximo, modo: "completar" | "reprogramar") => {

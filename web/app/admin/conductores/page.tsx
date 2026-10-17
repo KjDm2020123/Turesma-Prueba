@@ -5,11 +5,11 @@ import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
-import { descargarCSV } from "../../../lib/download";
+import { descargarCSV, descargarExcel } from "../../../lib/download";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  UserCircle, Plus, Edit3, Trash2, X, Search,
+  UserCircle, Plus, Edit3, Trash2, X, Search, FileSpreadsheet,
   CheckCircle, AlertCircle, Star, Loader2, Car, UploadCloud, Download
 } from "lucide-react";
 
@@ -56,6 +56,7 @@ export default function AdminConductoresPage() {
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportando, setExportando] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [msg, setMsg] = useState("");
@@ -112,6 +113,13 @@ export default function AdminConductoresPage() {
     const result = await descargarCSV("/api/admin/reportes/exportar-csv?tipo=conductores", "reporte_conductores.csv");
     if (!result.ok) setErr(result.error || "No se pudo exportar");
     setExportando(false);
+  };
+
+  const exportarExcel = async () => {
+    setExportandoExcel(true); setErr("");
+    const result = await descargarExcel("/api/admin/reportes/exportar-csv?tipo=conductores&formato=xlsx", "reporte_conductores.xlsx");
+    if (!result.ok) setErr(result.error || "No se pudo exportar");
+    setExportandoExcel(false);
   };
 
   const openEdit = (c: Conductor) => {
@@ -252,6 +260,10 @@ export default function AdminConductoresPage() {
         <button onClick={exportarCSV} disabled={exportando} className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
           {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
           Exportar CSV
+        </button>
+        <button onClick={exportarExcel} disabled={exportandoExcel} className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
+          {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+          Excel con diseño
         </button>
         <button onClick={openCreate} className="flex items-center gap-2 bg-[#E31E24] hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/20">
           <Plus size={16} />

@@ -2,10 +2,7 @@ import { getAuthHeaders } from "./session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-// Descarga un archivo autenticado (requiere el token, así que no puede ser un
-// <a href> normal): pide el CSV con fetch, arma un blob temporal y dispara la
-// descarga con un <a> invisible.
-export const descargarCSV = async (path: string, filenameFallback: string): Promise<{ ok: boolean; error?: string }> => {
+export const descargarArchivo = async (path: string, filenameFallback: string): Promise<{ ok: boolean; error?: string }> => {
   try {
     const res = await fetch(`${API_URL}${path}`, { headers: getAuthHeaders() });
     if (!res.ok) return { ok: false, error: "No se pudo generar el reporte" };
@@ -22,9 +19,14 @@ export const descargarCSV = async (path: string, filenameFallback: string): Prom
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     return { ok: true };
   } catch {
     return { ok: false, error: "No se pudo descargar el archivo" };
   }
 };
+
+// CSV y XLSX requieren token de sesión, por eso se descargan usando fetch.
+export const descargarCSV = descargarArchivo;
+export const descargarExcel = (path: string, filenameFallback: string) =>
+  descargarArchivo(path, filenameFallback);
