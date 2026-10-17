@@ -6,9 +6,44 @@ import { getAuthHeaders } from "../../../lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-type Message = { id: string; role: "assistant" | "user"; text: string };
+type Message = {
+  id: string;
+  role: "assistant" | "user";
+  text: string;
+  recommendation?: string;
+  sources?: string[];
+  generatedAt?: string;
+};
+
+type ChatbotResponse = {
+  answer?: string;
+  recommendation?: string;
+  sources?: string[];
+  generatedAt?: string;
+  error?: string;
+};
 
 const suggestions = ["¿Cómo está la flota?", "¿Qué mantenimientos requieren atención?", "¿Qué operaciones están pendientes?", "¿Cómo están los pagos del mes?"];
+const sourceLabels: Record<string, string> = {
+  vehiculos: "Flota",
+  conductores: "Conductores",
+  operaciones: "Operaciones",
+  reservas: "Reservas y pagos",
+  usuarios: "Usuarios",
+  cotizaciones: "Cotizaciones",
+  mantenimiento_vehiculos: "Mantenimiento",
+};
+
+const getSourceLabels = (sources: string[] = []) =>
+  [...new Set(sources.map((source) => sourceLabels[source.split(".")[0]] ?? source))];
+
+const formatGeneratedAt = (value?: string) => {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleString("es-EC", { dateStyle: "short", timeStyle: "short" });
+};
 
 export function AdminChatbot() {
   const [open, setOpen] = useState(false);
@@ -36,12 +71,19 @@ export function AdminChatbot() {
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
       });
-      const data = await response.json();
+      const data: ChatbotResponse = await response.json();
       if (!response.ok) throw new Error(data.error || "No se pudo consultar al asistente");
+      const answer = data.answer;
+      if (typeof answer !== "string" || !answer.trim()) {
+        throw new Error("El asistente no devolvió una respuesta válida");
+      }
       setMessages((previous) => [...previous, {
         id: `${id}-assistant`,
         role: "assistant",
-        text: data.answer,
+        text: answer,
+        recommendation: data.recommendation,
+        sources: data.sources,
+        generatedAt: data.generatedAt,
       }]);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "No se pudo consultar al asistente");
@@ -61,7 +103,22 @@ export function AdminChatbot() {
           </header>
           <div className="max-h-[510px] space-y-3 overflow-y-auto bg-slate-50 p-3">
             <div className="flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => void sendMessage(suggestion)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:border-cyan-400 hover:text-cyan-700">{suggestion}</button>)}</div>
-            <div className="space-y-3">{messages.map((message) => <div key={message.id} className={`max-w-[92%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm ${message.role === "assistant" ? "border border-slate-200 bg-white text-slate-700" : "ml-auto bg-slate-950 text-white"}`}><p>{message.text}</p></div>)}</div>
+            <div className="space-y-3">{messages.map((message) => (
+              <div key={message.id} className={`max-w-[92%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed shadow-sm ${message.role === "assistant" ? "border border-slate-200 bg-white text-slate-700" : "ml-auto bg-slate-950 text-white"}`}>
+                <p>{message.text}</p>
+                {message.role === "assistant" && message.recommendation && (
+                  <div className="mt-2 rounded-xl bg-cyan-50 px-3 py-2 text-xs text-cyan-950">
+                    <span className="font-black">Sugerencia:</span> {message.recommendation}
+                  </div>
+                )}
+                {message.role === "assistant" && (message.sources?.length || message.generatedAt) && (
+                  <p className="mt-2 text-[10px] font-medium text-slate-400">
+                    {message.sources?.length ? `Datos: ${getSourceLabels(message.sources).join(", ")}` : ""}
+                    {message.generatedAt && ` · ${formatGeneratedAt(message.generatedAt)}`}
+                  </p>
+                )}
+              </div>
+            ))}</div>
             {loading && <div className="flex items-center gap-2 text-xs font-bold text-slate-500"><Sparkles size={14} className="text-cyan-500" /> Consultando datos operativos...</div>}
             {error && <p className="rounded-xl bg-red-50 p-2 text-xs font-semibold text-red-700">{error}</p>}
             <form onSubmit={(event) => void sendMessage(event)} className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2"><input ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Pregunta sobre la operación..." className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-400" /><button type="submit" disabled={loading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-slate-950 hover:bg-cyan-300 disabled:opacity-50" aria-label="Enviar pregunta"><Send size={16} /></button></form>
