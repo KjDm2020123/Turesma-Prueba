@@ -44,7 +44,7 @@ export default function AuthCarousel() {
   }, [imagenes.length]);
 
   return (
-    <div className="relative hidden lg:flex lg:w-[42%] h-screen overflow-hidden bg-black shrink-0 flex-col justify-between p-10">
+    <aside className="relative hidden h-screen w-[42%] shrink-0 overflow-hidden bg-[#081126] lg:block">
       {imagenes.map((img, i) => (
         <Image
           key={img.src}
@@ -53,24 +53,23 @@ export default function AuthCarousel() {
           fill
           sizes="42vw"
           unoptimized
-          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out ${
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${
             i === index ? "opacity-100" : "opacity-0"
           }`}
         />
       ))}
 
       {imagenes.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-white/70">
-          <Bus size={64} strokeWidth={1.2} />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(ellipse_at_top_right,#263b60,#081126_70%)] text-white/70">
+          <Bus size={64} strokeWidth={1.2} className="text-yellow-400" />
           <p className="text-sm font-bold uppercase tracking-[0.2em]">Nuestra flota</p>
         </div>
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/80" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#071126]/85 via-[#071126]/20 to-[#071126]/90" />
 
-      {/* LOGO */}
-      <Link href="/" className="relative z-10 flex items-center gap-3 w-fit">
-        <div className="bg-white p-2 rounded-full shadow-lg border-2 border-yellow-400">
+      <Link href="/" className="absolute left-10 top-10 z-10 flex items-center gap-3 rounded-full border border-white/15 bg-[#071126]/35 px-4 py-3 backdrop-blur-md transition-colors hover:bg-[#071126]/60">
+        <div className="rounded-full border border-yellow-400/70 bg-white p-2 shadow-lg">
           <Bus size={22} className="text-[#E31E24]" />
         </div>
         <div>
@@ -83,8 +82,17 @@ export default function AuthCarousel() {
         </div>
       </Link>
 
-      {/* INDICADORES */}
-      <div className="relative z-10 flex gap-2">
+      <div className="absolute bottom-24 left-10 right-10 z-10">
+        <p className="mb-3 text-xs font-black uppercase tracking-[0.25em] text-yellow-400">Turesma S.A.</p>
+        <h2 className="max-w-lg text-4xl font-black italic leading-tight tracking-tight text-white xl:text-5xl">
+          Tu próximo viaje empieza aquí.
+        </h2>
+        <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-white/75">
+          Transporte turístico y ejecutivo con comodidad, puntualidad y seguridad en cada recorrido.
+        </p>
+      </div>
+
+      <div className="absolute bottom-10 left-10 z-10 flex items-center gap-2" aria-label="Imágenes de la flota">
         {imagenes.map((img, i) => (
           <span
             key={img.src}
@@ -94,6 +102,6 @@ export default function AuthCarousel() {
           />
         ))}
       </div>
-    </div>
+    </aside>
   );
 }
