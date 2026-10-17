@@ -41,6 +41,8 @@ export default function AdminGaleriaPage() {
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const imagenes = fotos.filter((foto) => foto.tipo === "imagen");
+  const videos = fotos.filter((foto) => foto.tipo === "video");
 
   const flash = (setter: (v: string) => void, value: string) => {
     setter(value);
@@ -145,6 +147,44 @@ export default function AdminGaleriaPage() {
     finally { setActingId(null); }
   };
 
+  const renderContenido = (contenido: Foto) => (
+    <div key={contenido.id} className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${contenido.activo ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
+      <div className={`relative aspect-[4/3] bg-slate-100 ${contenido.tipo === "imagen" ? "cursor-zoom-in" : ""}`} onClick={() => contenido.tipo === "imagen" && setZoomImg(contenido.imagen_url)}>
+        {contenido.tipo === "video" ? <video src={contenido.imagen_url} controls className="w-full h-full object-cover" /> : <Image src={contenido.imagen_url} alt={contenido.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />}
+        {!contenido.activo && (
+          <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Oculta</span>
+        )}
+      </div>
+      <div className="p-3">
+        {contenido.titulo ? (
+          <p className="text-sm font-black text-slate-800 truncate">{contenido.titulo}</p>
+        ) : (
+          <p className="text-sm font-bold text-slate-300 italic">Sin título</p>
+        )}
+        {contenido.descripcion && <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">{contenido.descripcion}</p>}
+        <div className="flex items-center gap-2 mt-3">
+          <button
+            onClick={() => toggleActivo(contenido)}
+            disabled={actingId === contenido.id}
+            title={contenido.activo ? "Ocultar de la web" : "Mostrar en la web"}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+          >
+            {actingId === contenido.id ? <Loader2 size={12} className="animate-spin" /> : contenido.activo ? <EyeOff size={12} /> : <Eye size={12} />}
+            {contenido.activo ? "Ocultar" : "Mostrar"}
+          </button>
+          <button
+            onClick={() => eliminar(contenido.id)}
+            disabled={actingId === contenido.id}
+            title="Eliminar"
+            className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-all disabled:opacity-50"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (checkingSession) return (
     <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#E31E24]" size={36} /></div>
   );
@@ -229,56 +269,30 @@ export default function AdminGaleriaPage() {
 
       {/* GALERÍA ACTUAL */}
       <div>
-        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-4">
-          Contenido publicado {fotos.length > 0 && <span className="text-slate-300">· {fotos.length}</span>}
-        </p>
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="animate-spin text-[#E31E24]" size={30} /></div>
-        ) : fotos.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
-            <Images size={40} className="text-slate-200 mx-auto mb-3" />
-            <p className="font-black text-slate-300 uppercase italic text-sm">Aún no hay contenido en la galería</p>
-            <p className="text-xs text-slate-400 mt-1">Sube una foto o video para que aparezca en la página principal.</p>
-          </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {fotos.map((f) => (
-              <div key={f.id} className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${f.activo ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
-                <div className={`relative aspect-[4/3] bg-slate-100 ${f.tipo === "imagen" ? "cursor-zoom-in" : ""}`} onClick={() => f.tipo === "imagen" && setZoomImg(f.imagen_url)}>
-                  {f.tipo === "video" ? <video src={f.imagen_url} controls className="w-full h-full object-cover" /> : <Image src={f.imagen_url} alt={f.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />}
-                  {f.tipo === "video" && <span className="absolute top-2 left-2 bg-black/70 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg flex items-center gap-1"><Video size={11} /> Video</span>}
-                  {!f.activo && (
-                    <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Oculta</span>
-                  )}
+          <div className="space-y-6">
+            {[
+              { title: "Fotos", items: imagenes, Icon: Images },
+              { title: "Videos", items: videos, Icon: Video },
+            ].map(({ title, items, Icon }) => (
+              <section key={title} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <Icon size={17} className="text-[#E31E24]" />
+                  <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-600">{title}</h2>
+                  <span className="text-[11px] font-black text-slate-300">· {items.length}</span>
                 </div>
-                <div className="p-3">
-                  {f.titulo ? (
-                    <p className="text-sm font-black text-slate-800 truncate">{f.titulo}</p>
-                  ) : (
-                    <p className="text-sm font-bold text-slate-300 italic">Sin título</p>
-                  )}
-                  {f.descripcion && <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">{f.descripcion}</p>}
-                  <div className="flex items-center gap-2 mt-3">
-                    <button
-                      onClick={() => toggleActivo(f)}
-                      disabled={actingId === f.id}
-                      title={f.activo ? "Ocultar de la web" : "Mostrar en la web"}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
-                    >
-                      {actingId === f.id ? <Loader2 size={12} className="animate-spin" /> : f.activo ? <EyeOff size={12} /> : <Eye size={12} />}
-                      {f.activo ? "Ocultar" : "Mostrar"}
-                    </button>
-                    <button
-                      onClick={() => eliminar(f.id)}
-                      disabled={actingId === f.id}
-                      title="Eliminar"
-                      className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 transition-all disabled:opacity-50"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                {items.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+                    {items.map(renderContenido)}
                   </div>
-                </div>
-              </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">
+                    <p className="text-xs font-bold text-slate-400">Aún no hay {title.toLowerCase()} publicadas.</p>
+                  </div>
+                )}
+              </section>
             ))}
           </div>
         )}

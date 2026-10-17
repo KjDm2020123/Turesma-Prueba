@@ -7,17 +7,10 @@ import { Bus } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-// Imagenes de respaldo, solo se usan si aun no hay vehiculos con foto en la BD.
-const FALLBACK_IMAGENES = [
-  { src: "/bus-hino-40.jpeg", alt: "Bus Hino de la flota Turesma" },
-  { src: "/jac-17.png", alt: "Vehiculo Jac de la flota Turesma" },
-  { src: "/jac-19.jpeg", alt: "Vehiculo Jac de la flota Turesma" },
-];
-
 type ImagenCarrusel = { src: string; alt: string };
 
 export default function AuthCarousel() {
-  const [imagenes, setImagenes] = useState<ImagenCarrusel[]>(FALLBACK_IMAGENES);
+  const [imagenes, setImagenes] = useState<ImagenCarrusel[]>([]);
   const [index, setIndex] = useState(0);
 
   // Usa la misma fuente publica que el carrusel "Nuestra Flota" de la pagina
@@ -65,6 +58,13 @@ export default function AuthCarousel() {
           }`}
         />
       ))}
+
+      {imagenes.length === 0 && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-white/70">
+          <Bus size={64} strokeWidth={1.2} />
+          <p className="text-sm font-bold uppercase tracking-[0.2em]">Nuestra flota</p>
+        </div>
+      )}
 
       <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/80" />
 

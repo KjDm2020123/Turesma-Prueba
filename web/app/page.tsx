@@ -21,7 +21,11 @@ import {
   Route,
   UsersRound,
   SlidersHorizontal,
-  PlayCircle
+  PlayCircle,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 
 type VehiculoPublico = {
@@ -59,6 +63,73 @@ type PublicDataCache = {
   vehiculos: VehiculoPublico[];
   galeria: GaleriaFoto[];
 };
+
+function VideoPlayer({ src, title }: { src: string; title: string | null }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  const togglePlayback = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      try {
+        await video.play();
+      } catch (error) {
+        console.error("No se pudo reproducir el video:", error);
+      }
+    } else {
+      video.pause();
+    }
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+  };
+
+  return (
+    <div className="video-player group/video relative aspect-video w-full overflow-hidden bg-black">
+      <video
+        ref={videoRef}
+        src={src}
+        preload="metadata"
+        playsInline
+        disablePictureInPicture
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        aria-label={title || "Video de Turesma"}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
+        onContextMenu={(event) => event.preventDefault()}
+        className="h-full w-full object-cover"
+      />
+      <div className="video-player-controls absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          aria-label={isPlaying ? "Pausar video" : "Reproducir video"}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+        </button>
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={isMuted ? "Activar sonido" : "Silenciar video"}
+          aria-pressed={!isMuted}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function RootPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -538,13 +609,7 @@ export default function RootPage() {
             <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
               {videosGaleria.map((video) => (
                 <figure key={video.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl">
-                  <video
-                    src={video.imagen_url}
-                    controls
-                    preload="metadata"
-                    playsInline
-                    className="aspect-video w-full object-cover"
-                  />
+                  <VideoPlayer src={video.imagen_url} title={video.titulo} />
                   {(video.titulo || video.descripcion) && (
                     <figcaption className="p-5">
                       {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
