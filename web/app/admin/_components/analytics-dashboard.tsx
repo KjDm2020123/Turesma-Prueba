@@ -20,6 +20,23 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const fmt = (n: number) =>
   new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
+const fmtAxis = (value: number) => {
+  if (Math.abs(value) >= 1000) {
+    return `$${(value / 1000).toLocaleString("en-US", { maximumFractionDigits: 1 })}k`;
+  }
+  return `$${value.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+};
+
+const formatMonth = (value: string) => {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return value;
+  return new Intl.DateTimeFormat("es-EC", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, 1)));
+};
+
 const COLORS_PIE = ["#2563EB", "#16A34A", "#D97706", "#DC2626", "#7C3AED"];
 const ESTADO_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
@@ -37,10 +54,9 @@ type DashData = {
     total_vehiculos: number; total_conductores: number; total_clientes: number;
   };
   reservaEstados: { estado: string; total: number }[];
-  mensual: { mes: string; ingresos: number; ganancias: number; reservas: number }[];
+  mensual: { mes: string; ingresos: number; gastos: number; ganancias: number; reservas: number }[];
   vehiculos: { placa: string; modelo: string; ingresos: number; reservas: number; pasajeros: number }[];
   mantenimientoVehiculos: { placa: string; modelo: string; gasto: number; servicios: number }[];
-  ingresosVsGastos: { mes: string; ingresos: number; gastos: number; ganancias: number }[];
   vehiculoMasUsado: { placa: string; modelo: string; reservas: number; ingresos: number } | null;
   vehiculoMayorGasto: { placa: string; modelo: string; gasto: number; servicios: number } | null;
 };
@@ -65,9 +81,10 @@ const KPICard = ({
   </div>
 );
 
-const ChartCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
+const ChartCard = ({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) => (
   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
     <p className="text-[13px] font-black text-slate-700 mb-4 tracking-tight">{title}</p>
+    {description && <p className="-mt-2 mb-4 text-[11px] text-slate-500">{description}</p>}
     {children}
   </div>
 );
@@ -155,7 +172,7 @@ export const AnalyticsDashboard = () => {
     );
   }
 
-  const { kpi, reservaEstados, mensual, vehiculos, mantenimientoVehiculos, ingresosVsGastos, vehiculoMasUsado, vehiculoMayorGasto } = data;
+  const { kpi, reservaEstados, mensual, vehiculos, mantenimientoVehiculos, vehiculoMasUsado, vehiculoMayorGasto } = data;
 
   const pieData = reservaEstados.map((r) => ({
     name: ESTADO_LABEL[r.estado] ?? r.estado,
@@ -177,17 +194,17 @@ export const AnalyticsDashboard = () => {
   }));
 
   const mensualChart = mensual.map((m) => ({
-    mes: m.mes,
+    mes: formatMonth(m.mes),
     "Ingresos": Number(m.ingresos),
-    "Ganancias": Number(m.ganancias),
+    "Ganancia neta": Number(m.ganancias),
     "Reservas": m.reservas,
   }));
 
-  const gastosChart = ingresosVsGastos.map((m) => ({
-    mes: m.mes,
+  const gastosChart = mensual.map((m) => ({
+    mes: formatMonth(m.mes),
     "Ingresos": Number(m.ingresos),
     "Gastos": Number(m.gastos),
-    "Ganancias": Number(m.ganancias),
+    "Ganancia neta": Number(m.ganancias),
   }));
 
   return (
@@ -277,7 +294,7 @@ export const AnalyticsDashboard = () => {
         <KPICard
           label="Ingresos Totales"
           value={fmt(kpi.ingresos)}
-          sub="Reservas confirmadas + finalizadas"
+          sub="Confirmadas, en curso y finalizadas"
           color="border-blue-200 bg-blue-50 text-blue-800"
           icon={DollarSign}
         />
@@ -338,7 +355,7 @@ export const AnalyticsDashboard = () => {
 
       {/* ── FILA 1: Ingresos & Ganancias | Reservas por Estado ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Ingresos & Ganancias por Mes">
+        <ChartCard title="Ingresos y ganancia neta por mes" description="Ganancia neta calculada como ingresos menos mantenimiento registrado.">
           {mensualChart.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-xs text-slate-300 font-bold">Sin datos mensuales aún</div>
           ) : (
@@ -346,11 +363,11 @@ export const AnalyticsDashboard = () => {
               <LineChart data={mensualChart} margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="mes" tick={{ fontSize: 10, fontWeight: 700 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: any) => fmt(Number(v))} />
                 <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
                 <Line type="monotone" dataKey="Ingresos" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="Ganancias" stroke="#16A34A" strokeWidth={2.5} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Ganancia neta" stroke="#16A34A" strokeWidth={2.5} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -397,37 +414,39 @@ export const AnalyticsDashboard = () => {
 
       {/* ── FILA 2: Ingresos por Vehículo | Ingresos por Conductor ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Ingresos por Vehículo">
+        <ChartCard title="Ingresos por Vehículo" description="Montos en USD y cantidad de reservas; cada dato usa su propia escala.">
           {vehiculosBar.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-xs text-slate-300 font-bold">Sin vehículos</div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={vehiculosBar} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <XAxis xAxisId="ingresos" type="number" tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
+                <XAxis xAxisId="reservas" type="number" orientation="top" allowDecimals={false} tick={{ fontSize: 10 }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} width={72} />
                 <Tooltip formatter={(v: any, name) => name === "Ingresos" ? fmt(Number(v)) : v} />
                 <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
-                <Bar dataKey="Ingresos" fill="#2563EB" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="Reservas" fill="#16A34A" radius={[0, 4, 4, 0]} />
+                <Bar xAxisId="ingresos" dataKey="Ingresos" fill="#2563EB" radius={[0, 4, 4, 0]} />
+                <Bar xAxisId="reservas" dataKey="Reservas" fill="#16A34A" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </ChartCard>
 
-        <ChartCard title="Gasto de Mantenimiento por Vehículo">
+        <ChartCard title="Gasto de Mantenimiento por Vehículo" description="Solo flota activa; cada barra compara monto en USD o número de servicios.">
           {mantenimientoBar.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-xs text-slate-300 font-bold">Sin gastos de mantenimiento</div>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={mantenimientoBar} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <XAxis xAxisId="gasto" type="number" tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
+                <XAxis xAxisId="servicios" type="number" orientation="top" allowDecimals={false} tick={{ fontSize: 10 }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} width={72} />
                 <Tooltip formatter={(v: any, name) => name === "Gasto" ? fmt(Number(v)) : v} />
                 <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
-                <Bar dataKey="Gasto" fill="#DC2626" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="Servicios" fill="#D97706" radius={[0, 4, 4, 0]} />
+                <Bar xAxisId="gasto" dataKey="Gasto" fill="#DC2626" radius={[0, 4, 4, 0]} />
+                <Bar xAxisId="servicios" dataKey="Servicios" fill="#D97706" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -445,7 +464,7 @@ export const AnalyticsDashboard = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="mes" tick={{ fontSize: 10, fontWeight: 700 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: any, name) => name === "Ingresos" ? fmt(Number(v)) : v} />
                 <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
                 <Bar yAxisId="left" dataKey="Reservas" fill="#2563EB" radius={[4, 4, 0, 0]} />
@@ -455,7 +474,7 @@ export const AnalyticsDashboard = () => {
           )}
         </ChartCard>
 
-        <ChartCard title="Ingresos vs Gastos">
+        <ChartCard title="Ingresos vs Gastos" description="Ganancia neta = ingresos menos mantenimiento reconocido en el mismo período.">
           {gastosChart.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-xs text-slate-300 font-bold">Sin datos de gastos</div>
           ) : (
@@ -477,12 +496,12 @@ export const AnalyticsDashboard = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="mes" tick={{ fontSize: 10, fontWeight: 700 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: any) => fmt(Number(v))} />
                 <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
                 <Area type="monotone" dataKey="Ingresos" stroke="#2563EB" strokeWidth={2} fill="url(#gIngresos)" />
                 <Area type="monotone" dataKey="Gastos" stroke="#DC2626" strokeWidth={2} fill="url(#gGastos)" />
-                <Area type="monotone" dataKey="Ganancias" stroke="#16A34A" strokeWidth={2} fill="url(#gGanancias)" />
+                <Area type="monotone" dataKey="Ganancia neta" stroke="#16A34A" strokeWidth={2} fill="url(#gGanancias)" />
               </AreaChart>
             </ResponsiveContainer>
           )}

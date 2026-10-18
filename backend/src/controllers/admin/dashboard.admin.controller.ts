@@ -14,14 +14,24 @@ const getDashboardData = async (req: any, res: any) => {
     // Cláusula reutilizable: el llamador pasa el nombre de la columna de fecha.
     const rangeClause = (col: string) => (hasRange ? `AND ${col} BETWEEN $1 AND $2` : "");
     const rangeParams = hasRange ? [desde, hasta] : [];
+    const monthStart = hasRange
+      ? "date_trunc('month', $1::date)"
+      : "date_trunc('month', CURRENT_DATE - INTERVAL '11 months')";
+    const monthEnd = hasRange
+      ? "date_trunc('month', $2::date)"
+      : "date_trunc('month', CURRENT_DATE)";
+    const periodClause = (col: string) => hasRange
+      ? `${col} BETWEEN $1::date AND $2::date`
+      : `${col} >= ${monthStart} AND ${col} < (${monthEnd} + INTERVAL '1 month')`;
+    const recognizedMaintenanceCost = (alias: string) =>
+      `(${alias}.fecha_realizada IS NOT NULL OR (${alias}.fecha_programada <= CURRENT_DATE AND ${alias}.estado IN ('programado','pendiente')))`;
 
     // ── KPIs PRINCIPALES ──────────────────────────────────────────────
-    const [kpiRes, reservaEstadosRes, mensualRes, vehiculosRes, mantenimientoVehiculosRes, mantenimientoRes] =
+    const [kpiRes, reservaEstadosRes, vehiculosRes, mantenimientoVehiculosRes, mantenimientoRes] =
       await Promise.all([
         pool.query(`
           SELECT
             COALESCE(SUM(CASE WHEN estado IN ('finalizada','en_curso','confirmada') THEN total ELSE 0 END), 0)::numeric AS ingresos,
-            COALESCE(SUM(CASE WHEN estado = 'finalizada' THEN total ELSE 0 END), 0)::numeric AS ingresos_finalizados,
             COUNT(*)::int AS total_reservas,
             COUNT(CASE WHEN estado = 'pendiente' THEN 1 END)::int AS pendientes,
             COUNT(CASE WHEN estado = 'confirmada' THEN 1 END)::int AS confirmadas,
@@ -41,25 +51,12 @@ const getDashboardData = async (req: any, res: any) => {
         `, rangeParams),
         pool.query(`
           SELECT
-            TO_CHAR(fecha_reserva, 'Mon') AS mes,
-            EXTRACT(MONTH FROM fecha_reserva)::int AS mes_num,
-            EXTRACT(YEAR FROM fecha_reserva)::int AS anio,
-            COALESCE(SUM(CASE WHEN estado NOT IN ('cancelada') THEN total ELSE 0 END), 0)::numeric AS ingresos,
-            COALESCE(SUM(CASE WHEN estado = 'finalizada' THEN total ELSE 0 END), 0)::numeric AS ganancias,
-            COUNT(*)::int AS reservas
-          FROM reservas
-          WHERE fecha_reserva >= CURRENT_DATE - INTERVAL '11 months'
-          GROUP BY mes, mes_num, anio
-          ORDER BY anio, mes_num
-        `),
-        pool.query(`
-          SELECT
             v.placa,
             v.modelo,
             v.tipo,
-            COALESCE(SUM(r.total), 0)::numeric AS ingresos,
+            COALESCE(SUM(CASE WHEN r.estado IN ('confirmada','en_curso','finalizada') THEN r.total ELSE 0 END), 0)::numeric AS ingresos,
             COUNT(r.id)::int AS reservas,
-            COALESCE(SUM(r.num_personas), 0)::int AS pasajeros
+            COALESCE(SUM(CASE WHEN r.estado IN ('confirmada','en_curso','finalizada') THEN r.num_personas ELSE 0 END), 0)::int AS pasajeros
           FROM vehiculos v
           LEFT JOIN reservas r ON r.vehiculo_id = v.id AND r.estado NOT IN ('cancelada') ${rangeClause("r.fecha_reserva")}
           WHERE v.activo = true
@@ -74,7 +71,11 @@ const getDashboardData = async (req: any, res: any) => {
             COALESCE(SUM(m.costo), 0)::numeric AS gasto,
             COUNT(m.id)::int AS servicios
           FROM vehiculos v
-          JOIN mantenimiento_vehiculos m ON m.vehiculo_id = v.id ${rangeClause("m.fecha_programada")}
+          JOIN mantenimiento_vehiculos m
+            ON m.vehiculo_id = v.id
+            AND ${recognizedMaintenanceCost("m")}
+            ${rangeClause("COALESCE(m.fecha_realizada, m.fecha_programada)")}
+          WHERE v.activo = true
           GROUP BY v.id, v.placa, v.modelo
           HAVING COALESCE(SUM(m.costo), 0) > 0
           ORDER BY gasto DESC
@@ -82,10 +83,9 @@ const getDashboardData = async (req: any, res: any) => {
         `, rangeParams),
         pool.query(`
           SELECT COALESCE(SUM(costo), 0)::numeric AS total_gastos
-          FROM mantenimiento_vehiculos
-          WHERE (fecha_realizada IS NOT NULL
-             OR (fecha_programada <= CURRENT_DATE AND estado IN ('programado','pendiente')))
-             ${hasRange ? `AND fecha_programada BETWEEN $1 AND $2` : ""}
+          FROM mantenimiento_vehiculos m
+          WHERE ${recognizedMaintenanceCost("m")}
+             ${rangeClause("COALESCE(m.fecha_realizada, m.fecha_programada)")}
         `, rangeParams),
       ]);
 
@@ -102,37 +102,40 @@ const getDashboardData = async (req: any, res: any) => {
       pool.query(`SELECT COUNT(*)::int AS total FROM usuarios WHERE rol='cliente'`),
     ]);
 
-    // ── INGRESOS VS GASTOS POR MES (últimos 12 meses) ─────────────────
-    const ingresosVsGastosRes = await pool.query(`
+    // ── INGRESOS, GASTOS Y GANANCIA NETA POR MES ──────────────────────
+    const mensualRes = await pool.query(`
       WITH meses AS (
+        SELECT generate_series(${monthStart}, ${monthEnd}, INTERVAL '1 month')::date AS mes_inicio
+      ),
+      reservas_mes AS (
         SELECT
-          TO_CHAR(fecha_reserva, 'Mon') AS mes,
-          EXTRACT(MONTH FROM fecha_reserva)::int AS mes_num,
-          COALESCE(SUM(total), 0)::numeric AS ingresos
+          date_trunc('month', fecha_reserva)::date AS mes_inicio,
+          COALESCE(SUM(CASE WHEN estado IN ('confirmada','en_curso','finalizada') THEN total ELSE 0 END), 0)::numeric AS ingresos,
+          COUNT(*)::int AS reservas
         FROM reservas
-        WHERE fecha_reserva >= CURRENT_DATE - INTERVAL '11 months'
-          AND estado NOT IN ('cancelada')
-        GROUP BY mes, mes_num
+        WHERE ${periodClause("fecha_reserva")}
+        GROUP BY 1
       ),
       gastos_mes AS (
         SELECT
-          TO_CHAR(fecha_programada, 'Mon') AS mes,
-          EXTRACT(MONTH FROM fecha_programada)::int AS mes_num,
-          COALESCE(SUM(costo), 0)::numeric AS gastos
-        FROM mantenimiento_vehiculos
-        WHERE fecha_programada >= CURRENT_DATE - INTERVAL '11 months'
-        GROUP BY mes, mes_num
+          date_trunc('month', COALESCE(m.fecha_realizada, m.fecha_programada))::date AS mes_inicio,
+          COALESCE(SUM(m.costo), 0)::numeric AS gastos
+        FROM mantenimiento_vehiculos m
+        WHERE ${recognizedMaintenanceCost("m")}
+          AND ${periodClause("COALESCE(m.fecha_realizada, m.fecha_programada)")}
+        GROUP BY 1
       )
       SELECT
-        m.mes,
-        m.mes_num,
-        COALESCE(m.ingresos, 0) AS ingresos,
-        COALESCE(g.gastos, 0) AS gastos,
-        COALESCE(m.ingresos, 0) - COALESCE(g.gastos, 0) AS ganancias
+        TO_CHAR(m.mes_inicio, 'YYYY-MM') AS mes,
+        COALESCE(r.ingresos, 0)::numeric AS ingresos,
+        COALESCE(g.gastos, 0)::numeric AS gastos,
+        (COALESCE(r.ingresos, 0) - COALESCE(g.gastos, 0))::numeric AS ganancias,
+        COALESCE(r.reservas, 0)::int AS reservas
       FROM meses m
-      LEFT JOIN gastos_mes g ON g.mes_num = m.mes_num
-      ORDER BY m.mes_num
-    `);
+      LEFT JOIN reservas_mes r ON r.mes_inicio = m.mes_inicio
+      LEFT JOIN gastos_mes g ON g.mes_inicio = m.mes_inicio
+      ORDER BY m.mes_inicio
+    `, rangeParams);
 
     res.json({
       kpi: {
@@ -155,7 +158,7 @@ const getDashboardData = async (req: any, res: any) => {
       mensual: mensualRes.rows,
       vehiculos: vehiculosRes.rows,
       mantenimientoVehiculos: mantenimientoVehiculosRes.rows,
-      ingresosVsGastos: ingresosVsGastosRes.rows,
+      ingresosVsGastos: mensualRes.rows,
       // Destacados del período
       vehiculoMasUsado: vehiculosRes.rows.find((v: any) => n(v.reservas) > 0) || null,
       vehiculoMayorGasto: mantenimientoVehiculosRes.rows[0] || null,
