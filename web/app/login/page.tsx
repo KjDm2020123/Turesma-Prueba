@@ -14,7 +14,15 @@ import {
   AlertCircle,
   Bus,
 } from "lucide-react";
-import { getRolePath, getStoredUser, setStoredUser, setStoredToken } from "../../lib/session";
+import {
+  clearStoredUser,
+  getRolePath,
+  getStoredToken,
+  getStoredUser,
+  isTokenExpired,
+  setStoredUser,
+  setStoredToken,
+} from "../../lib/session";
 import AuthCarousel from "../../components/auth-carousel";
 
 export default function LoginPage() {
@@ -32,10 +40,12 @@ export default function LoginPage() {
   useEffect(() => {
     const checkSession = () => {
       const storedUser = getStoredUser();
-      if (storedUser) {
+      const storedToken = getStoredToken();
+      if (storedUser && storedToken && !isTokenExpired()) {
         router.replace(getRolePath(storedUser.rol));
         return;
       }
+      if (storedUser || storedToken) clearStoredUser();
       setCheckingSession(false);
     };
 
