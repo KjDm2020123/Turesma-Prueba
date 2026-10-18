@@ -1,58 +1,34 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-
 export const SESSION_COOKIE = "turesma_session";
 
 export type SessionClaims = {
   id: number;
   email: string;
   rol: string;
-  exp: number;
 };
 
-const getJwtSecret = () => {
-  const secret = process.env.JWT_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV === "production") return null;
-  return "turesma_secret_key_2026_seguro";
-};
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-export const verifySessionToken = (token: string): SessionClaims | null => {
-  const secret = getJwtSecret();
-  if (!secret) return null;
+export const getVerifiedSession = async (token: string): Promise<SessionClaims | null> => {
+  const response = await fetch(`${API_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (response.status === 401 || response.status === 403 || response.status === 404) return null;
+  if (!response.ok) throw new Error(`Session validation failed with status ${response.status}`);
 
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-
-  try {
-    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
-    if (header.alg !== "HS256") return null;
-
-    const signature = Buffer.from(parts[2], "base64url");
-    const expectedSignature = createHmac("sha256", secret)
-      .update(`${parts[0]}.${parts[1]}`)
-      .digest();
-    if (
-      signature.length !== expectedSignature.length ||
-      !timingSafeEqual(signature, expectedSignature)
-    ) {
-      return null;
-    }
-
-    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-    if (
-      !Number.isInteger(claims.id) ||
-      typeof claims.email !== "string" ||
-      typeof claims.rol !== "string" ||
-      typeof claims.exp !== "number" ||
-      Date.now() >= claims.exp * 1000
-    ) {
-      return null;
-    }
-
-    return claims as SessionClaims;
-  } catch {
+  const data = await response.json();
+  const user = data?.user;
+  const userId = Number(user?.id);
+  if (
+    !Number.isInteger(userId) ||
+    userId <= 0 ||
+    typeof user?.email !== "string" ||
+    typeof user?.rol !== "string" ||
+    user.activo === false
+  ) {
     return null;
   }
+  return { id: userId, email: user.email, rol: user.rol };
 };
 
 export const getPortalPath = (role: string) => {

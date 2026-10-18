@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "../../../../lib/server-session";
+import { getVerifiedSession, SESSION_COOKIE } from "../../../../lib/server-session";
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -35,15 +35,24 @@ export async function POST(request: Request) {
   }
 
   const token = typeof data.token === "string" ? data.token : "";
-  const claims = token ? verifySessionToken(token) : null;
-  if (!claims) {
+  let session;
+  try {
+    session = token ? await getVerifiedSession(token) : null;
+  } catch (error) {
+    console.error("No se pudo verificar el token con el backend:", error);
     return NextResponse.json(
-      { error: "No fue posible validar la sesión. Verifica que JWT_SECRET coincida en frontend y backend." },
+      { error: "El servicio de autenticación no está disponible para confirmar la sesión." },
       { status: 502 },
     );
   }
+  if (!session) {
+    return NextResponse.json(
+      { error: "El backend rechazó el token de inicio de sesión." },
+      { status: 401 },
+    );
+  }
 
-  const response = NextResponse.json(data, {
+  const response = NextResponse.json({ ...data, user: session }, {
     headers: { "Cache-Control": "no-store" },
   });
   response.cookies.set(SESSION_COOKIE, token, {
@@ -51,7 +60,6 @@ export async function POST(request: Request) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    expires: new Date(claims.exp * 1000),
   });
   return response;
 }
