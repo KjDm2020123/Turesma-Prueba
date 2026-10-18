@@ -74,7 +74,7 @@ export default function AdminPagosPage() {
       // canceladas y que todavia no completan el minimo de pago requerido.
       setReservasParaLink(
         data
-          .filter(r => r.estado !== "cancelada" && r.estado_pago !== "confirmado")
+          .filter(r => r.estado !== "cancelada" && !["confirmado", "pagado"].includes(r.estado_pago))
           .sort((a, b) => b.id - a.id)
       );
     } catch { /* silencio */ }
@@ -108,6 +108,27 @@ export default function AdminPagosPage() {
       setMsg("Pago rechazado");
       setRechazarId(null); setNotaRechazo("");
       load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
+    finally { setActingId(null); }
+  };
+
+  const registrarPagoManual = async (pago: Pago) => {
+    const saldo = Math.max(0, Number(pago.reserva_total) - Number(pago.reserva_monto_pagado || 0));
+    if (saldo <= 0) return;
+    if (!window.confirm(`¿Confirmar que la reserva #${pago.reserva_id} recibió el saldo restante de $${saldo.toFixed(2)}?`)) return;
+
+    setActingId(pago.id); setErr(""); setMsg("");
+    try {
+      const res = await fetch(`${API}/api/admin/reservas/${pago.reserva_id}/pago-manual`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ monto: saldo, nota: "Saldo confirmado manualmente por el administrador" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo registrar el pago");
+      setMsg(`La reserva #${pago.reserva_id} quedó pagada completamente`);
+      load();
+      loadReservasParaLink();
     } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
   };
@@ -202,8 +223,26 @@ export default function AdminPagosPage() {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-slate-50 rounded-lg p-2"><p className="text-[8px] font-black uppercase text-slate-400">Monto</p><p className="text-xs font-black text-slate-800">${Number(p.monto).toFixed(2)}</p></div>
                 <div className="bg-slate-50 rounded-lg p-2"><p className="text-[8px] font-black uppercase text-slate-400">Método</p><p className="text-[10px] font-bold text-slate-600">{METODO_LABEL[p.metodo] || p.metodo}</p></div>
-                <div className="bg-slate-50 rounded-lg p-2"><p className="text-[8px] font-black uppercase text-slate-400">Reserva paga</p><p className="text-[10px] font-bold text-slate-600">${Number(p.reserva_monto_pagado).toFixed(0)}/${Number(p.reserva_total).toFixed(0)}</p></div>
+                <div className="bg-slate-50 rounded-lg p-2"><p className="text-[8px] font-black uppercase text-slate-400">Pagado / falta</p><p className="text-[10px] font-bold text-slate-600">${Number(p.reserva_monto_pagado).toFixed(2)} / ${Math.max(0, Number(p.reserva_total) - Number(p.reserva_monto_pagado)).toFixed(2)}</p></div>
               </div>
+              <p className={`rounded-lg px-3 py-2 text-center text-[10px] font-black uppercase tracking-widest ${
+                Number(p.reserva_total) - Number(p.reserva_monto_pagado || 0) <= 0.01
+                  ? "bg-emerald-50 text-emerald-700"
+                  : Number(p.reserva_monto_pagado || 0) > 0
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-red-50 text-red-600"
+              }`}>
+                {Number(p.reserva_total) - Number(p.reserva_monto_pagado || 0) <= 0.01
+                  ? "Reserva pagada completamente"
+                  : `Falta confirmar $${Math.max(0, Number(p.reserva_total) - Number(p.reserva_monto_pagado || 0)).toFixed(2)}`}
+              </p>
+
+              {Number(p.reserva_total) > Number(p.reserva_monto_pagado || 0) && p.estado !== "rechazado" && (
+              <button onClick={() => registrarPagoManual(p)} disabled={actingId === p.id}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
+                {actingId === p.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Marcar saldo pagado
+              </button>
+              )}
 
               {p.comprobante_url ? (
                 <button onClick={() => setZoomImg(p.comprobante_url)} className="block w-full">

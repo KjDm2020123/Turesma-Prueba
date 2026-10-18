@@ -42,6 +42,9 @@ export type ReservaConductor = {
   origen_lng?: number | null;
   destino_lat?: number | null;
   destino_lng?: number | null;
+  recogida_lat?: number | null;
+  recogida_lng?: number | null;
+  referencia_recogida?: string | null;
   hora_salida?: string | null;
   recogido?: boolean;
   isNew?: boolean;

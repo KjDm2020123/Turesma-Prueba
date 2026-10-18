@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState, useRef, type MouseEvent } from "react";
+import { useEffect, useState, useRef, type MouseEvent, type SyntheticEvent } from "react";
 import {
   BriefcaseBusiness,
   BadgeCheck,
@@ -53,6 +53,14 @@ const TELEFONO_EMPRESA_DISPLAY = "+593 99 357 0061";
 
 const IMAGEN_FALLBACK = "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=800&auto=format&fit=crop";
 const PUBLIC_DATA_CACHE_KEY = "turesma_public_data";
+
+const handleRemoteImageError = (event: SyntheticEvent<HTMLImageElement>) => {
+  const image = event.currentTarget;
+  if (image.src === IMAGEN_FALLBACK) return;
+  image.onerror = null;
+  image.src = IMAGEN_FALLBACK;
+  image.srcset = "";
+};
 
 type PublicDataCache = {
   vehiculos: VehiculoPublico[];
@@ -250,6 +258,7 @@ export default function RootPage() {
             alt="Bus de turismo"
             fill
             sizes="100vw"
+            unoptimized
             className="h-full w-full object-cover opacity-40 transition-transform duration-[10s] hover:scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
@@ -408,6 +417,8 @@ export default function RootPage() {
                         height={512}
                         sizes="(max-width: 640px) 85vw, 360px"
                         priority={index === 0}
+                        unoptimized
+                        onError={handleRemoteImageError}
                         className="h-56 w-full object-cover sm:h-64"
                       />
                       <div className="p-7 flex flex-col flex-1">
@@ -481,6 +492,8 @@ export default function RootPage() {
                       fill
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       priority={foto.id === fotosGaleria[0]?.id}
+                      unoptimized
+                      onError={handleRemoteImageError}
                       className="object-cover transition-transform duration-700 group-hover:scale-110"
                     />
                   )}

@@ -56,6 +56,9 @@ const authLimiter = rateLimit({
   max: 40,                  // 40 intentos por IP en esa ventana
   standardHeaders: true,
   legacyHeaders: false,
+  // Las consultas autenticadas (por ejemplo /auth/me) son comprobaciones de
+  // sesión, no intentos de acceso. No deben bloquear el inicio de sesión.
+  skip: (req) => String(req.headers.authorization || "").startsWith("Bearer "),
   message: { error: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." },
 });
 
@@ -97,7 +100,7 @@ const startServer = async () => {
     await initDatabase();
 
     app.listen(PORT, () => {
-      console.log(` Servidor corriendo en puerto ${PORT}`);
+      console.log(`Servidor corriendo en puerto ${PORT} - http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error("❌ Error iniciando el servidor:", error);

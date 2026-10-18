@@ -216,6 +216,21 @@ export default function ConductorActivasPage() {
                         <div>
                           <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Primero ve a recoger al cliente en</p>
                           <p className="text-sm font-black text-slate-900">{r.origen || "Punto de recogida"}</p>
+                          {r.referencia_recogida && (
+                            <p className="mt-2 text-xs font-semibold text-blue-800">
+                              Referencia: {r.referencia_recogida}
+                            </p>
+                          )}
+                          {r.recogida_lat != null && r.recogida_lng != null && (
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${r.recogida_lat},${r.recogida_lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-blue-700"
+                            >
+                              <Navigation size={12} /> Abrir punto de recogida
+                            </a>
+                          )}
                           <p className="text-[10px] text-slate-400 mt-1">Activa &ldquo;Compartir ubicación&rdquo; arriba para ver la ruta en el mapa.</p>
                         </div>
                       </div>

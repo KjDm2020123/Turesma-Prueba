@@ -963,6 +963,27 @@ const actualizarEstadoViaje = async (req, res) => {
   }
 
   try {
+    if (["en_curso", "finalizada"].includes(estado)) {
+      const reservaActual = await pool.query(
+        `SELECT total, estado_pago
+         FROM reservas
+         WHERE id = $1
+         LIMIT 1`,
+        [reservaId]
+      );
+
+      if (reservaActual.rowCount === 0) {
+        return res.status(404).json({ error: "Reserva no encontrada" });
+      }
+
+      const { total, estado_pago: estadoPago } = reservaActual.rows[0];
+      if (Number(total) > 0 && estadoPago !== "confirmado") {
+        return res.status(400).json({
+          error: "No puedes iniciar o finalizar un viaje sin pago confirmado",
+        });
+      }
+    }
+
     const result = await pool.query(
       "UPDATE reservas SET estado = $1 WHERE id = $2 RETURNING id, estado",
       [estado, reservaId]

@@ -2,9 +2,9 @@ export {};
 
 const pool = require("../config/db");
 const { notificarAdmins } = require("../config/notificaciones");
-const { createPaypalOrder, capturePaypalOrder } = require("../config/paypal");
+const { createPayphonePayment, confirmPayphonePayment } = require("../config/payphone");
 
-const METODOS_VALIDOS = ["transferencia", "link_pago", "paypal"];
+const METODOS_VALIDOS = ["transferencia", "link_pago", "payphone"];
 
 const getPaymentInfo = async (reservaId: number, userId: number) => {
   const result = await pool.query(
@@ -21,10 +21,10 @@ const validarMonto = (reserva: any, monto: number) => {
   if (monto > remaining + 0.01) throw new Error(`El pago no puede superar el saldo de $${remaining.toFixed(2)}`);
 };
 
-const crearOrdenPaypal = async (req: any, res: any) => {
+const crearPagoPayphone = async (req: any, res: any) => {
   const userId = req.user?.id;
   const reservaId = Number(req.params.id);
-  const monto = Number(req.body?.monto);
+  const monto = Number(String(req.body?.monto ?? "").replace(",", "."));
   if (!userId || !Number.isInteger(reservaId)) return res.status(400).json({ error: "Datos de pago inválidos" });
   if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: "Ingresa un monto válido" });
   try {
@@ -32,43 +32,72 @@ const crearOrdenPaypal = async (req: any, res: any) => {
     if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
     if (["cancelada", "finalizada"].includes(reserva.estado)) return res.status(400).json({ error: "Esta reserva no admite pagos" });
     validarMonto(reserva, monto);
-    const order = await createPaypalOrder(monto, reservaId);
-    const approvalUrl = order.links?.find((link: any) => link.rel === "approve")?.href;
-    if (!approvalUrl) throw new Error("PayPal no devolvió el enlace de aprobación");
-    return res.json({ order_id: order.id, approval_url: approvalUrl });
+    const clientTransactionId = `turesma-reserva-${reservaId}-${Date.now()}`.slice(0, 50);
+    const webUrl = String(process.env.WEB_URL || "http://localhost:3000").replace(/\/+$/, "");
+    const payment = await createPayphonePayment({
+      amount: monto,
+      clientTransactionId,
+      reference: `Pago reserva Turesma #${reservaId}`,
+      responseUrl: `${webUrl}/cliente/historial?payphone=ok&reserva_id=${reservaId}`,
+      cancellationUrl: `${webUrl}/cliente/historial?payphone=cancelado&reserva_id=${reservaId}`,
+    });
+    if (!payment.payWithCard || !payment.paymentId) {
+      throw new Error("PayPhone no devolvió el enlace de pago con tarjeta");
+    }
+    return res.json({ payment_id: payment.paymentId, client_transaction_id: clientTransactionId, payment_url: payment.payWithCard });
   } catch (error: any) {
-    console.error("Error creando orden PayPal:", error);
-    return res.status(400).json({ error: error.message || "No se pudo iniciar el pago PayPal" });
+    console.error("Error creando pago PayPhone:", error);
+    return res.status(400).json({ error: error.message || "No se pudo iniciar el pago PayPhone" });
   }
 };
 
-const capturarOrdenPaypal = async (req: any, res: any) => {
+const confirmarPagoPayphone = async (req: any, res: any) => {
   const userId = req.user?.id;
   const reservaId = Number(req.params.id);
-  const orderId = String(req.body?.order_id || "");
-  if (!userId || !Number.isInteger(reservaId) || !orderId) return res.status(400).json({ error: "Datos de captura inválidos" });
+  const paymentId = String(req.body?.payment_id || "");
+  const clientTransactionId = String(req.body?.client_transaction_id || "");
+  if (!userId || !Number.isInteger(reservaId) || !paymentId || !clientTransactionId) return res.status(400).json({ error: "Datos de confirmación inválidos" });
+  if (!clientTransactionId.startsWith(`turesma-reserva-${reservaId}-`)) return res.status(400).json({ error: "La transacción no corresponde a la reserva" });
   try {
     const reserva = await getPaymentInfo(reservaId, userId);
     if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
-    const capture = await capturePaypalOrder(orderId);
-    const captureData = capture.purchase_units?.[0]?.payments?.captures?.[0];
-    if (capture.status !== "COMPLETED" || captureData?.status !== "COMPLETED") return res.status(400).json({ error: "PayPal no confirmó el pago" });
-    const monto = Number(captureData.amount.value);
+    const payment = await confirmPayphonePayment({ id: paymentId, clientTransactionId });
+    const status = String(payment.status || payment.transactionStatus || "").toLowerCase();
+    if (status && !["approved", "completed", "success", "3"].includes(status)) {
+      return res.status(400).json({ error: "PayPhone no confirmó el pago" });
+    }
+    const monto = Number(payment.amount || payment.amountWithTax || 0) / 100;
+    if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: "PayPhone devolvió un monto inválido" });
     validarMonto(reserva, monto);
+    const duplicate = await pool.query("SELECT id FROM pagos_reserva WHERE proveedor_id = $1 LIMIT 1", [paymentId]);
+    if (duplicate.rowCount) return res.status(409).json({ error: "Este pago PayPhone ya fue registrado" });
     const saved = await pool.query(
       `INSERT INTO pagos_reserva (reserva_id, usuario_id, monto, metodo, proveedor_id, estado, revisado_en)
-       VALUES ($1, $2, $3, 'paypal', $4, 'aprobado', NOW())
-       RETURNING id, monto, estado`, [reservaId, userId, monto, orderId]
+       VALUES ($1, $2, $3, 'payphone', $4, 'aprobado', NOW())
+       RETURNING id, monto, estado`, [reservaId, userId, monto, paymentId]
     );
     const suma = await pool.query("SELECT COALESCE(SUM(monto), 0) AS total FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'", [reservaId]);
     const totalPagado = Number(suma.rows[0].total);
-    const estadoPago = totalPagado >= Number(reserva.total) * 0.5 ? "confirmado" : "parcial";
-    await pool.query("UPDATE reservas SET monto_pagado = $1, estado_pago = $2, estado = CASE WHEN estado = 'pendiente_pago' AND $2 = 'confirmado' THEN 'confirmada' ELSE estado END WHERE id = $3", [totalPagado, estadoPago, reservaId]);
-    await notificarAdmins(userId, `Pago PayPal confirmado para la reserva #${reservaId} ($${monto.toFixed(2)}).`, "reserva", reservaId);
-    return res.json({ message: "Pago PayPal confirmado", pago: saved.rows[0], estado_pago: estadoPago });
+    const estadoPago = totalPagado >= Number(reserva.total) - 0.01
+      ? "pagado"
+      : totalPagado >= Number(reserva.total) * 0.5
+        ? "confirmado"
+        : "parcial";
+    await pool.query(
+      "UPDATE reservas SET monto_pagado = $1, estado_pago = $2 WHERE id = $3",
+      [totalPagado, estadoPago, reservaId]
+    );
+    if (["confirmado", "pagado"].includes(estadoPago)) {
+      await pool.query(
+        "UPDATE reservas SET estado = 'confirmada' WHERE id = $1 AND estado = 'pendiente_pago'",
+        [reservaId]
+      );
+    }
+    await notificarAdmins(userId, `Pago PayPhone confirmado para la reserva #${reservaId} ($${monto.toFixed(2)}).`, "reserva", reservaId);
+    return res.json({ message: "Pago PayPhone confirmado", pago: saved.rows[0], estado_pago: estadoPago });
   } catch (error: any) {
-    console.error("Error capturando pago PayPal:", error);
-    return res.status(400).json({ error: error.message || "No se pudo confirmar el pago PayPal" });
+    console.error("Error confirmando pago PayPhone:", error);
+    return res.status(400).json({ error: error.message || "No se pudo confirmar el pago PayPhone" });
   }
 };
 
@@ -84,7 +113,7 @@ const crearPagoReserva = async (req: any, res: any) => {
   if (!Number.isInteger(reservaId) || reservaId <= 0) return res.status(400).json({ error: "ID de reserva inválido" });
   if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: "Ingresa un monto válido" });
   if (!METODOS_VALIDOS.includes(metodo)) return res.status(400).json({ error: "Método de pago inválido" });
-  if (metodo !== "paypal" && !comprobanteUrl) return res.status(400).json({ error: "Debes adjuntar una imagen del comprobante" });
+  if (metodo !== "payphone" && !comprobanteUrl) return res.status(400).json({ error: "Debes adjuntar una imagen del comprobante" });
 
   try {
     const check = await getPaymentInfo(reservaId, userId);
@@ -142,6 +171,6 @@ const listarPagosDeReserva = async (req: any, res: any) => {
 module.exports = {
   crearPagoReserva,
   listarPagosDeReserva,
-  crearOrdenPaypal,
-  capturarOrdenPaypal,
+  crearPagoPayphone,
+  confirmarPagoPayphone,
 };

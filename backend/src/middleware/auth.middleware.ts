@@ -3,7 +3,7 @@ export {};
 const jwt = require("jsonwebtoken");
 
 const JWT_SECRET = process.env.JWT_SECRET || "turesma_secret_key_2026_seguro";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 // Si no hay JWT_SECRET definido, el sistema usa una clave por defecto que está
 // a la vista en el código: cualquiera podría falsificar tokens. En producción

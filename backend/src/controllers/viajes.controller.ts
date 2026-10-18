@@ -14,7 +14,7 @@ const listarViajesPublicos = async (_req: any, res: any) => {
       SELECT t.id, t.titulo, t.descripcion, t.precio, t.duracion, t.capacidad, COALESCE((SELECT jsonb_agg(ti.imagen_url ORDER BY ti.orden) FROM tour_imagenes ti WHERE ti.tour_id = t.id), t.imagenes) AS imagenes,
              t.origen, t.destino, t.fecha_servicio, t.hora_salida, t.cupos_totales,
              t.tipo_servicio, t.imagen_url, v.placa AS vehiculo_placa, v.modelo AS vehiculo_modelo, v.imagen_url AS vehiculo_imagen_url,
-             GREATEST(COALESCE(t.cupos_totales, t.capacidad, 0) - COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND r.estado NOT IN ('cancelada', 'finalizada')), 0), 0)::int AS cupos_disponibles
+             GREATEST(COALESCE(t.cupos_totales, t.capacidad, 0) - COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND (t.fecha_servicio IS NULL OR r.fecha_reserva = t.fecha_servicio) AND r.estado NOT IN ('cancelada', 'finalizada')), 0), 0)::int AS cupos_disponibles
       FROM tours t
       LEFT JOIN vehiculos v ON v.id = t.vehiculo_id
       WHERE t.activo = true
@@ -38,6 +38,11 @@ const reservarViajePublicado = async (req: any, res: any) => {
   const travelDate = typeof req.body?.fecha_viaje === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.fecha_viaje) ? req.body.fecha_viaje : null;
   const travelTime = typeof req.body?.hora_viaje === "string" && /^\d{2}:\d{2}$/.test(req.body.hora_viaje) ? req.body.hora_viaje : null;
   const pickupLocation = typeof req.body?.ubicacion_recogida === "string" ? req.body.ubicacion_recogida.trim().slice(0, 300) : "";
+  const pickupReference = typeof req.body?.referencia_recogida === "string" ? req.body.referencia_recogida.trim().slice(0, 500) : null;
+  const pickupLat = Number(req.body?.recogida_lat);
+  const pickupLng = Number(req.body?.recogida_lng);
+  const hasPickupCoordinates = Number.isFinite(pickupLat) && Number.isFinite(pickupLng)
+    && pickupLat >= -90 && pickupLat <= 90 && pickupLng >= -180 && pickupLng <= 180;
   if (!travelDate || !travelTime || !pickupLocation) return res.status(400).json({ success: false, error: "Fecha, hora y ubicación de recogida son obligatorias" });
 
   const client = await pool.connect();
@@ -57,10 +62,10 @@ const reservarViajePublicado = async (req: any, res: any) => {
 
     const total = Number(tour.precio) * passengers;
     const reservation = await client.query(`
-      INSERT INTO reservas (usuario_id, tour_id, fecha_reserva, fecha_fin, num_personas, total, estado, estado_pago, monto_pagado, origen, destino, vehiculo_id, hora_salida, fecha_salida, fecha_servicio)
-      VALUES ($1, $2, $3, NULL, $4, $5, 'pendiente_pago', 'pendiente', 0, $6, $7, $8, $9, ($3::date + $10::time), ($3::date + $10::time))
+      INSERT INTO reservas (usuario_id, tour_id, fecha_reserva, fecha_fin, num_personas, total, estado, estado_pago, monto_pagado, origen, destino, vehiculo_id, hora_salida, fecha_salida, fecha_servicio, recogida_lat, recogida_lng, referencia_recogida)
+      VALUES ($1, $2, $3, NULL, $4, $5, 'pendiente_pago', 'pendiente', 0, $6, $7, $8, $9, ($3::date + $10::time), ($3::date + $10::time), $11, $12, $13)
       RETURNING id, total, estado, estado_pago
-    `, [userId, tourId, travelDate, passengers, total, pickupLocation, tour.destino, tour.vehiculo_id || null, travelTime, travelTime]);
+    `, [userId, tourId, travelDate, passengers, total, pickupLocation, tour.destino, tour.vehiculo_id || null, travelTime, travelTime, hasPickupCoordinates ? pickupLat : null, hasPickupCoordinates ? pickupLng : null, pickupReference]);
     await client.query("COMMIT");
     const reservationId = Number(reservation.rows[0].id);
     await notificarAdmins(userId, `Nueva compra del viaje ${tour.origen} - ${tour.destino}. Reserva #${reservationId}.`, "reserva", reservationId);
@@ -70,7 +75,7 @@ const reservarViajePublicado = async (req: any, res: any) => {
       const assignment = await client.query("SELECT conductor_id FROM asignacion_vehiculos WHERE vehiculo_id = $1 AND estado = 'activa' LIMIT 1", [tour.vehiculo_id || null]);
       driverUserId = await usuarioIdDeConductor(Number(assignment.rows[0]?.conductor_id) || null);
     }
-    const notification = `Reserva #${reservationId}: ${pickupLocation} → ${tour.destino}, ${travelDate} a las ${travelTime}.`;
+    const notification = `Reserva #${reservationId}: ${pickupLocation} → ${tour.destino}, ${travelDate} a las ${travelTime}.${pickupReference ? ` Referencia: ${pickupReference}` : ""}`;
     if (driverUserId) await crearNotificacion(userId, driverUserId, `Nuevo viaje asignado. ${notification}`, reservationId, "reserva", reservationId);
     const admin = await client.query("SELECT id FROM usuarios WHERE rol = 'admin' AND activo = true AND id <> $1 ORDER BY id LIMIT 1", [userId]);
     await crearNotificacion(Number(admin.rows[0]?.id) || driverUserId || null, userId, `Tu reserva fue registrada. ${notification}`, reservationId, "reserva", reservationId);

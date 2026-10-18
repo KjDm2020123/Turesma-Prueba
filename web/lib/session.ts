@@ -79,7 +79,13 @@ export const refreshStoredUser = async (): Promise<SessionUser | null> => {
       },
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // Un límite temporal o un error del servidor no invalida la sesión.
+      // Solo un 401 confirma que el token ya no puede utilizarse.
+      if (response.status === 401) return null;
+      if (response.status === 429 || response.status >= 500) return getStoredUser();
+      return null;
+    }
 
     const data = await response.json();
     if (!data?.user || data.user.activo === false) return null;
@@ -87,7 +93,8 @@ export const refreshStoredUser = async (): Promise<SessionUser | null> => {
     setStoredUser(data.user);
     return data.user as SessionUser;
   } catch {
-    return null;
+    // Mantener la sesión local durante una falla transitoria de red.
+    return getStoredUser();
   }
 };
 

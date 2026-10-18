@@ -518,6 +518,9 @@ const listarReservasConductor = async (req, res) => {
            r.estado,
            r.num_personas,
            r.total,
+           r.recogida_lat,
+           r.recogida_lng,
+           r.referencia_recogida,
            u.nombre AS usuario_nombre,
            u.email AS usuario_email,
            u.telefono AS usuario_telefono,
@@ -549,6 +552,9 @@ const listarReservasConductor = async (req, res) => {
            r.estado,
            r.num_personas,
            r.total,
+           r.recogida_lat,
+           r.recogida_lng,
+           r.referencia_recogida,
            u.nombre AS usuario_nombre,
            u.email AS usuario_email,
            u.telefono AS usuario_telefono,
@@ -840,7 +846,7 @@ const actualizarEstadoReservaConductor = async (req, res) => {
     }
 
     // El cliente debe tener aprobado al menos el 50% del total antes de iniciar el viaje.
-    if (estado === "en_curso" && Number(reserva.total) > 0 && reserva.estado_pago !== "confirmado") {
+    if (estado === "en_curso" && Number(reserva.total) > 0 && !["confirmado", "pagado"].includes(reserva.estado_pago)) {
       return res.status(400).json({ error: "El cliente aún no ha completado el pago mínimo del 50% para iniciar el viaje" });
     }
 

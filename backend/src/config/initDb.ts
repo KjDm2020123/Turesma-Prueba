@@ -396,6 +396,10 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS total DECIMAL(10, 2),
     ADD COLUMN IF NOT EXISTS estado VARCHAR(50) DEFAULT 'pendiente',
     ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS fecha_salida TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS fecha_llegada TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS fecha_servicio TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS notas TEXT,
     ADD COLUMN IF NOT EXISTS vehiculo_id INT REFERENCES vehiculos(id),
     ADD COLUMN IF NOT EXISTS conductor_id INT REFERENCES usuarios(id),
     ADD COLUMN IF NOT EXISTS origen VARCHAR(300),
@@ -406,6 +410,7 @@ const initDatabase = async () => {
   await pool.query(`
     UPDATE reservas
     SET fecha_reserva = COALESCE(fecha_reserva, CURRENT_DATE),
+        fecha_servicio = COALESCE(fecha_servicio, fecha_reserva::timestamp),
         num_personas = COALESCE(num_personas, 1),
         total = COALESCE(total, 0),
         estado = COALESCE(estado, 'pendiente'),
@@ -650,7 +655,10 @@ const initDatabase = async () => {
     ALTER TABLE reservas
     ADD COLUMN IF NOT EXISTS monto_pagado DECIMAL(10, 2) DEFAULT 0,
     ADD COLUMN IF NOT EXISTS estado_pago VARCHAR(20) DEFAULT 'pendiente',
-    ADD COLUMN IF NOT EXISTS link_pago VARCHAR(500);
+      ADD COLUMN IF NOT EXISTS link_pago VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS recogida_lat DECIMAL(10, 7),
+      ADD COLUMN IF NOT EXISTS recogida_lng DECIMAL(10, 7),
+      ADD COLUMN IF NOT EXISTS referencia_recogida VARCHAR(500);
   `);
 
   await pool.query(`

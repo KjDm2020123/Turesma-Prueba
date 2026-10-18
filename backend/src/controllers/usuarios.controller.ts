@@ -332,7 +332,7 @@ const listarMisReservas = async (req: any, res: any) => {
          r.monto_pagado,
          r.estado_pago,
          r.link_pago,
-         r.creado_en,
+         r.fecha_creacion AS creado_en,
          t.titulo AS tour_titulo,
          v.placa AS vehiculo_placa,
          v.modelo AS vehiculo_modelo,
@@ -347,7 +347,7 @@ const listarMisReservas = async (req: any, res: any) => {
        LEFT JOIN usuarios uc ON uc.id = r.conductor_id
        LEFT JOIN cotizaciones co ON co.reserva_id = r.id
        WHERE r.usuario_id = $1
-       ORDER BY r.creado_en DESC`,
+       ORDER BY r.fecha_creacion DESC, r.id DESC`,
       [userId]
     );
 
@@ -467,7 +467,8 @@ const calificarMiReserva = async (req: any, res: any) => {
 
   try {
     const check = await pool.query(
-      "SELECT id, estado, conductor_id FROM reservas WHERE id = $1 AND usuario_id = $2 LIMIT 1",
+      `SELECT id, estado, conductor_id, total, estado_pago
+       FROM reservas WHERE id = $1 AND usuario_id = $2 LIMIT 1`,
       [reservaId, userId]
     );
     if (check.rowCount === 0) return res.status(404).json({ error: "Reserva no encontrada" });
@@ -475,6 +476,9 @@ const calificarMiReserva = async (req: any, res: any) => {
     const reserva = check.rows[0];
     if (reserva.estado !== "finalizada") {
       return res.status(400).json({ error: "Solo puedes calificar viajes finalizados" });
+    }
+    if (Number(reserva.total) > 0 && !["confirmado", "pagado"].includes(reserva.estado_pago)) {
+      return res.status(400).json({ error: "Este viaje no cuenta como realizado porque el pago no está confirmado" });
     }
 
     await pool.query(

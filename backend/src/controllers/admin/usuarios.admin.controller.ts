@@ -3,6 +3,7 @@ export {};
 const pool = require("../../config/db");
 const bcrypt = require("bcrypt");
 const { normalizeRole } = require("../../config/catalogoHelpers");
+const { createEmailVerification } = require("../../config/emailVerification");
 
 const parsePositiveInt = (value) => {
   const parsed = Number(value);
@@ -134,8 +135,14 @@ const crearUsuarioAdmin = async (req, res) => {
       }
     }
 
+    try {
+      await createEmailVerification(createdUser.id, createdUser.email, createdUser.nombre);
+    } catch (mailError) {
+      console.error("Error enviando verificación por correo al usuario creado por admin:", mailError);
+    }
+
     return res.status(201).json({
-      message: "Usuario creado correctamente",
+      message: "Usuario creado correctamente. Se envió un enlace de verificación al correo indicado.",
       user: createdUser,
     });
   } catch (error) {

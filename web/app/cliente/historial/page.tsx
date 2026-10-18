@@ -53,6 +53,7 @@ const ESTADO_PAGO_STYLE: Record<string, { label: string; cls: string; icon: Reac
   pendiente: { label: "Pago pendiente", cls: "bg-red-50 text-red-600 border-red-200", icon: AlertTriangle },
   parcial: { label: "Pago parcial", cls: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
   confirmado: { label: "Pago confirmado", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  pagado: { label: "Pagado completo", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
 };
 
 const ESTADO_COMPROBANTE_BADGE: Record<string, string> = {
@@ -81,12 +82,12 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
   const total = Number(reserva.total) || 0;
   const minimo = total * 0.5;
   const pagado = Number(reserva.monto_pagado) || 0;
-  const faltaParaMinimo = Math.max(0, minimo - pagado);
+  const saldoPendiente = Math.max(0, total - pagado);
 
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loadingPagos, setLoadingPagos] = useState(true);
-  const [metodo, setMetodo] = useState<"transferencia" | "link_pago" | "paypal">(reserva.link_pago ? "link_pago" : "transferencia");
-  const [monto, setMonto] = useState(faltaParaMinimo > 0 ? faltaParaMinimo.toFixed(2) : minimo.toFixed(2));
+  const [metodo, setMetodo] = useState<"transferencia" | "link_pago" | "payphone">(reserva.link_pago ? "link_pago" : "transferencia");
+  const [monto, setMonto] = useState(saldoPendiente.toFixed(2));
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -109,15 +110,22 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
     setErr(""); setMsg("");
     if (!monto || Number(monto) <= 0) { setErr("Ingresa un monto válido"); return; }
 
-    if (metodo === "paypal") {
+    if (metodo === "payphone") {
       setSending(true);
       try {
-        const res = await fetch(`${API}/api/usuarios/mis-reservas/${reserva.id}/pagos/paypal/orden`, {
+        const res = await fetch(`${API}/api/usuarios/mis-reservas/${reserva.id}/pagos/payphone`, {
           method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ monto: Number(monto) }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "No se pudo iniciar el pago PayPal");
-        window.location.assign(data.approval_url);
+        const raw = await res.text();
+        let data: { error?: string; payment_url?: string } = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          throw new Error("El servidor no devolvió una respuesta válida de PayPhone. Reinicia el backend e inténtalo nuevamente.");
+        }
+        if (!res.ok) throw new Error(data.error || "No se pudo iniciar el pago PayPhone");
+        if (!data.payment_url) throw new Error("PayPhone no devolvió un enlace de pago. Verifica las credenciales y el Store ID.");
+        window.location.assign(data.payment_url);
       } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); setSending(false); }
       return;
     }
@@ -183,9 +191,9 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${metodo === "transferencia" ? "bg-[#E31E24] border-[#E31E24] text-white" : "border-slate-100 text-slate-500"}`}>
                 <Building2 size={14} /> Transferencia
               </button>
-              <button type="button" onClick={() => setMetodo("paypal")}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${metodo === "paypal" ? "bg-[#0070ba] border-[#0070ba] text-white" : "border-slate-100 text-slate-500"}`}>
-                <CreditCard size={14} /> PayPal / Tarjeta
+              <button type="button" onClick={() => setMetodo("payphone")}
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${metodo === "payphone" ? "bg-[#00a99d] border-[#00a99d] text-white" : "border-slate-100 text-slate-500"}`}>
+                <CreditCard size={14} /> PayPhone / Tarjeta
               </button>
               <button type="button" onClick={() => setMetodo("link_pago")} disabled={!reserva.link_pago}
                 className={`col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${metodo === "link_pago" ? "bg-[#E31E24] border-[#E31E24] text-white" : "border-slate-100 text-slate-500"}`}>
@@ -194,10 +202,10 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
             </div>
           </div>
 
-          {metodo === "paypal" ? (
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-center space-y-2">
-              <p className="text-xs font-black text-blue-800">Pago seguro con PayPal</p>
-              <p className="text-[11px] text-blue-700">Puedes pagar con tu saldo PayPal o con tarjeta. No guardamos los datos de tu tarjeta.</p>
+          {metodo === "payphone" ? (
+            <div className="rounded-2xl border border-teal-200 bg-teal-50 p-4 text-center space-y-2">
+              <p className="text-xs font-black text-teal-800">Pago seguro con PayPhone</p>
+              <p className="text-[11px] text-teal-700">Serás enviado al formulario seguro de PayPhone para pagar con tarjeta. Turesma no guarda datos de tu tarjeta.</p>
             </div>
           ) : metodo === "transferencia" ? (
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1.5 text-xs">
@@ -227,7 +235,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
               <input type="number" min="0.01" step="0.01" value={monto} onChange={e => setMonto(e.target.value)}
                 className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24] focus:bg-white" />
             </div>
-            {metodo !== "paypal" && <div className="space-y-1">
+            {metodo !== "payphone" && <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Comprobante (imagen) *</label>
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl py-4 cursor-pointer hover:border-[#E31E24] transition-all">
                 <UploadCloud size={16} className="text-slate-400" />
@@ -238,8 +246,8 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
             {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
             <button onClick={handleSubmit} disabled={uploading || sending}
               className="w-full py-3 rounded-2xl bg-[#E31E24] text-white font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-              {(uploading || sending) ? <Loader2 size={16} className="animate-spin" /> : metodo === "paypal" ? <CreditCard size={16} /> : <UploadCloud size={16} />}
-              {uploading ? "Subiendo imagen..." : sending ? "Enviando..." : metodo === "paypal" ? "Continuar con PayPal" : "Enviar comprobante"}
+              {(uploading || sending) ? <Loader2 size={16} className="animate-spin" /> : metodo === "payphone" ? <CreditCard size={16} /> : <UploadCloud size={16} />}
+              {uploading ? "Subiendo imagen..." : sending ? "Enviando..." : metodo === "payphone" ? "Continuar con PayPhone" : "Enviar comprobante"}
             </button>
           </div>
 
@@ -338,22 +346,36 @@ export default function ClienteHistorialPage() {
   }, [checkingSession, userId]);
 
   useEffect(() => {
+    if (checkingSession || !userId || !reservas.length || typeof window === "undefined") return;
+    const reservaId = Number(new URLSearchParams(window.location.search).get("abrir_pago"));
+    if (!Number.isInteger(reservaId) || reservaId <= 0) return;
+    const reserva = reservas.find((item) => item.id === reservaId);
+    if (!reserva) return;
+
+    setPagoReserva(reserva);
+    window.history.replaceState({}, "", "/cliente/historial");
+  }, [checkingSession, userId, reservas]);
+
+  useEffect(() => {
     if (checkingSession || !userId || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const paypalResult = params.get("paypal");
-    const orderId = params.get("token");
+    const payphoneResult = params.get("payphone");
+    const paymentId = params.get("id");
+    const clientTransactionId = params.get("clientTransactionId");
     const reservaId = params.get("reserva_id");
-    if (paypalResult !== "ok" || !orderId || !reservaId) return;
-    const captureKey = `paypal-capture-${orderId}`;
+    if (payphoneResult !== "ok" || !paymentId || !clientTransactionId || !reservaId) return;
+    const captureKey = `payphone-confirm-${paymentId}`;
     if (sessionStorage.getItem(captureKey)) return;
     sessionStorage.setItem(captureKey, "processing");
-    fetch(`${API}/api/usuarios/mis-reservas/${reservaId}/pagos/paypal/capturar`, {
-      method: "POST", headers: getAuthHeaders(), body: JSON.stringify({ order_id: orderId }),
+    fetch(`${API}/api/usuarios/mis-reservas/${reservaId}/pagos/payphone/confirmar`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ payment_id: paymentId, client_transaction_id: clientTransactionId }),
     })
       .then(async res => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "PayPal no pudo confirmar el pago");
-        setMsg(data.message || "Pago PayPal confirmado correctamente");
+        if (!res.ok) throw new Error(data.error || "PayPhone no pudo confirmar el pago");
+        setMsg(data.message || "Pago PayPhone confirmado correctamente");
         sessionStorage.setItem(captureKey, "done");
         load(true);
       })
@@ -404,9 +426,19 @@ export default function ClienteHistorialPage() {
         <div className="space-y-3">
           {reservas.map(r => {
             const est = ESTADO[r.estado] || ESTADO.pendiente;
-            const puedeCalificar = r.estado === "finalizada" && !r.calificacion;
-            const requierePago = Number(r.total) > 0 && !["cancelada", "finalizada"].includes(r.estado) && (r.estado_pago || "pendiente") !== "confirmado";
-            const pagoStyle = ESTADO_PAGO_STYLE[r.estado_pago || "pendiente"];
+            const pagoMinimoConfirmado = Number(r.total) <= 0 || ["confirmado", "pagado"].includes(r.estado_pago || "");
+            const viajeRealizado = r.estado === "finalizada" && pagoMinimoConfirmado;
+            const puedeCalificar = viajeRealizado && !r.calificacion;
+            const totalReserva = Number(r.total) || 0;
+            const montoPagado = Math.min(totalReserva, Math.max(0, Number(r.monto_pagado) || 0));
+            const saldoPendiente = Math.max(0, totalReserva - montoPagado);
+            const pagoCompleto = totalReserva <= 0 || saldoPendiente <= 0.01;
+            const requierePago = totalReserva > 0 && !["cancelada"].includes(r.estado) && !pagoCompleto;
+            const pagoStyle = pagoCompleto
+              ? ESTADO_PAGO_STYLE.pagado
+              : montoPagado > 0
+                ? ESTADO_PAGO_STYLE.parcial
+                : ESTADO_PAGO_STYLE.pendiente;
             return (
               <div key={r.id} className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -440,7 +472,8 @@ export default function ClienteHistorialPage() {
                 {Number(r.total) > 0 && !["cancelada"].includes(r.estado) && (
                   <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
                     <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${pagoStyle.cls}`}>
-                      <pagoStyle.icon size={12} />{pagoStyle.label}{Number(r.monto_pagado) > 0 ? ` · $${Number(r.monto_pagado).toFixed(2)} de $${(Number(r.total) * 0.5).toFixed(2)} mín.` : ""}
+                      <pagoStyle.icon size={12} />
+                      {pagoCompleto ? "Pagado completo" : montoPagado > 0 ? `Abono: $${montoPagado.toFixed(2)} · Falta: $${saldoPendiente.toFixed(2)}` : pagoStyle.label}
                     </span>
                     {requierePago && (
                       <button onClick={() => setPagoReserva(r)}
@@ -448,6 +481,12 @@ export default function ClienteHistorialPage() {
                         <CreditCard size={13} /> Pagar mi reserva
                       </button>
                     )}
+                  </div>
+                )}
+
+                {r.estado === "finalizada" && !pagoMinimoConfirmado && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                    Este viaje no cuenta como realizado porque el pago no está confirmado.
                   </div>
                 )}
 

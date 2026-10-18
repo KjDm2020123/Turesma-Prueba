@@ -71,7 +71,7 @@ const {
 } = require("../controllers/admin/rutas-reportadas.admin.controller");
 const { uploadVehiculoImagen, uploadViajeImagenes } = require("../controllers/admin/uploads.admin.controller");
 const { serveComprobante } = require("../controllers/uploads.controller");
-const { listarPagosAdmin, aprobarPago, rechazarPago, actualizarLinkPago } = require("../controllers/admin/pagos.admin.controller");
+const { listarPagosAdmin, aprobarPago, rechazarPago, actualizarLinkPago, registrarPagoManual } = require("../controllers/admin/pagos.admin.controller");
 const { getDashboardData } = require("../controllers/admin/dashboard.admin.controller");
 const { getControlOperativo, getScenarioContext, simularEscenario, getAnomalias } = require("../controllers/admin/control-operativo.admin.controller");
 const { getHistorialMensual } = require("../controllers/admin/historial.admin.controller");
@@ -227,6 +227,7 @@ router.get("/pagos", listarPagosAdmin);
 router.patch("/pagos/:id/aprobar", aprobarPago);
 router.patch("/pagos/:id/rechazar", rechazarPago);
 router.patch("/reservas/:id/link-pago", actualizarLinkPago);
+router.post("/reservas/:id/pago-manual", registrarPagoManual);
 
 router.get("/historial", verHistorial);
 router.get("/reportes", verReportes);

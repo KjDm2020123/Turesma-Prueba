@@ -258,7 +258,7 @@ export default function ClienteCotizarPage() {
         window.location.assign(data.approval_url);
         return;
       }
-      setFormMsg("Reserva creada. PayPal no está disponible todavía; puedes pagar por transferencia desde Historial.");
+      setFormMsg("Reserva creada. Puedes pagar con PayPhone o transferencia desde Historial.");
       setForm({ fecha_servicio: "", fecha_fin: "", num_personas: "1", num_viajes: "1", vehiculo_id: "", valor_ofrecido: "", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
       setVariosDias(false);
       setOrigin(null); setDestination(null);

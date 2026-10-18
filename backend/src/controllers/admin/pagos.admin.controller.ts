@@ -19,12 +19,21 @@ const recalcularEstadoPago = async (reservaId: number, adminId: number | null | 
     [reservaId]
   );
   const montoPagado = Number(sumaRes.rows[0].suma) || 0;
-  const estadoPago = montoPagado <= 0 ? "pendiente" : montoPagado >= total * 0.5 ? "confirmado" : "parcial";
+  const estadoPago = montoPagado <= 0
+    ? "pendiente"
+    : montoPagado >= total - 0.01
+      ? "pagado"
+      : montoPagado >= total * 0.5
+        ? "confirmado"
+        : "parcial";
 
-  await pool.query("UPDATE reservas SET monto_pagado = $1, estado_pago = $2 WHERE id = $3", [montoPagado, estadoPago, reservaId]);
+  await pool.query(
+    "UPDATE reservas SET monto_pagado = LEAST($1::numeric, total), estado_pago = $2 WHERE id = $3",
+    [montoPagado, estadoPago, reservaId]
+  );
 
   let reservaConfirmada = false;
-  if (estadoPago === "confirmado" && reserva?.estado === "pendiente_pago") {
+  if (["confirmado", "pagado"].includes(estadoPago) && reserva?.estado === "pendiente_pago") {
     await pool.query("UPDATE reservas SET estado = 'confirmada' WHERE id = $1 AND estado = 'pendiente_pago'", [reservaId]);
     reservaConfirmada = true;
     const condUserId = await usuarioIdDeConductor(reserva.conductor_id);
@@ -80,9 +89,11 @@ const aprobarPago = async (req: any, res: any) => {
     const monto = Number(pago.rows[0].monto).toFixed(2);
     const mensaje = reservaConfirmada
       ? `Tu pago de $${monto} fue APROBADO. ¡Tu reserva #${pago.rows[0].reserva_id} quedó CONFIRMADA!`
-      : estadoPago === "confirmado"
-        ? `Tu pago de $${monto} fue APROBADO. Tu reserva #${pago.rows[0].reserva_id} ya cubre el mínimo requerido (50%).`
-        : `Tu pago de $${monto} fue APROBADO para la reserva #${pago.rows[0].reserva_id}. Aún falta completar el 50% mínimo.`;
+      : estadoPago === "pagado"
+        ? `Tu pago de $${monto} fue APROBADO. La reserva #${pago.rows[0].reserva_id} está pagada completamente.`
+        : estadoPago === "confirmado"
+          ? `Tu pago de $${monto} fue APROBADO. Tu reserva #${pago.rows[0].reserva_id} ya cubre el mínimo requerido (50%); revisa el saldo pendiente.`
+          : `Tu pago de $${monto} fue APROBADO para la reserva #${pago.rows[0].reserva_id}. Aún falta completar el mínimo del 50%.`;
     await crearNotificacion(req.user?.id, pago.rows[0].usuario_id, mensaje, pago.rows[0].reserva_id, "reserva", pago.rows[0].reserva_id);
 
     return res.status(200).json({ message: "Pago aprobado", monto_pagado: montoPagado, estado_pago: estadoPago, reserva_confirmada: reservaConfirmada });
@@ -154,9 +165,61 @@ const actualizarLinkPago = async (req: any, res: any) => {
   }
 };
 
+// ── Admin: registra manualmente un saldo recibido ───────────────────────────
+const registrarPagoManual = async (req: any, res: any) => {
+  const reservaId = Number(req.params.id);
+  const montoSolicitado = Number(req.body?.monto);
+  const nota = typeof req.body?.nota === "string" ? req.body.nota.trim().slice(0, 500) : null;
+
+  if (!Number.isInteger(reservaId) || reservaId <= 0 || !Number.isFinite(montoSolicitado) || montoSolicitado <= 0) {
+    return res.status(400).json({ error: "Indica un monto válido para el pago" });
+  }
+
+  try {
+    const reservaRes = await pool.query(
+      "SELECT id, usuario_id, total, estado, COALESCE(monto_pagado, 0) AS monto_pagado FROM reservas WHERE id = $1 LIMIT 1",
+      [reservaId]
+    );
+    if (reservaRes.rowCount === 0) return res.status(404).json({ error: "Reserva no encontrada" });
+
+    const reserva = reservaRes.rows[0];
+    const total = Number(reserva.total) || 0;
+    const pagado = Number(reserva.monto_pagado) || 0;
+    const monto = Math.min(montoSolicitado, Math.max(0, total - pagado));
+    if (monto <= 0) return res.status(400).json({ error: "La reserva ya tiene el valor total pagado" });
+
+    await pool.query(
+      `INSERT INTO pagos_reserva
+        (reserva_id, usuario_id, monto, metodo, estado, notas_admin, revisado_en)
+       VALUES ($1, $2, $3, 'ajuste_admin', 'aprobado', $4, NOW())`,
+      [reservaId, reserva.usuario_id, monto, nota || "Pago confirmado manualmente por el administrador"]
+    );
+
+    const resultado = await recalcularEstadoPago(reservaId, req.user?.id);
+    await crearNotificacion(
+      req.user?.id,
+      reserva.usuario_id,
+      `El administrador registró un pago de $${monto.toFixed(2)} para la reserva #${reservaId}.`,
+      reservaId,
+      "reserva",
+      reservaId
+    );
+
+    return res.status(200).json({
+      message: "Pago registrado correctamente",
+      ...resultado,
+      saldo_pendiente: Math.max(0, resultado.total - resultado.montoPagado),
+    });
+  } catch (error) {
+    console.error("Error registrando pago manual:", error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
 module.exports = {
   listarPagosAdmin,
   aprobarPago,
   rechazarPago,
   actualizarLinkPago,
+  registrarPagoManual,
 };

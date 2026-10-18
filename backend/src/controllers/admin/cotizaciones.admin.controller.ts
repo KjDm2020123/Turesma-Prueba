@@ -3,7 +3,6 @@ export {};
 const pool = require("../../config/db");
 const { crearNotificacion, notificarAdmins } = require("../../config/notificaciones");
 const { getPricing, roadDistanceKm, calculateQuote } = require("../../config/pricing");
-const { createPaypalOrder } = require("../../config/paypal");
 
 // Busca un conductor y un vehículo disponibles para completar la reserva sin
 // intervención manual del conductor. Si ya existe una asignación activa válida,
@@ -182,15 +181,7 @@ const crearReservaDirecta = async (req: any, res: any) => {
     await client.query("COMMIT");
     const reservaId = Number(reservation.rows[0].id);
     await notificarAdmins(usuarioId, `Nueva reserva directa #${reservaId} pendiente de pago por $${Number(breakdown.total).toFixed(2)}.`, "reserva", reservaId);
-    let approvalUrl = null;
-    try {
-      const minimum = Number(breakdown.total) * 0.5;
-      const order = await createPaypalOrder(minimum, reservaId);
-      approvalUrl = order.links?.find((link: any) => link.rel === "approve")?.href || null;
-    } catch (paypalError) {
-      console.warn("Reserva creada sin orden PayPal; podrá pagarse por transferencia:", paypalError.message);
-    }
-    return res.status(201).json({ message: "Reserva creada. Continúa con el pago para confirmarla.", reserva_id: reservaId, total: breakdown.total, pago_minimo: Number(breakdown.total) * 0.5, approval_url: approvalUrl });
+    return res.status(201).json({ message: "Reserva creada. Continúa con el pago para confirmarla.", reserva_id: reservaId, total: breakdown.total, pago_minimo: Number(breakdown.total) * 0.5 });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Error creando reserva directa:", error);
