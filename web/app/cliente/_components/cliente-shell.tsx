@@ -21,7 +21,6 @@ import { ClienteChatbot } from "../../../components/cliente-chatbot";
 import { useClienteBadges } from "./use-cliente-badges";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
-import { SessionLoadingScreen } from "../../../components/session-loading-screen";
 
 type MenuItem = {
   href: string;
@@ -64,10 +63,6 @@ export function ClienteShell({ children }: ClienteShellProps) {
     clearStoredUser();
     window.location.assign("/api/auth/logout");
   };
-
-  if (checkingSession) {
-    return <SessionLoadingScreen />;
-  }
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-[#1a1a1a]">
@@ -144,7 +139,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
               type="button"
             >
               <LogOut size={14} className="group-hover:-translate-x-1 transition-transform" />
-              SALIR DEL PANEL
+              CERRAR SESIÓN
             </button>
           </div>
         </div>

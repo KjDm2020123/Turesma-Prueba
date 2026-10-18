@@ -13,7 +13,6 @@ import {
   handleUnauthorized,
   isTokenExpired,
   normalizeRole,
-  refreshStoredUser,
   SessionUser,
 } from "../../../lib/session";
 
@@ -86,7 +85,7 @@ const useConductorPanelState = () => {
   const primeraCargaRef = useRef(true);
 
   useEffect(() => {
-    const checkSession = async () => {
+    const checkSession = () => {
       const currentUser = getStoredUser();
       // Sin usuario, sin token, o token expirado → cerrar sesión y volver al login.
       if (!currentUser || !getStoredToken() || isTokenExpired()) {
@@ -95,26 +94,19 @@ const useConductorPanelState = () => {
         return;
       }
 
-      const verifiedUser = await refreshStoredUser();
-      if (!verifiedUser) {
-        clearStoredUser();
-        window.location.replace("/api/auth/logout");
-        return;
-      }
-
-      const role = normalizeRole(verifiedUser.rol);
+      const role = normalizeRole(currentUser.rol);
       if (role !== "conductor" && role !== "vehiculo") {
         router.replace(getRolePath(role));
         return;
       }
 
-      if (!verifiedUser.id) {
+      if (!currentUser.id) {
         clearStoredUser();
         window.location.replace("/api/auth/logout");
         return;
       }
 
-      setUser(verifiedUser);
+      setUser(currentUser);
       setCheckingSession(false);
     };
 

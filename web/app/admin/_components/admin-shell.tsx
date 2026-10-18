@@ -41,7 +41,6 @@ import { useAdminBadges } from "./use-admin-badges";
 import { AdminChatbot } from "./admin-chatbot";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
-import { SessionLoadingScreen } from "../../../components/session-loading-screen";
 
 type AdminShellProps = {
   children: React.ReactNode;
@@ -159,10 +158,6 @@ export const AdminShell = ({ children }: AdminShellProps) => {
     window.location.assign("/api/auth/logout");
   };
 
-  if (checkingSession) {
-    return <SessionLoadingScreen />;
-  }
-
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-[#1a1a1a]">
       
@@ -268,7 +263,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#E31E24]/10 hover:bg-[#E31E24] text-[#E31E24] hover:text-white rounded-xl transition-all duration-300 text-[10px] font-black tracking-widest border border-[#E31E24]/20 group"
             >
               <LogOut size={14} className="group-hover:-translate-x-1 transition-transform" />
-              SALIR DEL PANEL
+              CERRAR SESIÓN
             </button>
           </div>
         </div>

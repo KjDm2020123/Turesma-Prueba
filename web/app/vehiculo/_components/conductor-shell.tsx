@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore, useRef } from "react";
+import { useState, useRef } from "react";
 import {
   Bell,
   LayoutDashboard,
@@ -21,7 +21,6 @@ import { clearStoredUser } from "../../../lib/session";
 import { ConductorPanelProvider, useConductorPanelState } from "./use-conductor-panel";
 import { NotificationBell } from "../../../components/notification-bell";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
-import { SessionLoadingScreen } from "../../../components/session-loading-screen";
 
 type MenuItemType = {
   href: string;
@@ -46,15 +45,10 @@ const menuItems: MenuItemType[] = [
 export function ConductorShell({ children }: ConductorShellProps) {
   const pathname = usePathname();
   const panelState = useConductorPanelState();
-  const { newSolicitudesCount, user, checkingSession } = panelState;
+  const { newSolicitudesCount, user } = panelState;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLElement | null>(null);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const isHydrated = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
   useMobileMenuAccessibility(isMobileMenuOpen, setIsMobileMenuOpen, mobileMenuRef, mobileMenuTriggerRef);
 
   const isActive = (href: string) => {
@@ -71,10 +65,6 @@ export function ConductorShell({ children }: ConductorShellProps) {
     clearStoredUser();
     window.location.assign("/api/auth/logout");
   };
-
-  if (!isHydrated || checkingSession) {
-    return <SessionLoadingScreen />;
-  }
 
   return (
     <ConductorPanelProvider value={panelState}>
@@ -154,7 +144,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
               className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#E31E24]/10 hover:bg-[#E31E24] text-[#E31E24] hover:text-white rounded-xl transition-all duration-300 text-[10px] font-black tracking-widest border border-[#E31E24]/20 group"
             >
               <LogOut size={14} className="group-hover:-translate-x-1 transition-transform" />
-              SALIR DEL PANEL
+              CERRAR SESIÓN
             </button>
           </div>
         </div>

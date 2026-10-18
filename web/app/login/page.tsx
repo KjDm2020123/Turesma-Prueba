@@ -232,7 +232,7 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <Loader2 size={19} className="animate-spin" />
-                    Validando acceso...
+                    Validando sesión...
                   </>
                 ) : (
                   <>
