@@ -21,6 +21,7 @@ import { ClienteChatbot } from "../../../components/cliente-chatbot";
 import { useClienteBadges } from "./use-cliente-badges";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
+import { SessionLoadingScreen } from "../../../components/session-loading-screen";
 
 type MenuItem = {
   href: string;
@@ -65,7 +66,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
   };
 
   if (checkingSession) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]" role="status" aria-live="polite">Verificando sesión...</div>;
+    return <SessionLoadingScreen />;
   }
 
   return (

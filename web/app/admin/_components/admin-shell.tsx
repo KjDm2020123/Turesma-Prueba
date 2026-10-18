@@ -41,6 +41,7 @@ import { useAdminBadges } from "./use-admin-badges";
 import { AdminChatbot } from "./admin-chatbot";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
+import { SessionLoadingScreen } from "../../../components/session-loading-screen";
 
 type AdminShellProps = {
   children: React.ReactNode;
@@ -159,7 +160,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
   };
 
   if (checkingSession) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]" role="status" aria-live="polite">Verificando sesión...</div>;
+    return <SessionLoadingScreen />;
   }
 
   return (

@@ -21,6 +21,7 @@ import { clearStoredUser } from "../../../lib/session";
 import { ConductorPanelProvider, useConductorPanelState } from "./use-conductor-panel";
 import { NotificationBell } from "../../../components/notification-bell";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
+import { SessionLoadingScreen } from "../../../components/session-loading-screen";
 
 type MenuItemType = {
   href: string;
@@ -72,7 +73,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
   };
 
   if (!isHydrated || checkingSession) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]" role="status" aria-live="polite">Verificando sesión...</div>;
+    return <SessionLoadingScreen />;
   }
 
   return (
