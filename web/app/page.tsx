@@ -21,7 +21,11 @@ import {
   Route,
   UsersRound,
   SlidersHorizontal,
-  PlayCircle
+  PlayCircle,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 
 type VehiculoPublico = {
@@ -45,6 +49,7 @@ type GaleriaFoto = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop";
 
 // Número oficial de la empresa (formato internacional sin +). Cambiarlo aquí
 // actualiza el botón flotante, el CTA del hero y el pie de página a la vez.
@@ -67,19 +72,90 @@ type PublicDataCache = {
   galeria: GaleriaFoto[];
 };
 
+function VideoPlayer({ src, title }: { src: string; title: string | null }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  const togglePlayback = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      try {
+        await video.play();
+      } catch (error) {
+        console.error("No se pudo reproducir el video:", error);
+      }
+    } else {
+      video.pause();
+    }
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+  };
+
+  return (
+    <div className="video-player group/video relative aspect-video w-full overflow-hidden bg-black">
+      <video
+        ref={videoRef}
+        src={src}
+        preload="metadata"
+        playsInline
+        disablePictureInPicture
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        aria-label={title || "Video de Turesma"}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
+        onContextMenu={(event) => event.preventDefault()}
+        className="h-full w-full object-cover"
+      />
+      <div className="video-player-controls absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          aria-label={isPlaying ? "Pausar video" : "Reproducir video"}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+        </button>
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={isMuted ? "Activar sonido" : "Silenciar video"}
+          aria-pressed={!isMuted}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function RootPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [vehiculos, setVehiculos] = useState<VehiculoPublico[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
   const flotaRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMenuWasOpen = useRef(false);
   const fotosGaleria = galeria.filter((contenido) => contenido.tipo !== "video");
   const videosGaleria = galeria.filter((contenido) => contenido.tipo === "video");
 
   useEffect(() => {
-    const elements = document.querySelectorAll<HTMLElement>('[data-reveal]');
+    const elements = document.querySelectorAll<HTMLElement>('.home-page [data-reveal]');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (reduceMotion) {
@@ -101,24 +177,44 @@ export default function RootPage() {
 
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, []);
+  }, [fotosGaleria.length]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      if (mobileMenuWasOpen.current) mobileMenuTriggerRef.current?.focus();
+      mobileMenuWasOpen.current = false;
+      return;
+    }
+
+    mobileMenuWasOpen.current = true;
+    mobileMenuRef.current?.querySelector<HTMLElement>("a[href]")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+        mobileMenuTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
 
   // Desplaza el carrusel de flota una "tarjeta" a izq/der. Si ya está al final,
   // vuelve al inicio (loop infinito) para que el auto-avance no se detenga.
   const scrollFlota = (dir: "left" | "right") => {
     const el = flotaRef.current;
     if (!el) return;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     const card = el.querySelector<HTMLElement>("[data-flota-card]");
     const amount = card ? card.offsetWidth + 24 : el.clientWidth * 0.8;
     const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
     const atStart = el.scrollLeft <= 4;
 
     if (dir === "right" && atEnd) {
-      el.scrollTo({ left: 0, behavior: "smooth" });
+      el.scrollTo({ left: 0, behavior });
     } else if (dir === "left" && atStart) {
-      el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+      el.scrollTo({ left: el.scrollWidth, behavior });
     } else {
-      el.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
+      el.scrollBy({ left: dir === "left" ? -amount : amount, behavior });
     }
   };
 
@@ -174,6 +270,13 @@ export default function RootPage() {
     const updateScrollButton = () => {
       const shouldShow = window.scrollY > 300;
       setShowScrollTop((current) => (current === shouldShow ? current : shouldShow));
+      const activationLine = window.innerHeight * 0.35;
+      const sectionIds = ["nosotros", "flota", "servicios", "requerimiento", "contacto"];
+      const currentSection = sectionIds.reduce<string | null>((active, id) => {
+        const section = document.getElementById(id);
+        return section && section.getBoundingClientRect().top <= activationLine ? id : active;
+      }, null);
+      setActiveSection((current) => current === currentSection ? current : currentSection);
       ticking = false;
     };
     const onScroll = () => {
@@ -183,6 +286,7 @@ export default function RootPage() {
       }
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    updateScrollButton();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
@@ -195,15 +299,22 @@ export default function RootPage() {
 
     const navOffset = 96;
     const top = section.getBoundingClientRect().top + window.scrollY - navOffset;
-    window.scrollTo({ top, behavior: "smooth" });
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    window.scrollTo({ top, behavior });
     window.history.replaceState(null, "", `#${sectionId}`);
 
     if (shouldCloseMenu) closeMenu();
   };
 
+  const navLinkClass = (sectionId: string, mobile = false) =>
+    `${mobile ? "block text-lg font-bold" : "text-sm font-bold uppercase tracking-widest"} ${
+      activeSection === sectionId ? "text-[#E31E24]" : "text-gray-600"
+    } transition-colors hover:text-[#E31E24]`;
+
   return (
-    <main className="bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
-      
+    <main className="home-page bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
+      <link rel="preload" as="image" href={HERO_IMAGE_URL} fetchPriority="high" />
+
       {/* NAVBAR */}
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -213,38 +324,46 @@ export default function RootPage() {
 
           {/* Menú Escritorio */}
           <div className="hidden items-center gap-8 md:flex">
-            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Nosotros</a>
-            <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Flota</a>
-            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Servicios</a>
-            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Soluciones</a>
-            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className="text-sm font-bold uppercase tracking-widest text-gray-600 transition-colors hover:text-[#E31E24]">Contacto</a>
+            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className={navLinkClass("nosotros")} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
+            <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className={navLinkClass("flota")} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
+            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className={navLinkClass("servicios")} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
+            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className={navLinkClass("requerimiento")} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
+            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className={navLinkClass("contacto")} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
-            <Link href="/login" className="rounded-xl border-2 border-gray-100 px-6 py-2.5 text-sm font-bold text-gray-700 transition-all hover:border-[#E31E24] hover:text-[#E31E24]">
+            <Link href="/login" className="home-button rounded-xl border-2 border-gray-100 px-6 py-2.5 text-sm font-bold text-gray-700 transition-all hover:border-[#E31E24] hover:text-[#E31E24]">
               Ingresar
             </Link>
-            <Link href="/registro" className="rounded-xl bg-[#E31E24] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
+            <Link href="/registro" className="home-button rounded-xl bg-[#E31E24] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
               Registrarse
             </Link>
           </div>
 
-          <button type="button" className="text-[#E31E24] md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          <button
+            ref={mobileMenuTriggerRef}
+            type="button"
+            className="flex min-h-11 min-w-11 items-center justify-center text-[#E31E24] md:hidden"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+          >
             {mobileMenuOpen ? <X size={32} /> : <MenuIcon size={32} />}
           </button>
         </div>
 
         {/* Menú Móvil */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-b border-gray-100 p-6 space-y-4 shadow-xl animate-in slide-in-from-top duration-300">
-            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Nosotros</a>
-            <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Flota</a>
-            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Servicios</a>
-            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Soluciones</a>
-            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className="block text-lg font-bold text-gray-700 hover:text-[#E31E24]">Contacto</a>
+          <div id="mobile-navigation" ref={mobileMenuRef} role="region" aria-label="Navegación móvil" className="mobile-menu-panel md:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
+            <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className={navLinkClass("nosotros", true)} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
+            <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className={navLinkClass("flota", true)} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
+            <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className={navLinkClass("servicios", true)} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
+            <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className={navLinkClass("requerimiento", true)} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
+            <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className={navLinkClass("contacto", true)} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
             <div className="pt-4 flex flex-col gap-3">
-              <Link href="/login" className="text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
-              <Link href="/registro" className="text-center rounded-xl bg-[#E31E24] py-3 font-bold text-white">Registrarse</Link>
+              <Link href="/login" className="home-button text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
+              <Link href="/registro" className="home-button text-center rounded-xl bg-[#E31E24] py-3 font-bold text-white">Registrarse</Link>
             </div>
           </div>
         )}
@@ -266,17 +385,17 @@ export default function RootPage() {
         
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:flex lg:items-center">
           <div className="lg:w-2/3">
-            <h1 className="mb-6 text-5xl font-black leading-[1.1] tracking-tight text-white md:text-8xl italic">
+            <h1 className="hero-intro hero-intro-title mb-6 text-5xl font-black leading-[1.1] tracking-tight text-white md:text-8xl italic">
               VIAJA CON <span className="text-yellow-400">EXCELENCIA.</span>
             </h1>
-            <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-gray-300 md:text-2xl">
+            <p className="hero-intro hero-intro-copy mb-10 max-w-2xl text-xl font-medium leading-relaxed text-gray-300 md:text-2xl">
               Soluciones de transporte de alta gama en Manta. Puntualidad, confort y seguridad en cada kilómetro del Ecuador.
             </p>
-            <div className="flex flex-wrap gap-4">
-              <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="group flex items-center gap-3 rounded-2xl bg-white px-8 py-4 font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400">
+            <div className="hero-intro hero-intro-actions flex flex-wrap gap-4">
+              <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="home-button group flex items-center gap-3 rounded-2xl bg-white px-8 py-4 font-black uppercase tracking-widest text-black transition-all hover:bg-yellow-400">
                 Ver Flota <ChevronRight className="transition-transform group-hover:translate-x-1" />
               </a>
-              <a href={`https://wa.me/${TELEFONO_EMPRESA}`} target="_blank" className="rounded-2xl border-2 border-white/20 bg-white/5 px-8 py-4 font-black uppercase tracking-widest text-white backdrop-blur-md transition-all hover:bg-white/10">
+              <a href={`https://wa.me/${TELEFONO_EMPRESA}`} target="_blank" rel="noreferrer" className="home-button rounded-2xl border-2 border-white/20 bg-white/5 px-8 py-4 font-black uppercase tracking-widest text-white backdrop-blur-md transition-all hover:bg-white/10">
                 Contactar Asesor
               </a>
             </div>
@@ -301,7 +420,7 @@ export default function RootPage() {
               { label: "Puntualidad", icon: Clock3, color: "text-orange-500", bg: "bg-orange-50" },
               { label: "Logística", icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
             ].map((f, i) => (
-              <div key={i} className="group text-center">
+              <div key={i} className="home-card group text-center">
                 <div className={`mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[2rem] ${f.bg} transition-all group-hover:rotate-6 group-hover:scale-110`}>
                   <f.icon className={f.color} size={32} />
                 </div>
@@ -408,7 +527,7 @@ export default function RootPage() {
                     <div
                       key={v.id}
                       data-flota-card
-                      className="flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl transition-all hover:shadow-2xl hover:-translate-y-1 sm:w-[360px]"
+                      className="home-card flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl hover:shadow-2xl sm:w-[360px]"
                     >
                       <Image
                         src={v.imagen_url || IMAGEN_FALLBACK}
@@ -460,7 +579,7 @@ export default function RootPage() {
           )}
 
           <div className="mt-12 text-center">
-            <Link href="/login" className="inline-flex items-center gap-3 rounded-2xl bg-[#E31E24] px-8 py-4 font-black uppercase tracking-widest text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
+            <Link href="/login" className="home-button inline-flex items-center gap-3 rounded-2xl bg-[#E31E24] px-8 py-4 font-black uppercase tracking-widest text-white shadow-lg shadow-red-200 transition-all hover:bg-black">
               Reservar un vehículo <ChevronRight size={20} />
             </Link>
           </div>
@@ -470,7 +589,7 @@ export default function RootPage() {
       {/* SECCIÓN GALERÍA DE VIAJES (fotos publicadas por el admin) */}
       {fotosGaleria.length > 0 && (
         <section id="galeria" className="py-24 bg-white border-t border-gray-50">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
             <div className="mb-16 text-center">
               <h2 className="text-4xl font-black italic tracking-tighter text-[#E31E24] md:text-6xl uppercase">Nuestros Viajes</h2>
               <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
@@ -481,7 +600,7 @@ export default function RootPage() {
               {fotosGaleria.map((foto) => (
                 <figure
                   key={foto.id}
-                  className="group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
+                  className="home-card group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
                 >
                   {foto.tipo === "video" ? (
                     <video src={foto.imagen_url} controls preload="metadata" playsInline className="w-full h-full object-cover" />
@@ -531,13 +650,7 @@ export default function RootPage() {
             <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
               {videosGaleria.map((video) => (
                 <figure key={video.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl">
-                  <video
-                    src={video.imagen_url}
-                    controls
-                    preload="metadata"
-                    playsInline
-                    className="aspect-video w-full object-cover"
-                  />
+                  <VideoPlayer src={video.imagen_url} title={video.titulo} />
                   {(video.titulo || video.descripcion) && (
                     <figcaption className="p-5">
                       {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
@@ -569,15 +682,15 @@ export default function RootPage() {
              <div className="h-1.5 w-32 bg-yellow-400 rounded-full mt-2 mx-auto"></div>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-[2rem] bg-gray-50 border-b-4 border-[#E31E24] hover:bg-gray-100 transition-all">
+            <div className="home-card p-8 rounded-[2rem] bg-gray-50 border-b-4 border-[#E31E24] hover:bg-gray-100">
               <h3 className="text-2xl font-black italic text-gray-900 mb-4 uppercase">Traslados Ejecutivos</h3>
               <p className="text-gray-600 font-medium leading-relaxed">Puntualidad absoluta para viajes de negocios, traslados al aeropuerto y logística corporativa.</p>
             </div>
-            <div className="p-8 rounded-[2rem] bg-gray-50 border-b-4 border-yellow-400 hover:bg-gray-100 transition-all">
+            <div className="home-card p-8 rounded-[2rem] bg-gray-50 border-b-4 border-yellow-400 hover:bg-gray-100">
               <h3 className="text-2xl font-black italic text-gray-900 mb-4 uppercase">Tours Turísticos</h3>
               <p className="text-gray-600 font-medium leading-relaxed">Guías certificados y rutas personalizadas por la costa manabita y todo el Ecuador.</p>
             </div>
-            <div className="p-8 rounded-[2rem] bg-gray-50 border-b-4 border-green-600 hover:bg-gray-100 transition-all">
+            <div className="home-card p-8 rounded-[2rem] bg-gray-50 border-b-4 border-green-600 hover:bg-gray-100">
               <h3 className="text-2xl font-black italic text-gray-900 mb-4 uppercase">Logística de Eventos</h3>
               <p className="text-gray-600 font-medium leading-relaxed">Coordinación de transporte para congresos, bodas y eventos institucionales masivos.</p>
             </div>
@@ -610,7 +723,7 @@ export default function RootPage() {
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <article key={item.title} className="group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                <article key={item.title} className="home-card group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm hover:shadow-xl">
                   <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-2xl ${item.bg} transition-transform group-hover:rotate-6`}>
                     <Icon size={23} className={item.color} />
                   </div>
@@ -632,10 +745,10 @@ export default function RootPage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row md:flex-col lg:flex-row">
-              <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white hover:text-[#E31E24]">
+              <Link href="/login" className="home-button inline-flex items-center justify-center gap-2 rounded-xl bg-[#E31E24] px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white hover:text-[#E31E24]">
                 Cotizar en línea <ChevronRight size={16} />
               </Link>
-              <a href={`https://wa.me/${TELEFONO_EMPRESA}?text=${encodeURIComponent("Hola TURESMA, tengo un requerimiento de transporte personalizado.")}`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10">
+              <a href={`https://wa.me/${TELEFONO_EMPRESA}?text=${encodeURIComponent("Hola TURESMA, tengo un requerimiento de transporte personalizado.")}`} target="_blank" rel="noreferrer" className="home-button inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-5 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-white/10">
                 Cuéntanos tu requerimiento
               </a>
             </div>
@@ -722,7 +835,7 @@ export default function RootPage() {
                   { title: "Seguros de Pasajeros", desc: "Cobertura completa y cumplimiento de toda la normativa legal.", icon: <BadgeCheck className="text-green-600" /> },
                   { title: "Atención 24 Horas", desc: "Soporte y coordinación logística los 365 días del año.", icon: <Activity className="text-blue-600" /> }
                 ].map((item, index) => (
-                  <div key={index} className="flex gap-4 p-5 rounded-2xl border border-gray-100 hover:shadow-xl transition-all duration-300">
+                  <div key={index} className="home-card flex gap-4 p-5 rounded-2xl border border-gray-100 hover:shadow-xl">
                     <div className="mt-1 shrink-0">{item.icon}</div>
                     <div>
                       <h4 className="font-black text-gray-800 uppercase text-sm tracking-tight">{item.title}</h4>
@@ -789,7 +902,7 @@ export default function RootPage() {
               return (
                 <article
                   key={index}
-                  className={`rounded-xl border bg-white px-4 py-5 shadow-sm transition-all duration-500 ${
+                  className={`home-card rounded-xl border bg-white px-4 py-5 shadow-sm transition-all duration-500 ${
                     isOpen ? "border-[#E31E24]/30 shadow-md" : "border-gray-200"
                   }`}
                 >
@@ -797,7 +910,8 @@ export default function RootPage() {
                     type="button"
                     onClick={() => setOpenFaqIndex((current) => (current === index ? null : index))}
                     aria-expanded={isOpen}
-                    className="relative flex w-full items-center pr-7 text-[#0b1220] focus-visible:outline-none"
+                    aria-controls={`faq-answer-${index}`}
+                    className="relative flex min-h-11 w-full items-center pr-7 text-[#0b1220] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E31E24] focus-visible:ring-offset-2"
                   >
                     <span className="block w-full text-left text-base font-black italic uppercase tracking-tight md:text-[1.1rem]">
                       {faq.question}
@@ -809,6 +923,9 @@ export default function RootPage() {
                   </button>
 
                   <div
+                    id={`faq-answer-${index}`}
+                    aria-hidden={!isOpen}
+                    inert={!isOpen}
                     className={`grid overflow-hidden transition-all duration-500 ease-[cubic-bezier(.22,1,.36,1)] ${
                       isOpen ? "mt-4 grid-rows-[1fr] opacity-100" : "mt-0 grid-rows-[0fr] opacity-0"
                     }`}
@@ -875,18 +992,25 @@ export default function RootPage() {
 
       {/* BOTONES FLOTANTES */}
       <button
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        onClick={() => window.scrollTo({
+          top: 0,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        })}
+        type="button"
+        aria-label="Volver al inicio de la página"
         className={`fixed bottom-8 right-8 z-50 rounded-2xl bg-black p-4 text-white shadow-2xl transition-all hover:bg-[#E31E24] ${showScrollTop ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0"}`}
       >
-        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+        <svg aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
       </button>
 
       <a
         href={`https://wa.me/${TELEFONO_EMPRESA}`}
         target="_blank"
+        rel="noreferrer"
+        aria-label="Contactar a Turesma por WhatsApp"
         className="fixed bottom-8 left-8 z-50 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-2xl transition-transform hover:scale-110 active:scale-95"
       >
-        <svg className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24"><path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.4 0 .01 5.39 0 12.02c0 2.1.55 4.16 1.6 5.98L0 24l6.16-1.58a11.95 11.95 0 0 0 5.85 1.49h.01c6.63 0 12.02-5.39 12.03-12.02 0-3.22-1.25-6.24-3.53-8.41ZM12.02 21.4h-.01a9.4 9.4 0 0 1-4.78-1.3l-.34-.2-3.66.94.98-3.57-.22-.37a9.42 9.42 0 0 1-1.45-5.03c.01-5.21 4.25-9.45 9.47-9.45 2.53 0 4.9.99 6.68 2.77a9.36 9.36 0 0 1 2.77 6.68c-.01 5.22-4.25 9.46-9.44 9.46Zm5.47-7.46c-.3-.15-1.78-.88-2.06-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.95 1.18-.17.2-.35.23-.65.08-.3-.15-1.26-.46-2.4-1.48-.89-.8-1.49-1.78-1.67-2.08-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.03-.53-.08-.15-.68-1.64-.93-2.24-.24-.58-.49-.5-.68-.51h-.58c-.2 0-.53.07-.81.37-.28.3-1.05 1.02-1.05 2.49 0 1.47 1.08 2.89 1.23 3.09.15.2 2.11 3.23 5.11 4.53.71.31 1.26.49 1.69.63.71.23 1.36.19 1.87.11.57-.09 1.76-.72 2.01-1.42.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z" /></svg>
+        <svg aria-hidden="true" className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24"><path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.4 0 .01 5.39 0 12.02c0 2.1.55 4.16 1.6 5.98L0 24l6.16-1.58a11.95 11.95 0 0 0 5.85 1.49h.01c6.63 0 12.02-5.39 12.03-12.02 0-3.22-1.25-6.24-3.53-8.41ZM12.02 21.4h-.01a9.4 9.4 0 0 1-4.78-1.3l-.34-.2-3.66.94.98-3.57-.22-.37a9.42 9.42 0 0 1-1.45-5.03c.01-5.21 4.25-9.45 9.47-9.45 2.53 0 4.9.99 6.68 2.77a9.36 9.36 0 0 1 2.77 6.68c-.01 5.22-4.25 9.46-9.44 9.46Zm5.47-7.46c-.3-.15-1.78-.88-2.06-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.95 1.18-.17.2-.35.23-.65.08-.3-.15-1.26-.46-2.4-1.48-.89-.8-1.49-1.78-1.67-2.08-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.03-.53-.08-.15-.68-1.64-.93-2.24-.24-.58-.49-.5-.68-.51h-.58c-.2 0-.53.07-.81.37-.28.3-1.05 1.02-1.05 2.49 0 1.47 1.08 2.89 1.23 3.09.15.2 2.11 3.23 5.11 4.53.71.31 1.26.49 1.69.63.71.23 1.36.19 1.87.11.57-.09 1.76-.72 2.01-1.42.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z" /></svg>
       </a>
     </main>
   );

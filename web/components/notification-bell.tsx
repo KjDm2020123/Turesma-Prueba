@@ -6,6 +6,7 @@ import { Bell, CheckCheck, MessageCircle, X } from "lucide-react";
 import { getAuthHeaders } from "../lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const NOTIFICATIONS_POLL_MS = 30000;
 
 type NotificationItem = {
   id: number;
@@ -98,10 +99,12 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   // Aviso emergente lateral (toast) que salta cuando llega una notificación nueva.
   const [toast, setToast] = useState<NotificationItem | null>(null);
   const lastSeenIdRef = useRef<number | null>(null);
+  const loadingRef = useRef(false);
 
   const loadNotifications = async () => {
-    if (!userId || !API_URL) return;
+    if (!userId || !API_URL || loadingRef.current || document.visibilityState === "hidden") return;
 
+    loadingRef.current = true;
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/comunicacion/notificaciones`, {
@@ -134,6 +137,7 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
       setUnreadCount(0);
       setItems([]);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   };
@@ -157,9 +161,29 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   };
 
   useEffect(() => {
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 5000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+    const startPolling = () => {
+      if (document.visibilityState !== "visible" || interval) return;
+      loadNotifications();
+      interval = setInterval(loadNotifications, NOTIFICATIONS_POLL_MS);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") startPolling();
+      else stopPolling();
+    };
+
+    startPolling();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 

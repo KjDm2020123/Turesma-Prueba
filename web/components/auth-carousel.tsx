@@ -2,23 +2,17 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FocusEvent } from "react";
 import { Bus } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-// Imagenes de respaldo, solo se usan si aun no hay vehiculos con foto en la BD.
-const FALLBACK_IMAGENES = [
-  { src: "/bus-hino-40.jpeg", alt: "Bus Hino de la flota Turesma" },
-  { src: "/jac-17.png", alt: "Vehiculo Jac de la flota Turesma" },
-  { src: "/jac-19.jpeg", alt: "Vehiculo Jac de la flota Turesma" },
-];
-
 type ImagenCarrusel = { src: string; alt: string };
 
 export default function AuthCarousel() {
-  const [imagenes, setImagenes] = useState<ImagenCarrusel[]>(FALLBACK_IMAGENES);
+  const [imagenes, setImagenes] = useState<ImagenCarrusel[]>([]);
   const [index, setIndex] = useState(0);
+  const [pausado, setPausado] = useState(false);
 
   // Usa la misma fuente publica que el carrusel "Nuestra Flota" de la pagina
   // de inicio, para que cualquier vehiculo que el admin agregue, edite o
@@ -43,15 +37,29 @@ export default function AuthCarousel() {
   }, []);
 
   useEffect(() => {
-    if (imagenes.length < 2) return;
+    if (imagenes.length < 2 || pausado) return;
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (motionPreference.matches) return;
     const id = setInterval(() => {
       setIndex((prev) => (prev + 1) % imagenes.length);
     }, 5000);
     return () => clearInterval(id);
-  }, [imagenes.length]);
+  }, [imagenes.length, pausado]);
+
+  const handleFocusLeave = (event: FocusEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setPausado(false);
+    }
+  };
 
   return (
-    <div className="relative hidden lg:flex lg:w-[42%] h-screen overflow-hidden bg-black shrink-0 flex-col justify-between p-10">
+    <aside
+      className="relative hidden h-screen w-[42%] shrink-0 overflow-hidden bg-[#081126] lg:block"
+      onMouseEnter={() => setPausado(true)}
+      onMouseLeave={() => setPausado(false)}
+      onFocusCapture={() => setPausado(true)}
+      onBlurCapture={handleFocusLeave}
+    >
       {imagenes.map((img, i) => (
         <Image
           key={img.src}
@@ -60,17 +68,23 @@ export default function AuthCarousel() {
           fill
           sizes="42vw"
           unoptimized
-          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out ${
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${
             i === index ? "opacity-100" : "opacity-0"
           }`}
         />
       ))}
 
-      <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/80" />
+      {imagenes.length === 0 && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[radial-gradient(ellipse_at_top_right,#263b60,#081126_70%)] text-white/70">
+          <Bus size={64} strokeWidth={1.2} className="text-yellow-400" />
+          <p className="text-sm font-bold uppercase tracking-[0.2em]">Nuestra flota</p>
+        </div>
+      )}
 
-      {/* LOGO */}
-      <Link href="/" className="relative z-10 flex items-center gap-3 w-fit">
-        <div className="bg-white p-2 rounded-full shadow-lg border-2 border-yellow-400">
+      <div className="absolute inset-0 bg-gradient-to-b from-[#071126]/85 via-[#071126]/20 to-[#071126]/90" />
+
+      <Link href="/" className="absolute left-10 top-10 z-10 flex items-center gap-3 rounded-full border border-white/15 bg-[#071126]/35 px-4 py-3 backdrop-blur-md transition-colors hover:bg-[#071126]/60">
+        <div className="rounded-full border border-yellow-400/70 bg-white p-2 shadow-lg">
           <Bus size={22} className="text-[#E31E24]" />
         </div>
         <div>
@@ -83,17 +97,30 @@ export default function AuthCarousel() {
         </div>
       </Link>
 
-      {/* INDICADORES */}
-      <div className="relative z-10 flex gap-2">
+      <div className="auth-carousel-copy absolute inset-x-8 top-[31%] z-10 max-w-lg rounded-3xl border border-white/10 bg-[#071126]/35 p-6 shadow-2xl shadow-black/10 backdrop-blur-sm sm:inset-x-10 sm:p-8">
+        <p className="mb-3 text-[11px] font-black uppercase tracking-[0.25em] text-yellow-400">Turesma S.A.</p>
+        <h2 className="text-3xl font-black italic leading-[1.08] tracking-tight text-white xl:text-5xl">
+          Tu próximo viaje empieza aquí.
+        </h2>
+        <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-white/85">
+          Transporte turístico y ejecutivo con comodidad, puntualidad y seguridad.
+        </p>
+      </div>
+
+      <div className="absolute bottom-10 left-10 z-10 flex items-center gap-2" role="group" aria-label="Seleccionar imagen de la flota">
         {imagenes.map((img, i) => (
-          <span
+          <button
             key={img.src}
-            className={`h-1.5 rounded-full transition-all duration-500 ${
+            type="button"
+            onClick={() => setIndex(i)}
+            aria-label={`Mostrar imagen ${i + 1} de ${imagenes.length}`}
+            aria-current={i === index ? "true" : undefined}
+            className={`h-2 rounded-full transition-all duration-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white ${
               i === index ? "w-8 bg-yellow-400" : "w-1.5 bg-white/40"
             }`}
           />
         ))}
       </div>
-    </div>
+    </aside>
   );
 }

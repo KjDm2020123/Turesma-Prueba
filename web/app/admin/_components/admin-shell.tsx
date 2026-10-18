@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import {
   BarChart3,
   ChevronRight,
@@ -35,10 +35,12 @@ import {
   SlidersHorizontal
   ,Ticket
 } from "lucide-react";
-import { clearStoredUser, getStoredUser } from "../../../lib/session";
+import { clearStoredUser } from "../../../lib/session";
 import { NotificationBell } from "../../../components/notification-bell";
 import { useAdminBadges } from "./use-admin-badges";
 import { AdminChatbot } from "./admin-chatbot";
+import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
+import { useAdminGuard } from "../../../lib/use-admin-guard";
 
 type AdminShellProps = {
   children: React.ReactNode;
@@ -111,17 +113,13 @@ const menuItems: MenuItem[] = menuGroups.flatMap((g) => g.items);
 
 export const AdminShell = ({ children }: AdminShellProps) => {
   const pathname = usePathname();
-  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<ReturnType<typeof getStoredUser> | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const mobileMenuRef = useRef<HTMLElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const { user, checkingSession } = useAdminGuard();
 
-  useEffect(() => {
-    setUser(getStoredUser());
-    setIsHydrated(true);
-  }, []);
-
-  const badges = useAdminBadges(isHydrated);
+  const badges = useAdminBadges(!checkingSession);
+  useMobileMenuAccessibility(isMobileMenuOpen, setIsMobileMenuOpen, mobileMenuRef, mobileMenuTriggerRef);
 
   const isActive = (href: string) => {
     if (href === "/admin") return pathname === "/admin";
@@ -157,8 +155,12 @@ export const AdminShell = ({ children }: AdminShellProps) => {
 
   const handleLogout = () => {
     clearStoredUser();
-    router.replace("/login");
+    window.location.assign("/api/auth/logout");
   };
+
+  if (checkingSession) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]" role="status" aria-live="polite">Verificando sesión...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-[#1a1a1a]">
@@ -190,6 +192,8 @@ export const AdminShell = ({ children }: AdminShellProps) => {
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
+                  aria-expanded={isOpen}
+                  aria-controls={`admin-desktop-group-${group.id}`}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all duration-300 ${
                     groupHasActive ? "text-white" : "text-gray-500 hover:bg-white/5 hover:text-white"
                   }`}
@@ -200,7 +204,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
                   </div>
                   <ChevronRight size={14} className={`transition-transform duration-300 ${isOpen ? "rotate-90" : ""}`} />
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"}`}>
+                <div id={`admin-desktop-group-${group.id}`} inert={!isOpen} className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"}`}>
                   <div className="pl-2 pb-1 space-y-1">
                     {group.items.map((item) => {
                       const active = isActive(item.href);
@@ -247,7 +251,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
             <div className="flex items-center gap-3 mb-4">
               <div className="relative">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-gray-700 to-gray-800 flex items-center justify-center text-sm font-black border border-white/10 text-white" suppressHydrationWarning>
-                  {isHydrated && user ? String(user.nombre || "AD").slice(0, 2).toUpperCase() : "AD"}
+                  {user ? String(user.nombre || "AD").slice(0, 2).toUpperCase() : "AD"}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-[#0b0f1a] rounded-full shadow-lg"></div>
               </div>
@@ -270,13 +274,22 @@ export const AdminShell = ({ children }: AdminShellProps) => {
       </aside>
 
       {/* MOBILE HEADER Y MENU (Se mantiene la lógica pero con nuevos colores) */}
-      <aside className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}>
+      <aside
+        id="admin-mobile-navigation"
+        ref={mobileMenuRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menú de navegación del administrador"
+        aria-hidden={!isMobileMenuOpen}
+        inert={!isMobileMenuOpen}
+        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}
+      >
         <div className="p-8 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-[#E31E24] rounded-lg flex items-center justify-center font-bold">T</div>
             <span className="font-black italic tracking-tighter uppercase">Turesma</span>
           </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors"><X size={20} /></button>
+          <button type="button" onClick={() => setIsMobileMenuOpen(false)} aria-label="Cerrar menú" className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2 transition-colors hover:bg-white/5"><X size={20} /></button>
         </div>
         <nav className="p-6 space-y-1.5 overflow-y-auto custom-scrollbar" style={{ maxHeight: "calc(100vh - 188px)" }}>
           {menuGroups.map((group) => {
@@ -288,7 +301,9 @@ export const AdminShell = ({ children }: AdminShellProps) => {
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.id)}
-                  className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all ${groupHasActive ? "text-white" : "text-gray-500 hover:bg-white/5"}`}
+                  aria-expanded={isOpen}
+                  aria-controls={`admin-mobile-group-${group.id}`}
+                  className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl transition-all ${groupHasActive ? "text-white" : "text-gray-300 hover:bg-white/5"}`}
                 >
                   <div className="flex items-center gap-3">
                     <GroupIcon size={18} />
@@ -296,12 +311,12 @@ export const AdminShell = ({ children }: AdminShellProps) => {
                   </div>
                   <ChevronRight size={16} className={`transition-transform duration-300 ${isOpen ? "rotate-90" : ""}`} />
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"}`}>
+                <div id={`admin-mobile-group-${group.id}`} inert={!isOpen} className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"}`}>
                   <div className="pl-2 pb-1 space-y-1">
                     {group.items.map((item) => {
                       const pendientes = badges[item.href] || 0;
                       return (
-                        <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)} className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${isActive(item.href) ? "bg-[#E31E24] text-white" : "text-gray-500 hover:bg-white/5"}`}>
+                        <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)} className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${isActive(item.href) ? "bg-[#E31E24] text-white" : "text-gray-300 hover:bg-white/5"}`}>
                           <div className="flex items-center gap-4">
                             <item.icon size={20} />
                             <span className="font-bold text-sm uppercase tracking-tight">{item.label}</span>
@@ -323,7 +338,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         <div className="absolute bottom-0 left-0 right-0 border-t border-white/5 p-4">
           <button
             onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-500 hover:bg-white/5 hover:text-red-400 transition-all"
+            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-300 hover:bg-white/5 hover:text-red-400 transition-all"
             type="button"
           >
             <LogOut size={20} />
@@ -332,13 +347,17 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         </div>
       </aside>
 
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-[60] bg-black/45" aria-hidden="true" onClick={() => setIsMobileMenuOpen(false)} />
+      )}
+
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col lg:ml-72 h-screen relative min-w-0 overflow-hidden">
         
         {/* HEADER SUPERIOR - GLASSMORPHISM */}
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200 px-3 py-2 sm:px-6 sm:py-4 flex items-center justify-between shadow-sm h-14 sm:h-16">
           <div className="flex items-center gap-3">
-            <button className="lg:hidden p-2 text-[#E31E24] hover:bg-red-50 rounded-xl transition-all" onClick={() => setIsMobileMenuOpen(true)} aria-label="Abrir menú">
+            <button ref={mobileMenuTriggerRef} className="lg:hidden flex min-h-11 min-w-11 items-center justify-center rounded-xl p-2 text-[#E31E24] transition-all hover:bg-red-50" onClick={() => setIsMobileMenuOpen(true)} type="button" aria-label="Abrir menú" aria-expanded={isMobileMenuOpen} aria-controls="admin-mobile-navigation">
               <Menu size={24} />
             </button>
             {/* Logo + sección (visible en móvil, donde el sidebar está oculto) */}

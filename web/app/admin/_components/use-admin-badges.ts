@@ -14,8 +14,11 @@ export const useAdminBadges = (enabled: boolean) => {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    let loading = false;
 
     const load = async () => {
+      if (loading || document.visibilityState === "hidden") return;
+      loading = true;
       try {
         const res = await fetch(`${API_URL}/api/admin/badges-sidebar`, { headers: getAuthHeaders() });
         if (!res.ok) return;
@@ -23,12 +26,22 @@ export const useAdminBadges = (enabled: boolean) => {
         if (!cancelled) setBadges(data || {});
       } catch {
         // silencio
+      } finally {
+        loading = false;
       }
     };
 
     load();
     const interval = setInterval(load, 15000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [enabled]);
 
   return badges;

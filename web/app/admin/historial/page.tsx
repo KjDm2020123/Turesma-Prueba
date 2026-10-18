@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
+import { escapeReportHtml, openPrintableReport } from "../../../lib/print-report";
 import {
   Loader2, FileDown, TrendingUp, TrendingDown, DollarSign, Bus, Wallet, Calendar,
 } from "lucide-react";
@@ -55,7 +56,7 @@ export default function AdminHistorialPage() {
     const hoy = new Date();
     const filas = meses.map(m => `
       <tr>
-        <td><b>${m.nombre}</b></td>
+        <td><b>${escapeReportHtml(m.nombre)}</b></td>
         <td style="text-align:center">${m.viajes}</td>
         <td style="text-align:center">${m.pasajeros}</td>
         <td style="text-align:right;color:#047857;font-weight:700">${fmt(m.ingresos)}</td>
@@ -86,7 +87,7 @@ export default function AdminHistorialPage() {
         @media print{.noprint{display:none}}
       </style></head><body>
       <div class="head">
-        <img src="${logoUrl}" alt="Turesma" onerror="this.style.display='none'"/>
+        <img class="report-logo" src="${logoUrl}" alt="Turesma" onerror="this.style.display='none'"/>
         <h1>Balance anual de operaciones ${anio}</h1>
         <p>Generado el ${hoy.toLocaleDateString("es-EC", { day: "2-digit", month: "long", year: "numeric" })} a las ${hoy.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}</p>
       </div>
@@ -96,7 +97,7 @@ export default function AdminHistorialPage() {
         <div class="kpi"><p class="t">Gastos mantenimiento</p><p class="v" style="color:#b45309">${fmt(resumen.gastos)}</p></div>
         <div class="kpi"><p class="t">Utilidad</p><p class="v" style="color:#0369a1">${fmt(resumen.utilidad)}</p></div>
       </div>
-      <p style="font-size:12px;color:#475569;margin-bottom:14px">Mejor mes: <b>${resumen.mejorMes || "—"}</b> · Mes más bajo: <b>${resumen.peorMes || "—"}</b> · Pasajeros transportados: <b>${resumen.pasajeros}</b></p>
+      <p style="font-size:12px;color:#475569;margin-bottom:14px">Mejor mes: <b>${escapeReportHtml(resumen.mejorMes || "—")}</b> · Mes más bajo: <b>${escapeReportHtml(resumen.peorMes || "—")}</b> · Pasajeros transportados: <b>${resumen.pasajeros}</b></p>
       <h2>Detalle mes a mes</h2>
       <table>
         <thead><tr><th>Mes</th><th style="text-align:center">Viajes</th><th style="text-align:center">Pasajeros</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Gastos</th><th style="text-align:right">Utilidad</th><th style="text-align:center">Cancelados</th><th style="text-align:center">Crecim.</th></tr></thead>
@@ -116,10 +117,8 @@ export default function AdminHistorialPage() {
       <div class="noprint" style="text-align:center;margin-top:26px"><button onclick="window.print()" style="background:#E31E24;color:#fff;border:none;padding:12px 30px;border-radius:10px;font-weight:800;cursor:pointer;text-transform:uppercase;letter-spacing:1px">Descargar / Imprimir PDF</button></div>
       </body></html>`;
 
-    const win = window.open("", "_blank");
+    const win = openPrintableReport(html);
     if (!win) return;
-    win.document.write(html);
-    win.document.close();
   };
 
   if (checkingSession) return (

@@ -10,7 +10,9 @@ const fs = require("fs");
 const LOGO_PATH = (() => {
   const candidates = [
     path.join(process.cwd(), "assets", "logo.png"),
+    path.join(process.cwd(), "..", "web", "public", "logo.png"),
     path.join(__dirname, "..", "..", "assets", "logo.png"),
+    path.join(__dirname, "..", "..", "..", "web", "public", "logo.png"),
     path.join(__dirname, "..", "assets", "logo.png"),
   ];
   for (const p of candidates) { try { if (fs.existsSync(p)) return p; } catch { /* nada */ } }
@@ -115,10 +117,14 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
     doc.text(`Razón Social: ${e.razon}`, { width, align: "center" });
     doc.text(`Dirección: ${e.direccion}`, { width, align: "center" });
     doc.text(`Teléfono: ${e.telefonos}`, { width, align: "center" });
-    doc.fillColor("#2563eb").text(`Email: ${e.email}`, { width, align: "center" });
+    doc.fillColor("#e31e24").text(`Email: ${e.email}`, { width, align: "center" });
     doc.fillColor("#000000");
 
     doc.moveDown(1.2);
+    const dividerY = doc.y;
+    doc.lineWidth(2).strokeColor("#e31e24").moveTo(left, dividerY).lineTo(right, dividerY).stroke();
+    doc.strokeColor("#0b0f1a");
+    doc.moveDown(0.8);
 
     // ── Cliente + N° de proforma ──
     let y = doc.y;

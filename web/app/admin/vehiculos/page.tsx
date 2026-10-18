@@ -5,10 +5,10 @@ import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
-import { descargarCSV } from "../../../lib/download";
+import { descargarCSV, descargarExcel } from "../../../lib/download";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Bus, Plus, Edit3, Trash2, X, Search,
+  Bus, Plus, Edit3, Trash2, X, Search, FileSpreadsheet,
   CheckCircle, AlertCircle, Wrench, Car,
   Users, Loader2, UploadCloud, Download, GripVertical
 } from "lucide-react";
@@ -56,6 +56,31 @@ const ESTADO_ICON: Record<string, React.ReactNode> = {
 
 const INPUT_CLS = "w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white placeholder:font-normal";
 
+const drawVehicleCrop = (
+  canvas: HTMLCanvasElement,
+  image: HTMLImageElement,
+  position: { x: number; y: number },
+  zoom: number,
+  frameWidth: number,
+) => {
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("No se pudo preparar la vista previa");
+
+  context.fillStyle = "#f8fafc";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight) * zoom;
+  const width = image.naturalWidth * scale;
+  const height = image.naturalHeight * scale;
+  const positionScale = canvas.width / frameWidth;
+  context.drawImage(
+    image,
+    (canvas.width - width) / 2 + position.x * positionScale,
+    (canvas.height - height) / 2 + position.y * positionScale,
+    width,
+    height,
+  );
+};
+
 export default function AdminVehiculosPage() {
   const { checkingSession } = useAdminGuard();
   const confirmar = useConfirm();
@@ -63,6 +88,7 @@ export default function AdminVehiculosPage() {
   const [conductores, setConductores] = useState<ConductorOpt[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportando, setExportando] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [msg, setMsg] = useState("");
@@ -77,6 +103,16 @@ export default function AdminVehiculosPage() {
   const [draggingCrop, setDraggingCrop] = useState(false);
   const cropDragStart = useRef({ x: 0, y: 0 });
   const cropImageRef = useRef<HTMLImageElement>(null);
+  const cropFrameRef = useRef<HTMLDivElement>(null);
+  const cropPreviewRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const image = cropImageRef.current;
+    const frame = cropFrameRef.current;
+    const canvas = cropPreviewRef.current;
+    if (!image || !frame || !canvas || !image.complete || !image.naturalWidth) return;
+    drawVehicleCrop(canvas, image, cropPosition, cropZoom, frame.clientWidth);
+  }, [imageToCrop, cropPosition, cropZoom]);
 
   const emptyForm = {
     placa: "", tipo: "van", modelo: "", capacidad: "",
@@ -128,6 +164,13 @@ export default function AdminVehiculosPage() {
     setExportando(false);
   };
 
+  const exportarExcel = async () => {
+    setExportandoExcel(true); setErr("");
+    const result = await descargarExcel("/api/admin/reportes/exportar-csv?tipo=vehiculos&formato=xlsx", "reporte_vehiculos.xlsx");
+    if (!result.ok) setErr(result.error || "No se pudo exportar");
+    setExportandoExcel(false);
+  };
+
   const openEdit = (v: Vehiculo) => {
     setEditingId(v.id);
     setForm({
@@ -163,20 +206,13 @@ export default function AdminVehiculosPage() {
     setUploadingImg(true);
     try {
       const image = cropImageRef.current;
-      if (!image) throw new Error("La imagen aún no está lista");
+      const frame = cropFrameRef.current;
+      if (!image || !frame || !image.complete) throw new Error("La imagen aún no está lista");
 
       const canvas = document.createElement("canvas");
       canvas.width = 960;
       canvas.height = 540;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("No se pudo preparar la imagen");
-
-      context.fillStyle = "#f8fafc";
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight) * cropZoom;
-      const width = image.naturalWidth * scale;
-      const height = image.naturalHeight * scale;
-      context.drawImage(image, (canvas.width - width) / 2 + cropPosition.x * 3, (canvas.height - height) / 2 + cropPosition.y * 3, width, height);
+      drawVehicleCrop(canvas, image, cropPosition, cropZoom, frame.clientWidth);
 
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
       if (!blob) throw new Error("No se pudo procesar la imagen");
@@ -205,6 +241,60 @@ export default function AdminVehiculosPage() {
   const moveCrop = (event: PointerEvent<HTMLDivElement>) => {
     if (!draggingCrop) return;
     setCropPosition({ x: event.clientX - cropDragStart.current.x, y: event.clientY - cropDragStart.current.y });
+  };
+
+  const renderVehicleCardPreview = (showCropCanvas: boolean) => {
+    const previewStatus = form.estado === "disponible"
+      ? "Disponible"
+      : form.estado === "en_servicio"
+        ? "En Servicio"
+        : form.estado === "mantenimiento"
+          ? "Mantenimiento"
+          : "Inactivo";
+    const statusColor = form.estado === "disponible"
+      ? "text-green-600"
+      : form.estado === "en_servicio"
+        ? "text-blue-600"
+        : "text-amber-600";
+
+    return (
+      <div className="w-full">
+        <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Vista previa en la web principal</p>
+        <div className="mx-auto flex w-full max-w-[360px] flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl">
+          {showCropCanvas ? (
+            <canvas ref={cropPreviewRef} width={960} height={540} className="h-56 w-full bg-slate-100 object-cover sm:h-64" />
+          ) : (
+            <Image
+              src={form.imagen_url}
+              alt={`${form.tipo || "Vehículo"} ${form.placa}`}
+              width={720}
+              height={512}
+              sizes="(max-width: 640px) 85vw, 360px"
+              unoptimized
+              className="h-56 w-full object-cover sm:h-64"
+            />
+          )}
+          <div className="flex flex-1 flex-col p-7">
+            <span className="text-[10px] font-black uppercase tracking-widest text-green-600">
+              {form.capacidad ? `${form.capacidad} Pasajeros` : "Transporte"}
+            </span>
+            <h4 className="mt-2 text-2xl font-black italic text-gray-900">
+              {form.modelo || form.tipo || "Vehículo"}
+            </h4>
+            {form.descripcion && (
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-gray-500">{form.descripcion}</p>
+            )}
+            <div className="mt-6 flex items-center justify-between border-t pt-6">
+              <span className={`text-xs font-bold uppercase ${statusColor}`}>Estado: {previewStatus}</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-gray-50 px-2 py-1 text-xs font-bold uppercase text-gray-400">{form.placa || "PLACA"}</span>
+                <Bus size={20} className="text-[#E31E24]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -294,6 +384,10 @@ export default function AdminVehiculosPage() {
         <button onClick={exportarCSV} disabled={exportando} className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white border border-slate-800 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
           {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
           Exportar CSV
+        </button>
+        <button onClick={exportarExcel} disabled={exportandoExcel} className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
+          {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+          Excel con diseño
         </button>
         <button onClick={openCreate} className="flex items-center gap-2 bg-[#E31E24] hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/20">
           <Plus size={16} />
@@ -550,39 +644,50 @@ export default function AdminVehiculosPage() {
                   <UploadCloud className="mx-auto text-slate-300 mb-2" size={28} />
                   <p className="text-xs font-bold text-slate-400">Haz clic para cargar foto</p>
                   {uploadingImg && <Loader2 className="animate-spin mx-auto mt-2 text-[#E31E24]" size={18} />}
-                  {form.imagen_url && <Image src={form.imagen_url} alt="Vista previa" width={640} height={112} unoptimized className="mt-3 h-28 w-full object-cover rounded-xl" />}
                 </div>
                 {imageToCrop && (
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-900 p-4 text-white">
-                    <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Ajusta el encuadre</p>
-                    <div
-                      className="relative mx-auto aspect-video max-w-lg cursor-grab overflow-hidden rounded-xl bg-black active:cursor-grabbing"
-                      onPointerDown={startCropDrag}
-                      onPointerMove={moveCrop}
-                      onPointerUp={() => setDraggingCrop(false)}
-                      onPointerCancel={() => setDraggingCrop(false)}
-                    >
-                      <Image
-                        ref={cropImageRef}
-                        src={imageToCrop}
-                        alt="Vista previa del encuadre"
-                        fill
-                        sizes="640px"
-                        unoptimized
-                        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
-                        style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${cropZoom})` }}
-                      />
-                      <div className="pointer-events-none absolute inset-0 border-2 border-white/70" />
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-900 p-4 text-white">
+                      <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Ajusta el encuadre</p>
+                      <div
+                        ref={cropFrameRef}
+                        className="relative mx-auto aspect-video max-w-lg cursor-grab overflow-hidden rounded-xl bg-black active:cursor-grabbing"
+                        onPointerDown={startCropDrag}
+                        onPointerMove={moveCrop}
+                        onPointerUp={() => setDraggingCrop(false)}
+                        onPointerCancel={() => setDraggingCrop(false)}
+                      >
+                        <Image
+                          ref={cropImageRef}
+                          src={imageToCrop}
+                          alt="Vista previa del encuadre"
+                          fill
+                          sizes="640px"
+                          unoptimized
+                          onLoad={(event) => {
+                            const frame = cropFrameRef.current;
+                            const canvas = cropPreviewRef.current;
+                            if (frame && canvas) {
+                              drawVehicleCrop(canvas, event.currentTarget, cropPosition, cropZoom, frame.clientWidth);
+                            }
+                          }}
+                          className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+                          style={{ transform: `translate(${cropPosition.x}px, ${cropPosition.y}px) scale(${cropZoom})` }}
+                        />
+                        <div className="pointer-events-none absolute inset-0 border-2 border-white/70" />
+                      </div>
+                      <div className="mt-3 flex items-center gap-3">
+                        <span className="text-xs text-slate-300">Zoom</span>
+                        <input type="range" min="0.5" max="2" step="0.05" value={cropZoom} onChange={e => setCropZoom(Number(e.target.value))} className="w-full accent-[#E31E24]" />
+                        <button type="button" onClick={uploadCroppedImage} disabled={uploadingImg} className="shrink-0 rounded-xl bg-[#E31E24] px-3 py-2 text-[10px] font-black uppercase tracking-widest disabled:opacity-60">
+                          {uploadingImg ? "Subiendo..." : "Usar foto"}
+                        </button>
+                      </div>
                     </div>
-                    <div className="mt-3 flex items-center gap-3">
-                      <span className="text-xs text-slate-300">Zoom</span>
-                      <input type="range" min="0.5" max="2" step="0.05" value={cropZoom} onChange={e => setCropZoom(Number(e.target.value))} className="w-full accent-[#E31E24]" />
-                      <button type="button" onClick={uploadCroppedImage} disabled={uploadingImg} className="shrink-0 rounded-xl bg-[#E31E24] px-3 py-2 text-[10px] font-black uppercase tracking-widest disabled:opacity-60">
-                        {uploadingImg ? "Subiendo..." : "Usar foto"}
-                      </button>
-                    </div>
+                    {renderVehicleCardPreview(true)}
                   </div>
                 )}
+                {!imageToCrop && form.imagen_url && renderVehicleCardPreview(false)}
               </div>
 
               {/* Días de servicio */}

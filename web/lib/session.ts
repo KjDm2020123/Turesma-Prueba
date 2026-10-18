@@ -135,7 +135,7 @@ export const handleUnauthorized = (status: number): boolean => {
   if (status === 401) {
     clearStoredUser();
     if (typeof window !== "undefined") {
-      window.location.href = "/";
+      window.location.href = "/api/auth/logout";
     }
     return true;
   }

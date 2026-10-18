@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import { useState, useRef } from "react";
 import {
   Bus,
   FileText,
@@ -15,10 +15,12 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { clearStoredUser, getStoredUser } from "../../../lib/session";
+import { clearStoredUser } from "../../../lib/session";
 import { NotificationBell } from "../../../components/notification-bell";
 import { ClienteChatbot } from "../../../components/cliente-chatbot";
 import { useClienteBadges } from "./use-cliente-badges";
+import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
+import { useClienteGuard } from "../../../lib/use-cliente-guard";
 
 type MenuItem = {
   href: string;
@@ -37,31 +39,15 @@ type ClienteShellProps = {
   children: React.ReactNode;
 };
 
-let storedUserSnapshot: ReturnType<typeof getStoredUser> | null | undefined;
-
-function getClientUserSnapshot() {
-  if (storedUserSnapshot === undefined) {
-    storedUserSnapshot = getStoredUser();
-  }
-  return storedUserSnapshot;
-}
-
 export function ClienteShell({ children }: ClienteShellProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const isHydrated = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
-  const user = useSyncExternalStore<ReturnType<typeof getStoredUser> | null>(
-    () => () => undefined,
-    getClientUserSnapshot,
-    () => null,
-  );
+  const mobileMenuRef = useRef<HTMLElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const { user, checkingSession } = useClienteGuard();
 
-  const badges = useClienteBadges(isHydrated);
+  const badges = useClienteBadges(!checkingSession);
+  useMobileMenuAccessibility(isMobileMenuOpen, setIsMobileMenuOpen, mobileMenuRef, mobileMenuTriggerRef);
 
   const isActive = (href: string) => {
     if (href === "/cliente") return pathname === "/cliente";
@@ -75,11 +61,11 @@ export function ClienteShell({ children }: ClienteShellProps) {
 
   const handleLogout = () => {
     clearStoredUser();
-    router.replace("/login");
+    window.location.assign("/api/auth/logout");
   };
 
-  if (!isHydrated) {
-    return <div className="min-h-screen bg-[#f8f9fa]" />;
+  if (checkingSession) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#f8f9fa]" role="status" aria-live="polite">Verificando sesión...</div>;
   }
 
   return (
@@ -140,7 +126,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
             <div className="flex items-center gap-3 mb-4">
               <div className="relative">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-gray-700 to-gray-800 flex items-center justify-center text-sm font-black border border-white/10 text-white" suppressHydrationWarning>
-                  {isHydrated && user ? String(user.nombre || "CL").slice(0, 2).toUpperCase() : "CL"}
+                  {user ? String(user.nombre || "CL").slice(0, 2).toUpperCase() : "CL"}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-[#0b0f1a] rounded-full shadow-lg"></div>
               </div>
@@ -163,13 +149,22 @@ export function ClienteShell({ children }: ClienteShellProps) {
         </div>
       </aside>
 
-      <aside className={`fixed inset-y-0 left-0 w-72 bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}>
+      <aside
+        id="cliente-mobile-navigation"
+        ref={mobileMenuRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menú de navegación del cliente"
+        aria-hidden={!isMobileMenuOpen}
+        inert={!isMobileMenuOpen}
+        className={`fixed inset-y-0 left-0 w-72 bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}
+      >
         <div className="p-8 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-[#E31E24] rounded-lg flex items-center justify-center font-bold">T</div>
             <span className="font-black italic tracking-tighter uppercase">Turesma</span>
           </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors" type="button">
+          <button onClick={() => setIsMobileMenuOpen(false)} className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2 transition-colors hover:bg-white/5" type="button" aria-label="Cerrar menú">
             <X size={20} />
           </button>
         </div>
@@ -183,7 +178,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
-                className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${active ? "bg-[#E31E24] text-white" : "text-gray-500 hover:bg-white/5"}`}
+                className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${active ? "bg-[#E31E24] text-white" : "text-gray-300 hover:bg-white/5"}`}
               >
                 <div className="flex items-center gap-4">
                   <item.icon size={20} />
@@ -201,7 +196,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
         <div className="absolute bottom-0 left-0 right-0 border-t border-white/5 p-4">
           <button
             onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
-            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-500 hover:bg-white/5 hover:text-red-400 transition-all"
+            className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-300 hover:bg-white/5 hover:text-red-400 transition-all"
             type="button"
           >
             <LogOut size={20} />
@@ -213,7 +208,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
       <main className="flex-1 flex flex-col lg:ml-72 h-screen relative min-w-0 overflow-hidden">
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-3">
-            <button className="lg:hidden p-2 text-[#E31E24] hover:bg-red-50 rounded-xl transition-all" onClick={() => setIsMobileMenuOpen(true)} type="button" aria-label="Abrir menú">
+            <button ref={mobileMenuTriggerRef} className="lg:hidden flex min-h-11 min-w-11 items-center justify-center rounded-xl p-2 text-[#E31E24] transition-all hover:bg-red-50" onClick={() => setIsMobileMenuOpen(true)} type="button" aria-label="Abrir menú" aria-expanded={isMobileMenuOpen} aria-controls="cliente-mobile-navigation">
               <Menu size={24} />
             </button>
             {/* Logo + sección (visible en móvil, donde el sidebar está oculto) */}
@@ -236,7 +231,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
               </div>
               {user?.imagen_url ? (
                 <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm border border-slate-200">
-                  <Image src={user.imagen_url} alt={user?.nombre || "Cliente"} fill sizes="40px" unoptimized className="object-cover" />
+                  <Image src={user.imagen_url} alt={user?.nombre || "Cliente"} fill sizes="40px" className="object-cover" />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-[#E31E24] flex items-center justify-center text-white shadow-sm">
@@ -263,7 +258,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
       </main>
 
       {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 bg-black/45 z-[60]" onClick={() => setIsMobileMenuOpen(false)} />
+        <div className="lg:hidden fixed inset-0 bg-black/45 z-[60]" aria-hidden="true" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       <ClienteChatbot />

@@ -1,6 +1,118 @@
 export {};
 
 const pool = require("../../config/db");
+const ExcelJS = require("exceljs");
+const fs = require("fs");
+const path = require("path");
+
+const LOGO_PATHS = [
+  path.join(process.cwd(), "..", "web", "public", "logo.png"),
+  path.join(__dirname, "..", "..", "..", "..", "web", "public", "logo.png"),
+];
+
+const createExcelReport = async (res, { rows, headers, headerLabels, filename, title }) => {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Turesma S.A.";
+  workbook.created = new Date();
+  workbook.subject = title;
+
+  const worksheet = workbook.addWorksheet("Reporte", {
+    pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    views: [{ state: "frozen", ySplit: 8 }],
+  });
+  const columnCount = headers.length;
+  const lastColumn = worksheet.getColumn(columnCount).letter;
+  worksheet.columns = headers.map((header) => ({
+    key: header,
+    width: Math.max(16, Math.min(32, (headerLabels[header] ?? header).length + 4)),
+  }));
+
+  worksheet.mergeCells(`A1:${lastColumn}3`);
+  worksheet.mergeCells(`A4:${lastColumn}4`);
+  worksheet.mergeCells(`A5:${lastColumn}5`);
+  worksheet.mergeCells(`A6:${lastColumn}6`);
+  worksheet.getRow(1).height = 26;
+  worksheet.getRow(2).height = 26;
+  worksheet.getRow(3).height = 18;
+  worksheet.getRow(4).height = 30;
+  worksheet.getRow(5).height = 20;
+  worksheet.getRow(6).height = 20;
+  worksheet.getRow(7).height = 8;
+
+  const titleCell = worksheet.getCell("A4");
+  titleCell.value = title;
+  titleCell.font = { name: "Arial", size: 18, bold: true, color: { argb: "FFFFFFFF" } };
+  titleCell.alignment = { vertical: "middle", horizontal: "center" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B0F1A" } };
+
+  const generatedCell = worksheet.getCell("A5");
+  generatedCell.value = "REPORTE TURESMA S.A.";
+  generatedCell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFD400" } };
+  generatedCell.alignment = { vertical: "middle", horizontal: "center" };
+  generatedCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B0F1A" } };
+
+  worksheet.getCell("A6").value =
+    `Generado: ${new Date().toLocaleString("es-EC")}  |  Registros: ${rows.length}`;
+  worksheet.getCell("A6").font = { name: "Arial", size: 10, color: { argb: "FF475569" } };
+  worksheet.getCell("A6").alignment = { vertical: "middle", horizontal: "center" };
+
+  const logoPath = LOGO_PATHS.find((candidate) => fs.existsSync(candidate));
+  if (logoPath) {
+    const imageId = workbook.addImage({ buffer: fs.readFileSync(logoPath), extension: "png" });
+    const logoStartColumn = Math.max(0, (columnCount - 2) / 2);
+    worksheet.addImage(imageId, {
+      tl: { col: logoStartColumn, row: 0.15 },
+      br: { col: logoStartColumn + 2, row: 2.85 },
+      editAs: "oneCell",
+    });
+  } else {
+    const brandCell = worksheet.getCell("A1");
+    brandCell.value = "TURESMA S.A.";
+    brandCell.font = { name: "Arial", size: 16, bold: true, color: { argb: "FFE31E24" } };
+    brandCell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  }
+
+  const headerRow = worksheet.getRow(8);
+  headers.forEach((header, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = headerLabels[header] ?? header;
+    cell.font = { name: "Arial", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B0F1A" } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = { bottom: { style: "medium", color: { argb: "FFE31E24" } } };
+  });
+  headerRow.height = 30;
+
+  rows.forEach((row, rowIndex) => {
+    const excelRow = worksheet.getRow(rowIndex + 9);
+    headers.forEach((header, columnIndex) => {
+      const value = row[header];
+      const cell = excelRow.getCell(columnIndex + 1);
+      cell.value = value instanceof Date ? value.toISOString().slice(0, 10) : value ?? "";
+      cell.font = { name: "Arial", size: 10, color: { argb: "FF1E293B" } };
+      cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+      cell.border = { bottom: { style: "hair", color: { argb: "FFE2E8F0" } } };
+      if (rowIndex % 2 === 1) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+      }
+      if (/total|rating_promedio/i.test(header) && typeof value === "number") {
+        cell.numFmt = header.toLowerCase().includes("total") ? '$#,##0.00' : "0.00";
+      }
+    });
+    excelRow.height = 22;
+  });
+
+  worksheet.autoFilter = {
+    from: { row: 8, column: 1 },
+    to: { row: 8, column: columnCount },
+  };
+  worksheet.pageSetup.printTitlesRow = "1:8";
+  const buffer = await workbook.xlsx.writeBuffer();
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  return res.status(200).send(Buffer.from(buffer));
+};
 
 const historialViajes = async (_req, res) => {
   try {
@@ -192,6 +304,7 @@ const exportarReporteCSV = async (req, res) => {
   try {
     let rows: any[] = [];
     let headers: string[] = [];
+    let headerLabels: Record<string, string> = {};
     let filename = "reporte";
 
     if (tipo === "vehiculos") {
@@ -207,6 +320,16 @@ const exportarReporteCSV = async (req, res) => {
       );
       rows = result.rows;
       headers = ["placa", "modelo", "tipo", "capacidad", "color", "estado", "conductor", "viajes_realizados"];
+      headerLabels = {
+        placa: "Placa",
+        modelo: "Modelo",
+        tipo: "Tipo de vehículo",
+        capacidad: "Capacidad (pasajeros)",
+        color: "Color",
+        estado: "Estado",
+        conductor: "Conductor asignado",
+        viajes_realizados: "Viajes realizados",
+      };
       filename = "reporte_vehiculos";
     } else if (tipo === "conductores") {
       const result = await pool.query(
@@ -219,6 +342,17 @@ const exportarReporteCSV = async (req, res) => {
       );
       rows = result.rows;
       headers = ["nombre", "email", "telefono", "licencia", "estado", "rating_promedio", "viajes_completados", "horas_conduccion", "estado_documentos"];
+      headerLabels = {
+        nombre: "Nombre",
+        email: "Correo electrónico",
+        telefono: "Teléfono",
+        licencia: "Tipo de licencia",
+        estado: "Estado",
+        rating_promedio: "Calificación promedio",
+        viajes_completados: "Viajes completados",
+        horas_conduccion: "Horas de conducción",
+        estado_documentos: "Estado de documentos",
+      };
       filename = "reporte_conductores";
     } else {
       // reservas (default) — admite filtrar por rango de fecha (?desde=&hasta=),
@@ -248,20 +382,42 @@ const exportarReporteCSV = async (req, res) => {
       );
       rows = result.rows;
       headers = ["id", "fecha_reserva", "estado", "num_personas", "total", "cliente", "servicio", "conductor", "vehiculo"];
+      headerLabels = {
+        id: "N.º de reserva",
+        fecha_reserva: "Fecha de reserva",
+        estado: "Estado",
+        num_personas: "Número de pasajeros",
+        total: "Total (USD)",
+        cliente: "Cliente",
+        servicio: "Servicio",
+        conductor: "Conductor",
+        vehiculo: "Vehículo",
+      };
       filename = "reporte_reservas";
     }
 
-    // Generar CSV. pg devuelve las columnas DATE como objetos Date de JS: sin
-    // este formateo, String(valor) imprime algo como "Wed Jul 22 2026 00:00:00
-    // GMT-0500 (hora de Ecuador)" en vez de una fecha limpia para Excel.
+    if (String(req.query.formato || "").toLowerCase() === "xlsx") {
+      const titles = {
+        vehiculos: "Reporte de flota vehicular",
+        conductores: "Reporte de conductores",
+        reservas: "Reporte de reservas",
+      };
+      const title = titles[tipo] || titles.reservas;
+      return await createExcelReport(res, { rows, headers, headerLabels, filename, title });
+    }
+
+    const escapeCsvCell = (value: unknown) => {
+      const raw = value instanceof Date ? value.toISOString().slice(0, 10) : String(value ?? "");
+      const isNumeric = /^-?\d+(?:\.\d+)?$/.test(raw.trim());
+      const safe = !isNumeric && /^[\t\r\n ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+      const escaped = safe.replace(/"/g, '""');
+      return /[",\r\n]/.test(escaped) ? `"${escaped}"` : escaped;
+    };
+
     const csvLines = [
-      headers.join(","),
+      headers.map((header) => escapeCsvCell(headerLabels[header] ?? header)).join(","),
       ...rows.map((row) =>
-        headers.map((h) => {
-          const val = row[h] ?? "";
-          const str = (val instanceof Date ? val.toISOString().slice(0, 10) : String(val)).replace(/"/g, '""');
-          return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str}"` : str;
-        }).join(",")
+        headers.map((header) => escapeCsvCell(row[header])).join(",")
       ),
     ];
 

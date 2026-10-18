@@ -1,21 +1,17 @@
 "use client";
 
 import { Bot, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   text: string;
+  action?: { label: string; href: string };
 };
 
-const quickSuggestions = [
-  "¿Cuánto cuesta un Van?",
-  "¿Hay oferta del día?",
-  "¿Qué tipo de vehículo me recomienda?",
-  "¿Cómo cotizo?",
-  "¿Dónde veo mi historial?",
-];
+const quickSuggestions = ["Quiero cotizar un viaje", "¿Cuánto cuesta un Van?", "¿Hay descuentos disponibles?", "¿Dónde veo mis reservas?"];
 
 const faqAnswers = [
   {
@@ -68,29 +64,91 @@ function normalizeText(value: string) {
     .trim();
 }
 
-function getBotReply(input: string) {
+function getBotReply(input: string): Omit<ChatMessage, "id" | "role"> {
   const cleanInput = normalizeText(input);
 
   if (!cleanInput) {
-    return "Escribe tu consulta y te ayudaré con la información más importante.";
+    return { text: "Escribe tu consulta y te ayudaré con la información más importante." };
   }
 
-  for (const item of faqAnswers) {
-    const hasMatch = item.keywords.some((keyword) => cleanInput.includes(keyword));
-    if (hasMatch) {
-      return item.answer;
-    }
+  if (/^(hola|buenas|buenos dias|buenas tardes|buenas noches)\b/.test(cleanInput)) {
+    return {
+      text: "¡Hola! Puedo orientarte para cotizar, revisar tus reservas o consultar cómo se calcula el precio. ¿Qué necesitas hacer?",
+      action: { label: "Ir a Cotizar", href: "/cliente/cotizar" },
+    };
   }
 
-  if (cleanInput.includes("gracias") || cleanInput.includes("hola") || cleanInput.includes("buenas")) {
-    return "¡Hola! Puedo ayudarte con cotizaciones, precios por tipo de vehículo, oferta del día, reservas, historial y pagos. ¿Qué quieres revisar?";
+  if (cleanInput.includes("gracias")) {
+    return { text: "¡Con gusto! Si necesitas algo más sobre tu viaje o reserva, aquí estoy." };
   }
 
-  if (cleanInput.includes("cuanto") || cleanInput.includes("precio") || cleanInput.includes("costo")) {
-    return "Los precios dependen del tipo de vehículo, la cantidad de pasajeros, la ruta y la fecha. Puedes ver la estimación en la cotización y también consultar los tipos disponibles: Van, Bus, SUV, Minibus y Sedan.";
+  if (/(oferta|descuento|promo)/.test(cleanInput)) {
+    return {
+      text: "No puedo confirmar desde aquí si hay una promoción activa. Si hay un descuento vigente para tu viaje, se mostrará en el desglose de la cotización antes de que la envíes.",
+      action: { label: "Consultar cotización", href: "/cliente/cotizar" },
+    };
   }
 
-  return "Puedo ayudarte con cotizaciones, pagos, reservas, historial, tipos de vehículo y oferta del día. Intenta preguntarme algo como: '¿Cuánto cuesta un Van?', '¿Hay oferta?', o '¿Cómo cotizo?'";
+  if (/(precio|cuanto|costo|cotiz|presupuesto|valor)/.test(cleanInput)) {
+    return {
+      text: "El valor depende del origen, destino, fecha, número de pasajeros y vehículo. No quiero darte un precio aproximado que pueda ser incorrecto: completa esos datos y verás el cálculo vigente antes de enviar la solicitud.",
+      action: { label: "Cotizar mi viaje", href: "/cliente/cotizar" },
+    };
+  }
+
+  if (/(van|bus|suv|minibus|sedan|vehiculo|carro|recomienda|recomendar)/.test(cleanInput)) {
+    return {
+      text: "La mejor opción depende principalmente del número de pasajeros y la ruta. En Cotizar puedes revisar los vehículos disponibles y su capacidad; si me dices cuántas personas viajan, puedo orientarte sobre qué capacidad buscar.",
+      action: { label: "Ver vehículos", href: "/cliente/cotizar" },
+    };
+  }
+
+  if (/(pago|tarjeta|cuota|abono|factura|cobro)/.test(cleanInput)) {
+    return {
+      text: "Puedes revisar los pagos y el detalle de cada servicio desde tu historial. Si tienes una duda sobre un cobro específico, ten a mano la reserva relacionada para que el equipo pueda ayudarte.",
+      action: { label: "Ver mis reservas", href: "/cliente/historial" },
+    };
+  }
+
+  if (/(historial|viaje|reserva|mis servicios)/.test(cleanInput)) {
+    return {
+      text: "En tu historial puedes consultar tus reservas, su estado y los datos del servicio.",
+      action: { label: "Abrir historial", href: "/cliente/historial" },
+    };
+  }
+
+  if (/(perfil|datos|nombre|telefono|editar|modificar)/.test(cleanInput)) {
+    return {
+      text: "Puedes revisar y actualizar la información de tu cuenta desde Perfil.",
+      action: { label: "Ir a mi perfil", href: "/cliente/perfil" },
+    };
+  }
+
+  if (/(cancelar|reprogramar|cambiar fecha|anular)/.test(cleanInput)) {
+    return {
+      text: "Las opciones para cambiar o cancelar dependen del estado y la fecha de tu reserva. Revisa primero el servicio en tu historial; si no aparece una opción para gestionarlo, contacta al equipo de Turesma.",
+      action: { label: "Buscar mi reserva", href: "/cliente/historial" },
+    };
+  }
+
+  if (/(estado|pendiente|confirmada|en curso|cancelada|aprobada)/.test(cleanInput)) {
+    return {
+      text: "El estado muestra en qué etapa está el servicio. Para explicarte el estado de una reserva concreta, revisa el detalle en tu historial.",
+      action: { label: "Ver estado de mis reservas", href: "/cliente/historial" },
+    };
+  }
+
+  if (faqAnswers.some(({ keywords }) => keywords.some((keyword) => cleanInput.includes(normalizeText(keyword))))) {
+    return {
+      text: "Puedo ayudarte con ese tema, pero necesito un poco más de detalle para orientarte correctamente. ¿Quieres consultar un precio, una reserva o un vehículo?",
+      action: { label: "Cotizar mi viaje", href: "/cliente/cotizar" },
+    };
+  }
+
+  return {
+    text: "No tengo suficiente información para responder eso con seguridad. Puedo orientarte sobre cotizaciones, precios, vehículos, pagos, reservas e información de tu perfil.",
+    action: { label: "Empezar una cotización", href: "/cliente/cotizar" },
+  };
 }
 
 export function ClienteChatbot() {
@@ -109,7 +167,10 @@ export function ClienteChatbot() {
     const text = value.trim();
     if (!text) return;
 
-    const messageId = crypto.randomUUID();
+    const messageId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `message-${messages.length}`;
+    const reply = getBotReply(text);
     const userMessage: ChatMessage = {
       id: `${messageId}-user`,
       role: "user",
@@ -119,7 +180,7 @@ export function ClienteChatbot() {
     const assistantMessage: ChatMessage = {
       id: `${messageId}-assistant`,
       role: "assistant",
-      text: getBotReply(text),
+      ...reply,
     };
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
@@ -152,7 +213,7 @@ export function ClienteChatbot() {
           </div>
 
           <div className="flex max-h-[420px] flex-col gap-3 bg-slate-50 p-3">
-            <div className="flex flex-wrap gap-2">
+            {messages.length === 1 && <div className="flex flex-wrap gap-2">
               {quickSuggestions.map((suggestion) => (
                 <button
                   key={suggestion}
@@ -163,7 +224,7 @@ export function ClienteChatbot() {
                   {suggestion}
                 </button>
               ))}
-            </div>
+            </div>}
 
             <div className="flex max-h-[260px] min-h-[200px] flex-col gap-3 overflow-y-auto pr-1">
               {messages.map((message) => (
@@ -175,7 +236,15 @@ export function ClienteChatbot() {
                       : "ml-auto bg-[#E31E24] text-white"
                   }`}
                 >
-                  {message.text}
+                  <p>{message.text}</p>
+                  {message.action && (
+                    <Link
+                      href={message.action.href}
+                      className="mt-2 inline-flex rounded-lg bg-[#E31E24] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#c71a20]"
+                    >
+                      {message.action.label}
+                    </Link>
+                  )}
                 </div>
               ))}
             </div>

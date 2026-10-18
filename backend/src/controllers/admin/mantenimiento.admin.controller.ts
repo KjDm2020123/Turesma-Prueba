@@ -22,12 +22,16 @@ const getMantenimientoVehiculos = async (req: any, res: any) => {
     query += " ORDER BY fecha_programada DESC LIMIT $" + (params.length + 1) + " OFFSET $" + (params.length + 2);
     params.push(limit, offset);
 
-    const result = await pool.query(query, params);
+    const [result, vehiculosConMantenimiento] = await Promise.all([
+      pool.query(query, params),
+      pool.query("SELECT DISTINCT vehiculo_id FROM mantenimiento_vehiculos"),
+    ]);
 
     res.json({
       success: true,
       data: result.rows,
       total: result.rows.length,
+      vehicleIdsWithMaintenance: vehiculosConMantenimiento.rows.map((row: any) => row.vehiculo_id),
     });
   } catch (error) {
     console.error("Error getting mantenimiento:", error);

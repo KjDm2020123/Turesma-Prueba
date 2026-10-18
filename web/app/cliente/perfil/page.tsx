@@ -140,7 +140,7 @@ export default function ClientePerfilPage() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
         <div className="relative shrink-0">
           {imagenUrl ? (
-            <Image src={imagenUrl} alt="Perfil" width={96} height={96} unoptimized className="w-24 h-24 rounded-2xl object-cover border border-slate-200" />
+            <Image src={imagenUrl} alt="Perfil" width={96} height={96} sizes="96px" className="w-24 h-24 rounded-2xl object-cover border border-slate-200" />
           ) : (
             <div className="w-24 h-24 rounded-2xl bg-slate-100 flex items-center justify-center"><User size={38} className="text-slate-300" /></div>
           )}

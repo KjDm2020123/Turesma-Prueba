@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
+import { escapeReportHtml, openPrintableReport } from "../../../lib/print-report";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
@@ -135,18 +136,18 @@ function AdminCotizacionesContent() {
       const d = await fetchProforma(c.id);
       const e = d.empresa;
       const logoUrl = `${window.location.origin}/logo.png`;
-      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Proforma ${d.numero} — Turesma</title>
+      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Proforma ${escapeReportHtml(d.numero)} — Turesma</title>
         <style>
           *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a}
           body{padding:40px;max-width:760px;margin:0 auto;font-size:12px}
-          .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:26px}
-          .head .txt{flex:1;text-align:center}
+          .head{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:26px}
+          .head .txt{order:2;width:100%;text-align:center}
           .head .txt p{margin:2px 0}
           .lema{font-weight:800;font-size:13px}
           .cursiva{font-style:italic;font-size:11.5px}
           .rucline{font-weight:800;font-size:12.5px;margin-top:5px}
           .mail{color:#2563eb;text-decoration:underline}
-          .head img{height:88px;width:auto}
+          .head img{order:1;height:72px;width:auto}
           .clirow{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
           .cliname{font-weight:800;text-transform:uppercase;max-width:420px}
           .prof{font-weight:800;white-space:nowrap}
@@ -170,24 +171,24 @@ function AdminCotizacionesContent() {
         </style></head><body>
         <div class="head">
           <div class="txt">
-            <p class="lema">${e.lema}</p>
-            <p class="cursiva">${e.sub1}</p>
-            <p class="cursiva">${e.sub2}</p>
-            <p class="rucline">${e.nombre}&nbsp;&nbsp;RUC: ${e.ruc}</p>
-            <p><b>Razón Social:</b> ${e.razon}</p>
-            <p><b>Dirección:</b> ${e.direccion}</p>
-            <p><b>Teléfono:</b> ${e.telefonos}</p>
-            <p><b>Email:</b> <span class="mail">${e.email}</span></p>
+            <p class="lema">${escapeReportHtml(e.lema)}</p>
+            <p class="cursiva">${escapeReportHtml(e.sub1)}</p>
+            <p class="cursiva">${escapeReportHtml(e.sub2)}</p>
+            <p class="rucline">${escapeReportHtml(e.nombre)}&nbsp;&nbsp;RUC: ${escapeReportHtml(e.ruc)}</p>
+            <p><b>Razón Social:</b> ${escapeReportHtml(e.razon)}</p>
+            <p><b>Dirección:</b> ${escapeReportHtml(e.direccion)}</p>
+            <p><b>Teléfono:</b> ${escapeReportHtml(e.telefonos)}</p>
+            <p><b>Email:</b> <span class="mail">${escapeReportHtml(e.email)}</span></p>
           </div>
-          <img src="${logoUrl}" alt="Turesma" onerror="this.style.display='none'"/>
+          <img class="report-logo" src="${logoUrl}" alt="Turesma" onerror="this.style.display='none'"/>
         </div>
 
         <div class="clirow">
-          <p class="cliname">${d.cliente.nombre || ""}</p>
-          <p class="prof">PROFORMA. ${d.numero}</p>
+          <p class="cliname">${escapeReportHtml(d.cliente.nombre || "")}</p>
+          <p class="prof">PROFORMA. ${escapeReportHtml(d.numero)}</p>
         </div>
-        <p class="dato"><b>${d.cliente.cedula && String(d.cliente.cedula).length === 13 ? "RUC" : "CÉDULA"}:</b>&nbsp;&nbsp;${d.cliente.cedula || "—"}</p>
-        <p class="dato"><b>FECHA:</b>&nbsp;&nbsp;${fmtFechaProf(d.fecha)}</p>
+        <p class="dato"><b>${d.cliente.cedula && String(d.cliente.cedula).length === 13 ? "RUC" : "CÉDULA"}:</b>&nbsp;&nbsp;${escapeReportHtml(d.cliente.cedula || "—")}</p>
+        <p class="dato"><b>FECHA:</b>&nbsp;&nbsp;${escapeReportHtml(fmtFechaProf(d.fecha))}</p>
 
         <table>
           <thead><tr><th style="width:80px">CANTIDAD</th><th>DESCRIPCION</th><th style="width:95px">P. UNITARIO</th><th style="width:95px">P. TOTAL</th></tr></thead>
@@ -196,9 +197,9 @@ function AdminCotizacionesContent() {
               <td class="ctr desc-cell">1</td>
               <td class="desc-cell">
                 Servicio de Transporte<br/><br/>
-                <b>Ruta:</b> ${d.servicio.origen} → ${d.servicio.destino}<br/>
-                <b>Salida:</b> ${fmtFechaProf(d.servicio.fecha_servicio)}${d.servicio.hora_salida ? " · " + d.servicio.hora_salida : ""} · ${d.servicio.num_personas} pasajero(s)<br/><br/>
-                ${d.servicio.notas ? d.servicio.notas : "Servicio de transporte para traslado de personal."}
+                <b>Ruta:</b> ${escapeReportHtml(d.servicio.origen)} → ${escapeReportHtml(d.servicio.destino)}<br/>
+                <b>Salida:</b> ${escapeReportHtml(fmtFechaProf(d.servicio.fecha_servicio))}${d.servicio.hora_salida ? " · " + escapeReportHtml(d.servicio.hora_salida) : ""} · ${escapeReportHtml(d.servicio.num_personas)} pasajero(s)<br/><br/>
+                ${escapeReportHtml(d.servicio.notas ? d.servicio.notas : "Servicio de transporte para traslado de personal.")}
               </td>
               <td class="num desc-cell">${fmtUSD(d.precio)}</td>
               <td class="num desc-cell">${fmtUSD(d.precio)}</td>
@@ -213,15 +214,15 @@ function AdminCotizacionesContent() {
 
         <div class="foot">
           <div class="banco">
-            <p><b>${e.banco.nombre}</b></p>
-            <p><b>Cuenta:</b> ${e.banco.tipo}</p>
-            <p><b>Numero:</b> ${e.banco.numero}</p>
-            <p><b>Nombre:</b> ${e.banco.titular}</p>
-            <p><b>RUC:</b> ${e.banco.ruc}</p>
+            <p><b>${escapeReportHtml(e.banco.nombre)}</b></p>
+            <p><b>Cuenta:</b> ${escapeReportHtml(e.banco.tipo)}</p>
+            <p><b>Numero:</b> ${escapeReportHtml(e.banco.numero)}</p>
+            <p><b>Nombre:</b> ${escapeReportHtml(e.banco.titular)}</p>
+            <p><b>RUC:</b> ${escapeReportHtml(e.banco.ruc)}</p>
           </div>
           <div class="firma">
-            <p class="linea">${e.gerente}</p>
-            <p class="cargo">${e.cargoGerente}</p>
+            <p class="linea">${escapeReportHtml(e.gerente)}</p>
+            <p class="cargo">${escapeReportHtml(e.cargoGerente)}</p>
           </div>
         </div>
 
@@ -230,10 +231,8 @@ function AdminCotizacionesContent() {
         </div>
         </body></html>`;
 
-      const win = window.open("", "_blank");
+      const win = openPrintableReport(html);
       if (!win) throw new Error("El navegador bloqueó la ventana emergente");
-      win.document.write(html);
-      win.document.close();
       load(true);
     } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo generar la proforma"); }
     finally { setProformaBusyId(null); }

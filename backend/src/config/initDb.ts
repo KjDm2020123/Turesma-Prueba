@@ -287,6 +287,26 @@ const initDatabase = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_data_migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    WITH migration_applied AS (
+      INSERT INTO app_data_migrations (name)
+      VALUES ('deactivate_seed_maintenance_vehicles')
+      ON CONFLICT (name) DO NOTHING
+      RETURNING name
+    )
+    UPDATE vehiculos
+    SET activo = false
+    WHERE placa IN ('ABC-1234', 'DEF-5678', 'GHI-9012')
+      AND EXISTS (SELECT 1 FROM migration_applied);
+  `);
+
+  await pool.query(`
     UPDATE vehiculos v
     SET usuario_id = u.id
     FROM usuarios u

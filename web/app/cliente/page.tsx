@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -45,7 +46,7 @@ export default function ClienteInicioPage() {
           const rs = await rRes.json();
           const arr = Array.isArray(rs) ? rs : [];
           setViajes(arr.length);
-          // Viaje activo: prioriza en_curso, luego confirmada (próximo viaje)
+          // Prioriza el viaje en curso; si no hay, muestra el próximo confirmado sin cargar seguimiento.
           const activo = arr.find((r: any) => r.estado === "en_curso") || arr.find((r: any) => r.estado === "confirmada");
           setViajeActivo(activo ? { id: activo.id, estado: activo.estado, origen: activo.origen, destino: activo.destino } : null);
         }
@@ -116,7 +117,69 @@ export default function ClienteInicioPage() {
           <Link href="/cliente/historial" className="text-xs font-black text-slate-400 hover:text-[#E31E24]">Mis pagos</Link>
         </div>
         {viajesMessage && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700">{viajesMessage}</p>}
-        <div className="grid gap-4 md:grid-cols-2">{catalogoViajes.map((viaje) => <article key={viaje.id} className="overflow-hidden rounded-2xl border border-slate-200">        <div className="grid grid-cols-2 gap-1">{viaje.vehiculo_imagen_url && <Image src={viaje.vehiculo_imagen_url} alt={`Vehículo ${viaje.vehiculo_placa || ""}`} width={320} height={144} unoptimized className="h-36 w-full object-cover" />}{Array.isArray(viaje.imagenes) && viaje.imagenes.slice(0, 3).map((image: string) => <Image key={image} src={image} alt={`Destino ${viaje.destino}`} width={320} height={144} unoptimized className="h-36 w-full object-cover" />)}</div><div className="p-4"><div className="flex items-start justify-between gap-3"><h3 className="font-black text-slate-900">{viaje.titulo}</h3><span className="text-lg font-black text-[#E31E24]">${Number(viaje.precio).toFixed(2)}</span></div><p className="mt-3 flex items-center gap-2 text-sm font-bold text-slate-600"><MapPin size={15} className="text-[#E31E24]" />{viaje.origen} <ArrowRight size={13} /> {viaje.destino}</p><p className="mt-2 text-xs font-semibold text-slate-500">{viaje.vehiculo_placa ? `Vehículo ${viaje.vehiculo_placa} · ${viaje.vehiculo_modelo || ""}` : "Vehículo por confirmar"}</p><div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500"><span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.fecha_servicio}</span><span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.hora_salida || "Hora por definir"}</span><span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.cupos_disponibles} cupos</span></div><button onClick={() => { setViajeCompra(viaje); setPickupPoint(null); setCompraForm({ pasajeros: "1", fecha: viaje.fecha_servicio?.slice(0, 10) || "", hora: viaje.hora_salida || "", ubicacion: viaje.origen || "", referencia: "" }); }} disabled={!viaje.cupos_disponibles} className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wider text-white disabled:cursor-not-allowed disabled:opacity-40">{viaje.cupos_disponibles ? "Reservar este viaje" : "Sin cupos"}</button></div></article>)}</div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {catalogoViajes.map((viaje) => (
+            <article key={viaje.id} className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="grid grid-cols-2 gap-1">
+                {viaje.vehiculo_imagen_url && (
+                  <Image
+                    src={viaje.vehiculo_imagen_url}
+                    alt={`Vehículo ${viaje.vehiculo_placa || ""}`}
+                    width={320}
+                    height={144}
+                    sizes="(max-width: 768px) 50vw, 320px"
+                    className="h-36 w-full object-cover"
+                  />
+                )}
+                {Array.isArray(viaje.imagenes) && viaje.imagenes.slice(0, 3).map((image: string) => (
+                  <Image
+                    key={image}
+                    src={image}
+                    alt={`Destino ${viaje.destino}`}
+                    width={320}
+                    height={144}
+                    sizes="(max-width: 768px) 50vw, 320px"
+                    className="h-36 w-full object-cover"
+                  />
+                ))}
+              </div>
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-black text-slate-900">{viaje.titulo}</h3>
+                  <span className="text-lg font-black text-[#E31E24]">${Number(viaje.precio).toFixed(2)}</span>
+                </div>
+                <p className="mt-3 flex items-center gap-2 text-sm font-bold text-slate-600">
+                  <MapPin size={15} className="text-[#E31E24]" />{viaje.origen} <ArrowRight size={13} /> {viaje.destino}
+                </p>
+                <p className="mt-2 text-xs font-semibold text-slate-500">
+                  {viaje.vehiculo_placa ? `Vehículo ${viaje.vehiculo_placa} · ${viaje.vehiculo_modelo || ""}` : "Vehículo por confirmar"}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
+                  <span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.fecha_servicio}</span>
+                  <span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.hora_salida || "Hora por definir"}</span>
+                  <span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.cupos_disponibles} cupos</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setViajeCompra(viaje);
+                    setPickupPoint(null);
+                    setCompraForm({
+                      pasajeros: "1",
+                      fecha: viaje.fecha_servicio?.slice(0, 10) || "",
+                      hora: viaje.hora_salida || "",
+                      ubicacion: viaje.origen || "",
+                      referencia: "",
+                    });
+                  }}
+                  disabled={!viaje.cupos_disponibles}
+                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-xs font-black uppercase tracking-wider text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {viaje.cupos_disponibles ? "Reservar este viaje" : "Sin cupos"}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
         {!catalogoViajes.length && <p className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-bold text-slate-400">No hay viajes publicados en este momento.</p>}
       </section>
 
@@ -140,7 +203,13 @@ export default function ClienteInicioPage() {
               <span className="truncate">{viajeActivo.destino || "—"}</span>
             </p>
           )}
-          <LiveTripMap reservaId={viajeActivo.id} />
+          {viajeActivo.estado === "en_curso" ? (
+            <LiveTripMap reservaId={viajeActivo.id} />
+          ) : (
+            <p className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-semibold text-blue-700">
+              El seguimiento en vivo estará disponible cuando el conductor inicie el viaje.
+            </p>
+          )}
         </div>
       )}
 

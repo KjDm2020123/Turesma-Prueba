@@ -91,14 +91,14 @@ const useConductorPanelState = () => {
       // Sin usuario, sin token, o token expirado → cerrar sesión y volver al login.
       if (!currentUser || !getStoredToken() || isTokenExpired()) {
         clearStoredUser();
-        router.replace("/");
+        window.location.replace("/api/auth/logout");
         return;
       }
 
       const verifiedUser = await refreshStoredUser();
       if (!verifiedUser) {
         clearStoredUser();
-        router.replace("/");
+        window.location.replace("/api/auth/logout");
         return;
       }
 
@@ -110,7 +110,7 @@ const useConductorPanelState = () => {
 
       if (!verifiedUser.id) {
         clearStoredUser();
-        router.replace("/");
+        window.location.replace("/api/auth/logout");
         return;
       }
 

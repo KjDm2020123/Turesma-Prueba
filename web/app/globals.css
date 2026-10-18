@@ -25,21 +25,143 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-[data-reveal] {
+.home-page [data-reveal] {
   opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 650ms ease, transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(18px);
+  transition: opacity 520ms ease, transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-[data-reveal].is-visible {
+.home-page [data-reveal].is-visible {
   opacity: 1;
   transform: translateY(0);
 }
 
+.home-card {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
+}
+
+.home-button {
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-card:hover {
+    transform: translateY(-4px);
+  }
+
+  .home-button:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.home-button:active {
+  transform: scale(0.98);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  [data-reveal] {
+  .home-page *,
+  .home-page *::before,
+  .home-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .home-page [data-reveal] {
     opacity: 1;
     transform: none;
-    transition: none;
+  }
+
+  .home-page .home-card:hover,
+  .home-page .home-button:hover,
+  .home-page .home-button:active {
+    transform: none !important;
+  }
+}
+
+.home-page .hero-intro {
+  animation: hero-enter 750ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-page .hero-intro-title {
+  animation-delay: 120ms;
+}
+
+.home-page .hero-intro-copy {
+  animation-delay: 280ms;
+}
+
+.home-page .hero-intro-actions {
+  animation-delay: 440ms;
+}
+
+.home-page .hero-background-image {
+  background-position: center;
+  background-size: cover;
+}
+
+.home-page .mobile-menu-panel {
+  animation: mobile-menu-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top;
+}
+
+@keyframes hero-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mobile-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-page .hero-intro,
+  .home-page .mobile-menu-panel {
+    animation: none;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 760px) {
+  .login-content,
+  .auth-form-scroll {
+    align-items: flex-start;
+    height: 100vh;
+    min-height: 0;
+    overflow-y: auto;
+    padding-block: 1rem;
+  }
+
+  .login-content-inner,
+  .auth-form-scroll-inner {
+    margin-block: auto;
+  }
+
+  .auth-carousel-copy {
+    top: 27%;
+    padding: 1.5rem;
+  }
+
+  .auth-carousel-copy h2 {
+    font-size: clamp(2rem, 4vh, 2.75rem);
+  }
+
+  .auth-carousel-copy p:last-child {
+    margin-top: 0.75rem;
   }
 }

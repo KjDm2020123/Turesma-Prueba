@@ -43,10 +43,10 @@ async function seed() {
 
     // ── 2. VEHÍCULOS ─────────────────────────────────────────────────
     const vehiculosDef = [
-      { placa: "ABC-1234", tipo: "van",     modelo: "Toyota Hiace 2022",      capacidad: 15, color: "Blanco", estado: "disponible",  descripcion: "Furgoneta ejecutiva con A/C y GPS",             uid: uIds["carlos@turesma.com"] },
-      { placa: "DEF-5678", tipo: "bus",     modelo: "Hino RK Bus 2021",       capacidad: 40, color: "Azul",   estado: "disponible",  descripcion: "Bus turístico de lujo para grupos grandes",      uid: uIds["luis@turesma.com"]   },
-      { placa: "GHI-9012", tipo: "suv",     modelo: "Toyota Land Cruiser 2023", capacidad: 6, color: "Negro", estado: "disponible",  descripcion: "SUV ejecutivo para traslados VIP",               uid: null },
-      { placa: "JKL-3456", tipo: "minibus", modelo: "JAC Minibus 2022",       capacidad: 19, color: "Blanco", estado: "en_servicio", descripcion: "Minibús ideal para tours grupales por la costa", uid: null },
+      { placa: "ABC-1234", tipo: "van",     modelo: "Toyota Hiace 2022",       capacidad: 15, color: "Blanco", estado: "disponible",  activo: false, descripcion: "Furgoneta ejecutiva con A/C y GPS",             uid: uIds["carlos@turesma.com"] },
+      { placa: "DEF-5678", tipo: "bus",     modelo: "Hino RK Bus 2021",        capacidad: 40, color: "Azul",   estado: "disponible",  activo: false, descripcion: "Bus turístico de lujo para grupos grandes",      uid: uIds["luis@turesma.com"]   },
+      { placa: "GHI-9012", tipo: "suv",     modelo: "Toyota Land Cruiser 2023", capacidad: 6, color: "Negro",  estado: "disponible",  activo: false, descripcion: "SUV ejecutivo para traslados VIP",               uid: null },
+      { placa: "JKL-3456", tipo: "minibus", modelo: "JAC Minibus 2022",        capacidad: 19, color: "Blanco", estado: "en_servicio", activo: true,  descripcion: "Minibús ideal para tours grupales por la costa", uid: null },
     ];
 
     const vIds: number[] = [];
@@ -55,8 +55,8 @@ async function seed() {
       if (ex.rowCount === 0) {
         const r = await client.query(
           `INSERT INTO vehiculos (placa, tipo, modelo, capacidad, color, estado, descripcion, usuario_id, activo)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id`,
-          [v.placa, v.tipo, v.modelo, v.capacidad, v.color, v.estado, v.descripcion, v.uid]
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+          [v.placa, v.tipo, v.modelo, v.capacidad, v.color, v.estado, v.descripcion, v.uid, v.activo]
         );
         vIds.push(r.rows[0].id);
         log(`Vehículo creado: ${v.placa}`);
