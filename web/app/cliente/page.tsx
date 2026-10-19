@@ -112,37 +112,41 @@ export default function ClienteInicioPage() {
       </div>
 
       <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-end justify-between gap-3">
-          <div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#E31E24]">Compra directa</p><h2 className="mt-1 text-2xl font-black text-slate-900">Viajes disponibles</h2><p className="mt-1 text-sm text-slate-500">Selecciona un viaje con precio y cupos definidos.</p></div>
-          <Link href="/cliente/historial" className="text-xs font-black text-slate-400 hover:text-[#E31E24]">Mis pagos</Link>
+        <div className="flex items-start justify-between gap-3 sm:items-end">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#E31E24]">Compra directa</p>
+            <h2 className="mt-1 text-xl font-black text-slate-900 sm:text-2xl">Viajes disponibles</h2>
+            <p className="mt-1 text-sm text-slate-500">Selecciona un viaje con precio y cupos definidos.</p>
+          </div>
+          <Link href="/cliente/historial" className="shrink-0 whitespace-nowrap pt-1 text-xs font-black text-slate-400 hover:text-[#E31E24]">Mis pagos</Link>
         </div>
         {viajesMessage && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700">{viajesMessage}</p>}
         <div className="grid gap-4 md:grid-cols-2">
-          {catalogoViajes.map((viaje) => (
+          {catalogoViajes.map((viaje) => {
+            const images = [
+              ...(viaje.vehiculo_imagen_url ? [{ src: viaje.vehiculo_imagen_url, alt: `Vehículo ${viaje.vehiculo_placa || ""}` }] : []),
+              ...(Array.isArray(viaje.imagenes)
+                ? viaje.imagenes.slice(0, 3).map((src: string) => ({ src, alt: `Destino ${viaje.destino}` }))
+                : []),
+            ];
+
+            return (
             <article key={viaje.id} className="overflow-hidden rounded-2xl border border-slate-200">
-              <div className="grid grid-cols-2 gap-1">
-                {viaje.vehiculo_imagen_url && (
-                  <Image
-                    src={viaje.vehiculo_imagen_url}
-                    alt={`Vehículo ${viaje.vehiculo_placa || ""}`}
-                    width={320}
-                    height={144}
-                    sizes="(max-width: 768px) 50vw, 320px"
-                    className="h-36 w-full object-cover"
-                  />
-                )}
-                {Array.isArray(viaje.imagenes) && viaje.imagenes.slice(0, 3).map((image: string) => (
-                  <Image
-                    key={image}
-                    src={image}
-                    alt={`Destino ${viaje.destino}`}
-                    width={320}
-                    height={144}
-                    sizes="(max-width: 768px) 50vw, 320px"
-                    className="h-36 w-full object-cover"
-                  />
-                ))}
-              </div>
+              {images.length > 0 && (
+                <div className="grid grid-cols-2 gap-1">
+                  {images.map((image) => (
+                    <Image
+                      key={image.src}
+                      src={image.src}
+                      alt={image.alt}
+                      width={320}
+                      height={144}
+                      sizes={images.length === 1 ? "(max-width: 768px) 100vw, 640px" : "(max-width: 768px) 50vw, 320px"}
+                      className={`h-36 w-full object-cover ${images.length === 1 ? "col-span-2" : ""}`}
+                    />
+                  ))}
+                </div>
+              )}
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="font-black text-slate-900">{viaje.titulo}</h3>
@@ -178,7 +182,8 @@ export default function ClienteInicioPage() {
                 </button>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
         {!catalogoViajes.length && <p className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-bold text-slate-400">No hay viajes publicados en este momento.</p>}
       </section>

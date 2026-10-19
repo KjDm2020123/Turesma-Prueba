@@ -91,11 +91,20 @@ const ChartCard = ({ title, description, children }: { title: string; descriptio
 
 export const AnalyticsDashboard = () => {
   const { checkingSession } = useAdminGuard();
+  const [compactCharts, setCompactCharts] = useState(false);
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [exportando, setExportando] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 639px)");
+    const updateCompactCharts = () => setCompactCharts(mediaQuery.matches);
+    updateCompactCharts();
+    mediaQuery.addEventListener("change", updateCompactCharts);
+    return () => mediaQuery.removeEventListener("change", updateCompactCharts);
+  }, []);
 
   // Filtro de fechas
   const [filtro, setFiltro] = useState<FiltroFecha>("todo");
@@ -208,7 +217,7 @@ export const AnalyticsDashboard = () => {
   }));
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-500">
+    <div className="space-y-5 pb-24 sm:pb-0 animate-in fade-in duration-500">
 
       {/* HEADER */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -329,26 +338,26 @@ export const AnalyticsDashboard = () => {
       </div>
 
       {/* ── KPI SECUNDARIO ────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-gradient-to-br from-[#0b0f1a] to-[#1e2740] text-white rounded-2xl p-4 flex items-center gap-3 shadow-lg">
-          <div className="bg-[#E31E24]/20 p-2.5 rounded-xl"><Car size={20} className="text-[#E31E24]" /></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Vehículos activos</p>
-            <p className="text-3xl font-black">{kpi.total_vehiculos}</p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className="flex min-w-0 min-h-32 flex-col items-start gap-2 rounded-2xl bg-gradient-to-br from-[#0b0f1a] to-[#1e2740] p-3 text-white shadow-lg sm:min-h-0 sm:flex-row sm:items-center sm:gap-3 sm:p-4">
+          <div className="shrink-0 rounded-xl bg-[#E31E24]/20 p-2.5"><Car size={20} className="text-[#E31E24]" /></div>
+          <div className="min-w-0">
+            <p className="break-words text-[9px] font-black uppercase leading-tight tracking-[0.08em] text-gray-300 sm:text-[10px] sm:tracking-widest">Vehículos activos</p>
+            <p className="text-2xl font-black sm:text-3xl">{kpi.total_vehiculos}</p>
           </div>
         </div>
-        <div className="bg-gradient-to-br from-[#0b0f1a] to-[#1e2740] text-white rounded-2xl p-4 flex items-center gap-3 shadow-lg">
-          <div className="bg-blue-500/20 p-2.5 rounded-xl"><UserCircle size={20} className="text-blue-400" /></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Conductores</p>
-            <p className="text-3xl font-black">{kpi.total_conductores}</p>
+        <div className="flex min-w-0 min-h-32 flex-col items-start gap-2 rounded-2xl bg-gradient-to-br from-[#0b0f1a] to-[#1e2740] p-3 text-white shadow-lg sm:min-h-0 sm:flex-row sm:items-center sm:gap-3 sm:p-4">
+          <div className="shrink-0 rounded-xl bg-blue-500/20 p-2.5"><UserCircle size={20} className="text-blue-400" /></div>
+          <div className="min-w-0">
+            <p className="break-words text-[9px] font-black uppercase leading-tight tracking-[0.08em] text-gray-300 sm:text-[10px] sm:tracking-widest">Conductores</p>
+            <p className="text-2xl font-black sm:text-3xl">{kpi.total_conductores}</p>
           </div>
         </div>
-        <div className="bg-gradient-to-br from-[#0b0f1a] to-[#1e2740] text-white rounded-2xl p-4 flex items-center gap-3 shadow-lg">
-          <div className="bg-emerald-500/20 p-2.5 rounded-xl"><Users size={20} className="text-emerald-400" /></div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Clientes registrados</p>
-            <p className="text-3xl font-black">{kpi.total_clientes}</p>
+        <div className="flex min-w-0 min-h-32 flex-col items-start gap-2 rounded-2xl bg-gradient-to-br from-[#0b0f1a] to-[#1e2740] p-3 text-white shadow-lg sm:col-span-2 sm:min-h-0 sm:flex-row sm:items-center sm:gap-3 sm:p-4 md:col-span-1">
+          <div className="shrink-0 rounded-xl bg-emerald-500/20 p-2.5"><Users size={20} className="text-emerald-400" /></div>
+          <div className="min-w-0">
+            <p className="break-words text-[9px] font-black uppercase leading-tight tracking-[0.08em] text-gray-300 sm:text-[10px] sm:tracking-widest">Clientes registrados</p>
+            <p className="text-2xl font-black sm:text-3xl">{kpi.total_clientes}</p>
           </div>
         </div>
       </div>
@@ -362,10 +371,10 @@ export const AnalyticsDashboard = () => {
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={mensualChart} margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mes" tick={{ fontSize: 10, fontWeight: 700 }} />
+                <XAxis dataKey="mes" interval={compactCharts ? "preserveStartEnd" : 0} minTickGap={compactCharts ? 24 : 12} tick={{ fontSize: compactCharts ? 9 : 10, fontWeight: 700 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: any) => fmt(Number(v))} />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Legend iconSize={compactCharts ? 8 : 12} wrapperStyle={{ fontSize: compactCharts ? 9 : 11, fontWeight: 700, width: "100%" }} />
                 <Line type="monotone" dataKey="Ingresos" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} />
                 <Line type="monotone" dataKey="Ganancia neta" stroke="#16A34A" strokeWidth={2.5} dot={{ r: 4 }} />
               </LineChart>
@@ -425,7 +434,7 @@ export const AnalyticsDashboard = () => {
                 <XAxis xAxisId="reservas" type="number" orientation="top" allowDecimals={false} tick={{ fontSize: 10 }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} width={72} />
                 <Tooltip formatter={(v: any, name) => name === "Ingresos" ? fmt(Number(v)) : v} />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Legend iconSize={compactCharts ? 8 : 12} wrapperStyle={{ fontSize: compactCharts ? 9 : 11, fontWeight: 700, width: "100%" }} />
                 <Bar xAxisId="ingresos" dataKey="Ingresos" fill="#2563EB" radius={[0, 4, 4, 0]} />
                 <Bar xAxisId="reservas" dataKey="Reservas" fill="#16A34A" radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -444,7 +453,7 @@ export const AnalyticsDashboard = () => {
                 <XAxis xAxisId="servicios" type="number" orientation="top" allowDecimals={false} tick={{ fontSize: 10 }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} width={72} />
                 <Tooltip formatter={(v: any, name) => name === "Gasto" ? fmt(Number(v)) : v} />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Legend iconSize={compactCharts ? 8 : 12} wrapperStyle={{ fontSize: compactCharts ? 9 : 11, fontWeight: 700, width: "100%" }} />
                 <Bar xAxisId="gasto" dataKey="Gasto" fill="#DC2626" radius={[0, 4, 4, 0]} />
                 <Bar xAxisId="servicios" dataKey="Servicios" fill="#D97706" radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -462,11 +471,11 @@ export const AnalyticsDashboard = () => {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={mensualChart} margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mes" tick={{ fontSize: 10, fontWeight: 700 }} />
+                <XAxis dataKey="mes" interval={compactCharts ? "preserveStartEnd" : 0} minTickGap={compactCharts ? 24 : 12} tick={{ fontSize: compactCharts ? 9 : 10, fontWeight: 700 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: any, name) => name === "Ingresos" ? fmt(Number(v)) : v} />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Legend iconSize={compactCharts ? 8 : 12} wrapperStyle={{ fontSize: compactCharts ? 9 : 11, fontWeight: 700, width: "100%" }} />
                 <Bar yAxisId="left" dataKey="Reservas" fill="#2563EB" radius={[4, 4, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="Ingresos" stroke="#E31E24" strokeWidth={2.5} dot={{ r: 3 }} />
               </BarChart>
@@ -495,10 +504,10 @@ export const AnalyticsDashboard = () => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mes" tick={{ fontSize: 10, fontWeight: 700 }} />
+                <XAxis dataKey="mes" interval={compactCharts ? "preserveStartEnd" : 0} minTickGap={compactCharts ? 24 : 12} tick={{ fontSize: compactCharts ? 9 : 10, fontWeight: 700 }} />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: any) => fmt(Number(v))} />
-                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Legend iconSize={compactCharts ? 8 : 12} wrapperStyle={{ fontSize: compactCharts ? 9 : 11, fontWeight: 700, width: "100%" }} />
                 <Area type="monotone" dataKey="Ingresos" stroke="#2563EB" strokeWidth={2} fill="url(#gIngresos)" />
                 <Area type="monotone" dataKey="Gastos" stroke="#DC2626" strokeWidth={2} fill="url(#gGastos)" />
                 <Area type="monotone" dataKey="Ganancia neta" stroke="#16A34A" strokeWidth={2} fill="url(#gGanancias)" />
@@ -513,7 +522,7 @@ export const AnalyticsDashboard = () => {
         <div className="px-5 py-4 border-b border-slate-100">
           <p className="text-[13px] font-black text-slate-700 tracking-tight">Resumen por Estado de Reserva</p>
         </div>
-        <div className="grid grid-cols-5 divide-x divide-slate-100">
+        <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-5">
           {[
             { label: "Pendientes",  value: kpi.pendientes,  color: "text-amber-600 bg-amber-50"   },
             { label: "Confirmadas", value: kpi.confirmadas, color: "text-blue-600 bg-blue-50"     },
@@ -521,9 +530,9 @@ export const AnalyticsDashboard = () => {
             { label: "Finalizadas", value: kpi.finalizadas, color: "text-emerald-600 bg-emerald-50" },
             { label: "Canceladas",  value: kpi.canceladas,  color: "text-red-600 bg-red-50"       },
           ].map((s) => (
-            <div key={s.label} className={`flex flex-col items-center py-6 gap-1 ${s.color}`}>
-              <p className="text-3xl font-black">{s.value}</p>
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-60">{s.label}</p>
+            <div key={s.label} className={`flex min-w-0 flex-col items-center justify-center gap-1 px-2 py-4 text-center sm:py-6 ${s.color}`}>
+              <p className="text-2xl font-black sm:text-3xl">{s.value}</p>
+              <p className="max-w-full break-words text-[9px] font-black uppercase leading-tight tracking-[0.06em] opacity-70 sm:text-[10px] sm:tracking-widest">{s.label}</p>
             </div>
           ))}
         </div>

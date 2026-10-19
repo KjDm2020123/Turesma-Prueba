@@ -159,7 +159,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
         aria-label="Menú de navegación del conductor"
         aria-hidden={!isMobileMenuOpen}
         inert={!isMobileMenuOpen}
-        className={`fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#0b0f1a] text-white z-[70] transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-[70] flex h-dvh w-72 max-w-[85vw] flex-col bg-[#0b0f1a] text-white transform transition-transform duration-500 ease-in-out lg:hidden ${isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}`}
       >
         <div className="p-8 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -170,7 +170,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
           </div>
           <button type="button" onClick={() => setIsMobileMenuOpen(false)} aria-label="Cerrar menú" className="flex min-h-11 min-w-11 items-center justify-center rounded-full p-2 transition-colors hover:bg-white/5"><X size={20} /></button>
         </div>
-        <nav className="p-6 space-y-3">
+        <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto p-6">
           {menuItems.map((item) => {
             const hasNotification = item.href === "/vehiculo/solicitudes" && newSolicitudesCount > 0;
             return (
@@ -193,7 +193,7 @@ export function ConductorShell({ children }: ConductorShellProps) {
             );
           })}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 border-t border-white/5 p-4">
+        <div className="mt-auto shrink-0 border-t border-white/5 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <button
             onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }}
             className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-gray-300 hover:bg-white/5 hover:text-red-400 transition-all"

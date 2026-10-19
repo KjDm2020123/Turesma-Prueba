@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { Bell, CheckCheck, MessageCircle, X } from "lucide-react";
 import { getAuthHeaders } from "../lib/session";
 
@@ -90,9 +91,12 @@ const getRelativeTime = (dateText: string) => {
 export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   const styles = useMemo(() => accentStyles[accent] ?? accentStyles.blue, [accent]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -213,24 +217,58 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   };
 
   useEffect(() => {
-    const onClickOutside = (event: MouseEvent) => {
-      if (!wrapperRef.current) return;
-      if (!wrapperRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
+    if (!open) return;
+
+    const updatePosition = () => {
+      const button = buttonRef.current;
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      const width = Math.min(320, window.innerWidth - 24);
+      const left = Math.min(Math.max(rect.right - width, 12), window.innerWidth - width - 12);
+      const top = Math.min(rect.bottom + 8, Math.max(12, window.innerHeight - 200));
+      setPopoverPosition({
+        top,
+        left,
+        width,
+        maxHeight: Math.max(160, window.innerHeight - top - 16),
+      });
     };
 
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (wrapperRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
 
   return (
     <div className="relative" ref={wrapperRef}>
       <button
-        onClick={() => setOpen((prev) => !prev)}
+        ref={buttonRef}
+        onClick={() => {
+          if (!open) setPopoverPosition(null);
+          setOpen((prev) => !prev);
+        }}
         className={`p-2.5 text-slate-500 rounded-xl transition-all relative ${styles.button}`}
         type="button"
         aria-label="Abrir notificaciones"
+        aria-expanded={open}
+        aria-haspopup="dialog"
       >
         <Bell size={20} />
         {unreadCount > 0 && (
@@ -240,8 +278,20 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 animate-in zoom-in-95 duration-200 origin-top-right z-50">
+      {open && popoverPosition && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          role="dialog"
+          aria-label="Notificaciones"
+          style={{
+            position: "fixed",
+            top: popoverPosition.top,
+            left: popoverPosition.left,
+            width: popoverPosition.width,
+            maxHeight: popoverPosition.maxHeight,
+          }}
+          className="z-[100] overflow-hidden rounded-2xl border border-slate-100 bg-white p-4 shadow-2xl animate-in zoom-in-95 duration-200 origin-top-right"
+        >
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`text-sm font-bold ${styles.title}`}>Notificaciones</h3>
             <button
@@ -257,7 +307,7 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
             </button>
           </div>
 
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+          <div className="overflow-y-auto space-y-2 pr-1" style={{ maxHeight: Math.max(80, popoverPosition.maxHeight - 72) }}>
             {loading && items.length === 0 ? (
               <p className="text-xs text-slate-500">Cargando notificaciones...</p>
             ) : items.length === 0 ? (
@@ -288,7 +338,8 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* TOAST LATERAL: salta al llegar una notificación nueva, mostrando qué es */}
