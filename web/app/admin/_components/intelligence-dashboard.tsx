@@ -55,24 +55,31 @@ type PerformanceData = {
   rutas: Array<{ origen: string; destino: string; viajes: number; pasajeros_promedio: number; ingreso_promedio: number }>;
 };
 
+type AssignmentOption = {
+  vehiculo_id: number;
+  placa: string;
+  modelo: string;
+  capacidad: number;
+  conductor_nombre?: string;
+  puntaje: number;
+  carga_30_dias: number;
+  mantenimiento_ok: number;
+  desglose: {
+    capacidad: number;
+    calificacion: number;
+    mantenimiento: number;
+    cargaOperativa: number;
+  };
+  razones: string[];
+};
+
 type AssignmentRecommendation = {
+  decisionId: number;
   fecha: string;
   pasajeros: number;
-  vehiculo: {
-    placa: string;
-    modelo: string;
-    capacidad: number;
-    conductor_nombre?: string;
-    puntaje: number;
-    carga_30_dias: number;
-    mantenimiento_ok: number;
-  };
-  alternativas: Array<{
-    placa: string;
-    modelo: string;
-    conductor_nombre?: string;
-    puntaje: number;
-  }>;
+  vehiculo: AssignmentOption;
+  alternativas: AssignmentOption[];
+  filtrosAplicados: string[];
   criterios: string[];
 };
 
@@ -100,6 +107,11 @@ export const IntelligenceDashboard = () => {
   const [passengers, setPassengers] = useState(10);
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
   const [recommendationError, setRecommendationError] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
+  const [decisionReason, setDecisionReason] = useState("");
+  const [savingDecision, setSavingDecision] = useState(false);
+  const [decisionMessage, setDecisionMessage] = useState("");
+  const [decisionError, setDecisionError] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -145,10 +157,46 @@ export const IntelligenceDashboard = () => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "No se pudo generar la recomendación");
       setRecommendation(payload.data);
+      setSelectedVehicleId(payload.data.vehiculo.vehiculo_id);
+      setDecisionReason("");
+      setDecisionMessage("");
+      setDecisionError("");
     } catch (error) {
       setRecommendationError(error instanceof Error ? error.message : "No se pudo generar la recomendación");
     } finally {
       setLoadingRecommendation(false);
+    }
+  };
+
+  const registerAssignmentDecision = async () => {
+    if (!recommendation || selectedVehicleId === null) return;
+    const isAlternative = selectedVehicleId !== recommendation.vehiculo.vehiculo_id;
+    setSavingDecision(true);
+    setDecisionError("");
+    setDecisionMessage("");
+    try {
+      const response = await fetch(
+        `${API_URL}/api/admin/inteligencia/asignacion-recomendada/${recommendation.decisionId}/decision`,
+        {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            vehiculo_id: selectedVehicleId,
+            resultado: isAlternative ? "alternativa" : "aceptada",
+            motivo: decisionReason,
+          }),
+        }
+      );
+      if (handleUnauthorized(response.status)) return;
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "No se pudo registrar la decisión");
+      setDecisionMessage(isAlternative
+        ? "Alternativa y motivo registrados para la evaluación."
+        : "Aceptación de la recomendación registrada.");
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : "No se pudo registrar la decisión");
+    } finally {
+      setSavingDecision(false);
     }
   };
 
@@ -311,12 +359,94 @@ export const IntelligenceDashboard = () => {
               <p className="mt-1 text-xs text-emerald-800">
                 Conductor: {recommendation.vehiculo.conductor_nombre || "Sin conductor asignado"} · Capacidad: {recommendation.vehiculo.capacidad}
               </p>
-              <p className="mt-2 text-[11px] text-emerald-700">
-                Criterios: {recommendation.criterios.join(", ")}.
+              <p className="mt-3 text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                Desglose del puntaje
+              </p>
+              <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-emerald-800">
+                <span>Capacidad: {recommendation.vehiculo.desglose.capacidad}/30</span>
+                <span>Conductor: {recommendation.vehiculo.desglose.calificacion}/25</span>
+                <span>Mantenimiento: {recommendation.vehiculo.desglose.mantenimiento}/25</span>
+                <span>Carga: {recommendation.vehiculo.desglose.cargaOperativa}/20</span>
+              </div>
+              <ul className="mt-2 space-y-1 text-[10px] leading-relaxed text-emerald-800">
+                {recommendation.vehiculo.razones.map((reason) => <li key={reason}>• {reason}</li>)}
+              </ul>
+              <p className="mt-3 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                Filtros obligatorios aplicados
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-600">
+                {recommendation.filtrosAplicados.join(" · ")}.
               </p>
               {recommendation.alternativas.length > 0 && (
-                <p className="mt-2 text-[11px] font-bold text-slate-500">
-                  Alternativa: {recommendation.alternativas[0].placa} ({recommendation.alternativas[0].puntaje}/100)
+                <fieldset className="mt-4 space-y-2">
+                  <legend className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                    Decisión del operador
+                  </legend>
+                  {[recommendation.vehiculo, ...recommendation.alternativas].map((option, index) => (
+                    <label key={option.vehiculo_id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 text-xs">
+                      <input
+                        type="radio"
+                        name="assignment-option"
+                        value={option.vehiculo_id}
+                        checked={selectedVehicleId === option.vehiculo_id}
+                        onChange={() => {
+                          setSelectedVehicleId(option.vehiculo_id);
+                          setDecisionError("");
+                          setDecisionMessage("");
+                        }}
+                        disabled={Boolean(decisionMessage)}
+                        className="accent-[#E31E24]"
+                      />
+                      <span className="flex-1 font-bold text-slate-700">
+                        {index === 0 ? "Recomendado: " : "Alternativa: "}
+                        {option.placa} · {option.modelo}
+                        <span className="mt-0.5 block text-[9px] font-medium text-slate-500">
+                          Cap. {option.desglose.capacidad}/30 · Conductor {option.desglose.calificacion}/25
+                          · Mant. {option.desglose.mantenimiento}/25 · Carga {option.desglose.cargaOperativa}/20
+                        </span>
+                      </span>
+                      <span className="font-black text-slate-500">{option.puntaje}/100</span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+              {selectedVehicleId !== null && selectedVehicleId !== recommendation.vehiculo.vehiculo_id && (
+                <label className="mt-3 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Motivo para elegir otra opción
+                  <textarea
+                    value={decisionReason}
+                    onChange={(event) => setDecisionReason(event.target.value)}
+                    maxLength={500}
+                    rows={2}
+                    disabled={Boolean(decisionMessage)}
+                    placeholder="Indica la razón operativa de la elección"
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-700"
+                  />
+                </label>
+              )}
+              <button
+                type="button"
+                onClick={registerAssignmentDecision}
+                disabled={savingDecision || Boolean(decisionMessage)
+                  || (selectedVehicleId !== recommendation.vehiculo.vehiculo_id && !decisionReason.trim())}
+                className="mt-3 w-full rounded-xl bg-emerald-700 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50"
+              >
+                {savingDecision ? "Guardando decisión..." : selectedVehicleId === recommendation.vehiculo.vehiculo_id
+                  ? "Aceptar recomendación"
+                  : "Registrar alternativa"}
+              </button>
+              {decisionMessage && <p role="status" className="mt-2 rounded-lg bg-white p-2 text-xs font-bold text-emerald-800">{decisionMessage}</p>}
+              {decisionError && <p role="alert" className="mt-2 rounded-lg bg-red-50 p-2 text-xs font-bold text-red-700">{decisionError}</p>}
+              <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+                El registro guarda la decisión del operador para evaluar la recomendación; no realiza la asignación del servicio.
+              </p>
+              {recommendation.alternativas.length === 0 && (
+                <p className="mt-2 text-[10px] text-slate-500">No se encontraron alternativas adicionales para esta fecha.</p>
+              )}
+              {recommendation.alternativas.length > 0 && (
+                <p className="mt-2 text-[10px] text-slate-500">
+                  La recomendación ordena por: {recommendation.criterios.join(", ")}.
                 </p>
               )}
             </div>

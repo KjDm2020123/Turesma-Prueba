@@ -40,6 +40,7 @@ son:
 - `GET /api/admin/inteligencia/dashboard`
 - `GET /api/admin/inteligencia/analitica`
 - `GET /api/admin/inteligencia/asignacion-recomendada?fecha=YYYY-MM-DD&pasajeros=N`
+- `PATCH /api/admin/inteligencia/asignacion-recomendada/:id/decision`
 - `GET /api/admin/inteligencia/desempeno`
 - `GET /api/admin/control-operativo`
 - `GET /api/admin/inteligencia/anomalias`
@@ -58,12 +59,23 @@ margen y riesgo sin modificar datos reales. La detección de anomalías analiza
 cancelaciones, pagos antiguos, utilización de vehículos y rutas con baja demanda.
 
 La recomendación de asignación considera capacidad, disponibilidad, mantenimiento,
-calificación del conductor y carga operativa. Cada recomendación se registra en
-`decisiones_sistema` para permitir trazabilidad y evaluación posterior.
+calificación del conductor y carga operativa. El resultado muestra el desglose
+ponderado del puntaje y los filtros obligatorios aplicados. Cada recomendación se
+registra en `decisiones_sistema`; el personal administrativo puede registrar si la
+aceptó o eligió una alternativa e indicar el motivo del cambio. Este registro
+permite evaluar posteriormente la pertinencia de las recomendaciones; no ejecuta
+por sí mismo la asignación del servicio.
 
 Los comprobantes de pago ya no se sirven como archivos estáticos públicos. Se
 entregan mediante URLs temporales o rutas autorizadas, mientras que las imágenes
 públicas se limitan a las carpetas de galería, perfiles, vehículos y viajes.
+
+## Exportación de reservas
+
+El módulo administrativo de reservas permite descargar un Excel con formato de
+marca TURESMA, encabezados, filtros y filas alternadas. La exportación respeta
+los filtros actuales de estado y búsqueda de la pantalla. También está disponible
+mediante `GET /api/admin/reportes/exportar-csv?tipo=reservas&formato=xlsx`.
 
 ## Comprobaciones
 

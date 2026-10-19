@@ -4,10 +4,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
+import { descargarExcel } from "../../../lib/download";
 import {
   Calendar, Plus, Edit3, Trash2, X, Search,
   CheckCircle, Clock, AlertCircle, Loader2, User, Car,
-  MapPin, ArrowRight, CreditCard
+  MapPin, ArrowRight, CreditCard, FileSpreadsheet
 } from "lucide-react";
 import { MapPicker, Punto } from "../../../components/map-picker";
 import { VehiculoCalendario } from "../../../components/vehiculo-calendario";
@@ -87,6 +88,7 @@ export default function AdminReservasPage() {
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [msg, setMsg] = useState("");
@@ -161,6 +163,20 @@ export default function AdminReservasPage() {
     const matchEstado = filtroEstado === "todos" || r.estado === filtroEstado;
     return matchSearch && matchEstado;
   });
+
+  const exportarExcel = async () => {
+    setExportandoExcel(true);
+    setErr("");
+    const query = new URLSearchParams({ tipo: "reservas", formato: "xlsx" });
+    if (filtroEstado !== "todos") query.set("estado", filtroEstado);
+    if (search.trim()) query.set("busqueda", search.trim());
+    const result = await descargarExcel(
+      `/api/admin/reportes/exportar-csv?${query.toString()}`,
+      "reporte_reservas.xlsx"
+    );
+    if (!result.ok) setErr(result.error || "No se pudo exportar");
+    setExportandoExcel(false);
+  };
 
   const openCreate = () => {
     setEditingId(null);
@@ -305,7 +321,15 @@ export default function AdminReservasPage() {
     <div className="space-y-6 animate-in fade-in duration-500">
 
       {/* HEADER */}
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          onClick={exportarExcel}
+          disabled={exportandoExcel || loading}
+          className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition-all hover:bg-emerald-100 disabled:opacity-60"
+        >
+          {exportandoExcel ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+          {exportandoExcel ? "Generando Excel..." : "Exportar Excel"}
+        </button>
         <button onClick={openCreate} className="flex items-center gap-2 bg-[#E31E24] hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/20">
           <Plus size={16} />
           Nueva Reserva

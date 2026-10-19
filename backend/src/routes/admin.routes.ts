@@ -45,6 +45,7 @@ const {
   getBadgesSidebar,
   getAnaliticaInteligente,
   recomendarAsignacion,
+  registrarDecisionAsignacion,
   getIndicesDesempeno,
   exportarReporteCSV,
   getTarifas,
@@ -161,6 +162,7 @@ router.get("/inteligencia/dashboard", getInteligenciaDashboard);
 router.get("/inteligencia/alertas", getAlertasInteligentes);
 router.get("/inteligencia/analitica", getAnaliticaInteligente);
 router.get("/inteligencia/asignacion-recomendada", recomendarAsignacion);
+router.patch("/inteligencia/asignacion-recomendada/:id/decision", registrarDecisionAsignacion);
 router.get("/inteligencia/desempeno", getIndicesDesempeno);
 router.post("/inteligencia/simular", simularEscenario);
 router.get("/inteligencia/contexto-escenarios", getScenarioContext);

@@ -359,11 +359,29 @@ const exportarReporteCSV = async (req, res) => {
       // el mismo filtro que ya usa el Dashboard de Rendimiento.
       const { desde, hasta } = req.query;
       const params: any[] = [];
-      let whereFecha = "";
+      const filtros: string[] = [];
       if (desde && hasta) {
         params.push(desde, hasta);
-        whereFecha = `WHERE r.fecha_reserva BETWEEN $1 AND $2`;
+        filtros.push(`r.fecha_reserva BETWEEN $1 AND $2`);
       }
+      const estado = String(req.query.estado || "").trim();
+      if (estado && estado !== "todos") {
+        params.push(estado);
+        filtros.push(`r.estado = $${params.length}`);
+      }
+      const busqueda = String(req.query.busqueda || "").trim().slice(0, 100);
+      if (busqueda) {
+        params.push(busqueda);
+        const searchParam = `$${params.length}`;
+        filtros.push(`(
+          POSITION(LOWER(${searchParam}) IN LOWER(r.id::text)) > 0
+          OR POSITION(LOWER(${searchParam}) IN LOWER(COALESCE(u.nombre, ''))) > 0
+          OR POSITION(LOWER(${searchParam}) IN LOWER(COALESCE(v.placa, ''))) > 0
+          OR POSITION(LOWER(${searchParam}) IN LOWER(COALESCE(to_jsonb(r)->>'destino', ''))) > 0
+          OR POSITION(LOWER(${searchParam}) IN LOWER(COALESCE(to_jsonb(r)->>'origen', ''))) > 0
+        )`);
+      }
+      const whereClause = filtros.length ? `WHERE ${filtros.join(" AND ")}` : "";
 
       const result = await pool.query(
         `SELECT r.id, r.fecha_reserva, r.estado, r.num_personas, r.total,
@@ -375,7 +393,7 @@ const exportarReporteCSV = async (req, res) => {
          LEFT JOIN conductores c ON c.id = r.conductor_id
          LEFT JOIN usuarios uc ON uc.id = c.usuario_id
          LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
-         ${whereFecha}
+         ${whereClause}
          ORDER BY r.fecha_reserva DESC, r.id DESC
          LIMIT 1000`,
         params

@@ -570,8 +570,10 @@ const recomendarAsignacion = async (req: any, res: any) => {
       WITH candidatos AS (
         SELECT
           v.id AS vehiculo_id, v.placa, v.modelo, v.tipo, v.capacidad,
+          v.fecha_proximo_mantenimiento,
           u.id AS conductor_id, u.nombre AS conductor_nombre,
           COALESCE(c.rating_promedio, 0)::numeric AS rating,
+          c.rating_promedio IS NOT NULL AS calificacion_registrada,
           COUNT(DISTINCT r.id) FILTER (
             WHERE r.estado NOT IN ('cancelada', 'finalizada')
               AND r.fecha_reserva >= CURRENT_DATE - INTERVAL '30 days'
@@ -598,6 +600,10 @@ const recomendarAsignacion = async (req: any, res: any) => {
         GROUP BY v.id, u.id, u.nombre, c.rating_promedio
       )
       SELECT *,
+        ROUND(((LEAST(capacidad, 60) / 60.0) * 30)::numeric, 2) AS puntaje_capacidad,
+        ROUND(((LEAST(rating, 5) / 5.0) * 25)::numeric, 2) AS puntaje_calificacion,
+        mantenimiento_ok * 25 AS puntaje_mantenimiento,
+        GREATEST(0, 20 - LEAST(carga_30_dias, 20)) AS puntaje_carga,
         ROUND((
           (LEAST(capacidad, 60) / 60.0) * 30
           + (LEAST(rating, 5) / 5.0) * 25
@@ -617,28 +623,125 @@ const recomendarAsignacion = async (req: any, res: any) => {
       });
     }
 
+    const opcionesExplicadas = opciones.map((opcion: any) => ({
+      ...opcion,
+      desglose: {
+        capacidad: Number(opcion.puntaje_capacidad),
+        calificacion: Number(opcion.puntaje_calificacion),
+        mantenimiento: Number(opcion.puntaje_mantenimiento),
+        cargaOperativa: Number(opcion.puntaje_carga),
+      },
+      razones: [
+        `Capacidad: ${opcion.capacidad} plazas (${Number(opcion.puntaje_capacidad)}/30 puntos).`,
+        opcion.conductor_nombre
+          ? opcion.calificacion_registrada
+            ? `Calificación del conductor: ${Number(opcion.rating).toFixed(1)}/5 (${Number(opcion.puntaje_calificacion)}/25 puntos).`
+            : "El conductor no tiene calificación registrada; obtiene 0/25 puntos en este criterio."
+          : "No tiene un conductor asociado; por eso no obtiene puntos de calificación.",
+        opcion.fecha_proximo_mantenimiento == null
+          ? "No hay fecha de próximo mantenimiento registrada; se asignan 25/25 puntos y conviene verificar el dato."
+          : Number(opcion.mantenimiento_ok)
+            ? "La fecha de próximo mantenimiento queda fuera de los siguientes 7 días (+25 puntos)."
+            : "El mantenimiento está vencido o previsto dentro de los próximos 7 días (0/25 puntos).",
+        `Carga de ${opcion.carga_30_dias} reservas en los últimos 30 días (${Number(opcion.puntaje_carga)}/20 puntos).`,
+      ],
+    }));
+
     const recomendacion = {
       fecha,
       pasajeros,
-      vehiculo: opciones[0],
-      alternativas: opciones.slice(1),
+      vehiculo: opcionesExplicadas[0],
+      alternativas: opcionesExplicadas.slice(1),
+      filtrosAplicados: [
+        "Vehículo activo y disponible",
+        "Capacidad suficiente para los pasajeros",
+        "Sin otra reserva que lo ocupe en la fecha seleccionada",
+      ],
       criterios: ["capacidad", "disponibilidad", "mantenimiento", "calificación", "carga operativa"],
     };
 
-    await pool.query(
+    const decision = await pool.query(
       `INSERT INTO decisiones_sistema (tipo_decision, entidad_id, recomendacion, factores)
-       VALUES ('asignacion_vehiculo', $1, $2::jsonb, $3::jsonb)`,
+       VALUES ('asignacion_vehiculo', $1, $2::jsonb, $3::jsonb)
+       RETURNING id`,
       [
-        opciones[0].vehiculo_id,
+        opcionesExplicadas[0].vehiculo_id,
         JSON.stringify(recomendacion),
-        JSON.stringify({ fecha, pasajeros, opciones_evaluadas: opciones.length }),
+        JSON.stringify({
+          fecha,
+          pasajeros,
+          opciones_evaluadas: opcionesExplicadas.length,
+          pesos: { capacidad: 30, calificacion: 25, mantenimiento: 25, carga_operativa: 20 },
+        }),
       ]
     );
 
-    return res.json({ success: true, data: recomendacion });
+    return res.json({ success: true, data: { ...recomendacion, decisionId: decision.rows[0].id } });
   } catch (error) {
     console.error("Error generando recomendación de asignación:", error);
     return res.status(500).json({ success: false, error: "No se pudo generar la recomendación" });
+  }
+};
+
+const registrarDecisionAsignacion = async (req: any, res: any) => {
+  const decisionId = Number(req.params.id);
+  const vehiculoId = Number(req.body?.vehiculo_id);
+  const resultado = req.body?.resultado;
+  const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
+  const usuarioId = Number(req.user?.id);
+
+  if (!Number.isInteger(decisionId) || decisionId <= 0
+    || !Number.isInteger(vehiculoId) || vehiculoId <= 0
+    || !["aceptada", "alternativa"].includes(resultado)
+    || !Number.isInteger(usuarioId) || usuarioId <= 0
+    || (resultado === "alternativa" && !motivo)
+    || motivo.length > 500) {
+    return res.status(400).json({ success: false, error: "La decisión, el vehículo o el motivo no son válidos" });
+  }
+
+  try {
+    const updated = await pool.query(
+      `UPDATE decisiones_sistema
+       SET entidad_id = $2,
+           resultado = $3,
+           confirmado_por = $4,
+           factores = factores || jsonb_build_object(
+             'decision_operador',
+             jsonb_build_object(
+               'vehiculo_id', $2,
+               'resultado', $3,
+               'motivo', NULLIF($5, ''),
+               'registrado_en', CURRENT_TIMESTAMP
+             )
+           )
+       WHERE id = $1
+         AND tipo_decision = 'asignacion_vehiculo'
+         AND resultado IS NULL
+         AND (
+           ($3 = 'aceptada' AND (recomendacion->'vehiculo'->>'vehiculo_id')::int = $2)
+           OR (
+             $3 = 'alternativa'
+             AND EXISTS (
+               SELECT 1
+               FROM jsonb_array_elements(recomendacion->'alternativas') AS opciones(opcion)
+               WHERE (opciones.opcion->>'vehiculo_id')::int = $2
+             )
+           )
+         )
+       RETURNING id`,
+      [decisionId, vehiculoId, resultado, usuarioId, motivo]
+    );
+
+    if (!updated.rowCount) {
+      return res.status(409).json({
+        success: false,
+        error: "La decisión ya fue registrada o el vehículo no pertenece a las opciones recomendadas",
+      });
+    }
+    return res.json({ success: true, message: "Decisión registrada correctamente" });
+  } catch (error) {
+    console.error("Error registrando decisión de asignación:", error);
+    return res.status(500).json({ success: false, error: "No se pudo registrar la decisión" });
   }
 };
 
@@ -705,5 +808,6 @@ module.exports = {
   getBadgesSidebar,
   getAnaliticaInteligente,
   recomendarAsignacion,
+  registrarDecisionAsignacion,
   getIndicesDesempeno,
 };
