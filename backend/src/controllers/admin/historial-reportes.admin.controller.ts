@@ -111,7 +111,10 @@ const createExcelReport = async (res, { rows, headers, headerLabels, filename, t
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}_${new Date().toISOString().slice(0, 10)}.xlsx"`);
-  return res.status(200).send(Buffer.from(buffer));
+  res.setHeader("Content-Length", buffer.byteLength);
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200);
+  return res.end(Buffer.from(buffer));
 };
 
 const historialViajes = async (_req, res) => {
@@ -460,4 +463,5 @@ module.exports = {
   verHistorial,
   verReportes,
   exportarReporteCSV,
+  createExcelReport,
 };

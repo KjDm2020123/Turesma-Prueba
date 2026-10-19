@@ -5,13 +5,32 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 export const descargarArchivo = async (path: string, filenameFallback: string): Promise<{ ok: boolean; error?: string }> => {
   try {
     const res = await fetch(`${API_URL}${path}`, { headers: getAuthHeaders() });
-    if (!res.ok) return { ok: false, error: "No se pudo generar el reporte" };
+    if (!res.ok) {
+      let error = "No se pudo generar el archivo";
+      try {
+        const payload = await res.json();
+        if (typeof payload.error === "string") error = payload.error;
+      } catch {
+        // Keep the generic message when the server response is not JSON.
+      }
+      return { ok: false, error };
+    }
 
     const disposition = res.headers.get("Content-Disposition") || "";
     const match = disposition.match(/filename="?([^"]+)"?/);
     const filename = match ? match[1] : filenameFallback;
 
     const blob = await res.blob();
+    if (filename.toLowerCase().endsWith(".xlsx")) {
+      const bytes = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+      const hasZipSignature = bytes.length === 4
+        && bytes[0] === 0x50 && bytes[1] === 0x4b
+        && bytes[2] === 0x03 && bytes[3] === 0x04;
+      if (!hasZipSignature) {
+        return { ok: false, error: "El servidor no devolvió un Excel válido. Actualiza el backend e inténtalo nuevamente." };
+      }
+    }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
