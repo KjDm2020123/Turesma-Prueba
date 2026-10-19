@@ -25,7 +25,7 @@ const router = express.Router();
 
 // Todas las rutas de conductor requieren token JWT válido
 router.use(verifyToken);
-router.use(requireSelfOrRole("admin", "operativo"));
+router.use("/:id", requireSelfOrRole("admin", "operativo"));
 
 router.get("/:id/reservas", listarReservasConductor);
 router.patch("/:id/reservas/:reservaId/aceptar", aceptarReservaConductor);
