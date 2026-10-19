@@ -1,9 +1,10 @@
 export {};
 
 const express = require("express");
-const { verifyToken, requireSelfOrRole } = require("../middleware/auth.middleware");
+const { verifyToken, requireRole, requireSelfOrRole } = require("../middleware/auth.middleware");
 const {
   listarReservasConductor,
+  listarMisReservasConductor,
   aceptarReservaConductor,
   rechazarReservaConductor,
   actualizarEstadoReservaConductor,
@@ -25,8 +26,9 @@ const router = express.Router();
 
 // Todas las rutas de conductor requieren token JWT válido
 router.use(verifyToken);
-router.use("/:id", requireSelfOrRole("admin", "operativo"));
+router.param("id", requireSelfOrRole("admin", "operativo"));
 
+router.get("/me/reservas", requireRole("conductor", "vehiculo"), listarMisReservasConductor);
 router.get("/:id/reservas", listarReservasConductor);
 router.patch("/:id/reservas/:reservaId/aceptar", aceptarReservaConductor);
 router.patch("/:id/reservas/:reservaId/rechazar", rechazarReservaConductor);

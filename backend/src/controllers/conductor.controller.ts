@@ -631,6 +631,11 @@ const listarReservasConductor = async (req, res) => {
   }
 };
 
+const listarMisReservasConductor = (req, res) => {
+  req.params.id = String(req.user.id);
+  return listarReservasConductor(req, res);
+};
+
 const aceptarReservaConductor = async (req, res) => {
   const conductorId = parsePositiveInt(req.params.id);
   const reservaId = parsePositiveInt(req.params.reservaId);
@@ -1381,6 +1386,7 @@ const registrarViajeConductor = async (req, res) => {
 
 module.exports = {
   listarReservasConductor,
+  listarMisReservasConductor,
   aceptarReservaConductor,
   rechazarReservaConductor,
   actualizarEstadoReservaConductor,

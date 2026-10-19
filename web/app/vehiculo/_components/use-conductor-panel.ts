@@ -134,7 +134,7 @@ const useConductorPanelState = () => {
     setErr("");
 
     try {
-      const res = await fetch(`${API_URL}/api/conductor/${user.id}/reservas`, {
+      const res = await fetch(`${API_URL}/api/conductor/me/reservas`, {
         headers: getAuthHeaders(),
       });
       if (handleUnauthorized(res.status)) return;
