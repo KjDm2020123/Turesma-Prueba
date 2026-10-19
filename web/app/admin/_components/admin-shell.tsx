@@ -32,8 +32,7 @@ import {
   Calculator,
   IdCard,
   Images,
-  SlidersHorizontal
-  ,Ticket
+  Ticket
 } from "lucide-react";
 import { clearStoredUser } from "../../../lib/session";
 import { NotificationBell } from "../../../components/notification-bell";
@@ -66,7 +65,6 @@ const menuGroups: MenuGroup[] = [
     id: "general", label: "General", icon: LayoutDashboard, items: [
       { href: "/admin", label: "Reporte", icon: LayoutDashboard },
       { href: "/admin/inteligencia", label: "Toma de decisiones", icon: Brain },
-      { href: "/admin/simulador", label: "Simulador de escenarios", icon: SlidersHorizontal },
     ],
   },
   {

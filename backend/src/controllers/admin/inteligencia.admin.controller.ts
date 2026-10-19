@@ -560,8 +560,16 @@ const getAnaliticaInteligente = async (_req: any, res: any) => {
 const recomendarAsignacion = async (req: any, res: any) => {
   const fecha = typeof req.query.fecha === "string" ? req.query.fecha : new Date().toISOString().slice(0, 10);
   const pasajeros = Number(req.query.pasajeros || 1);
+  const horaInicio = typeof req.query.hora_inicio === "string" ? req.query.hora_inicio : null;
+  const horaFin = typeof req.query.hora_fin === "string" ? req.query.hora_fin : null;
+  const operationId = req.query.operacion_id === undefined ? null : Number(req.query.operacion_id);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !Number.isInteger(pasajeros) || pasajeros <= 0) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)
+    || !Number.isInteger(pasajeros) || pasajeros <= 0
+    || (operationId !== null && (!Number.isInteger(operationId) || operationId <= 0))
+    || (horaInicio !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(horaInicio))
+    || (horaFin !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(horaFin))
+    || (horaInicio && horaFin && horaFin <= horaInicio)) {
     return res.status(400).json({ success: false, error: "Fecha o cantidad de pasajeros inválida" });
   }
 
@@ -594,8 +602,29 @@ const recomendarAsignacion = async (req: any, res: any) => {
           AND NOT EXISTS (
             SELECT 1 FROM reservas ocupada
             WHERE ocupada.vehiculo_id = v.id
-              AND ocupada.fecha_reserva = $1::date
+              AND COALESCE(ocupada.fecha_salida::date, ocupada.fecha_servicio::date, ocupada.fecha_reserva::date) = $1::date
               AND ocupada.estado NOT IN ('cancelada', 'finalizada')
+              AND (
+                $3::time IS NULL OR $4::time IS NULL OR ocupada.fecha_salida IS NULL OR ocupada.fecha_llegada IS NULL
+                OR (ocupada.fecha_salida::time < $4::time AND $3::time < ocupada.fecha_llegada::time)
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM operaciones propia
+                WHERE propia.id = $5 AND propia.reserva_id = ocupada.id
+              )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM operaciones o
+            LEFT JOIN conductores conductor_operacion ON conductor_operacion.id = o.conductor_id
+            WHERE o.fecha_programada = $1::date
+              AND o.id <> COALESCE($5::int, -1)
+              AND o.estado IN ('programada', 'asignada', 'en_curso', 'incidencia')
+              AND (o.vehiculo_id = v.id OR conductor_operacion.usuario_id = u.id)
+              AND (
+                $3::time IS NULL OR o.hora_inicio IS NULL OR $4::time IS NULL OR o.hora_fin IS NULL
+                OR (o.hora_inicio < $4::time AND $3::time < o.hora_fin)
+              )
           )
         GROUP BY v.id, u.id, u.nombre, c.rating_promedio
       )
@@ -613,7 +642,7 @@ const recomendarAsignacion = async (req: any, res: any) => {
       FROM candidatos
       ORDER BY puntaje DESC, carga_30_dias ASC, kilometraje ASC
       LIMIT 5
-    `, [fecha, pasajeros]);
+    `, [fecha, pasajeros, horaInicio, horaFin, operationId]);
 
     const opciones = result.rows;
     if (!opciones.length) {
@@ -650,12 +679,16 @@ const recomendarAsignacion = async (req: any, res: any) => {
     const recomendacion = {
       fecha,
       pasajeros,
+      hora_inicio: horaInicio,
+      hora_fin: horaFin,
+      operacion_id: operationId,
       vehiculo: opcionesExplicadas[0],
       alternativas: opcionesExplicadas.slice(1),
       filtrosAplicados: [
         "Vehículo activo y disponible",
         "Capacidad suficiente para los pasajeros",
-        "Sin otra reserva que lo ocupe en la fecha seleccionada",
+        "Sin solapamiento con reservas existentes en el horario seleccionado",
+        "Sin conflicto de horario con otra operación activa",
       ],
       criterios: ["capacidad", "disponibilidad", "mantenimiento", "calificación", "carga operativa"],
     };

@@ -74,7 +74,7 @@ const { uploadVehiculoImagen, uploadViajeImagenes } = require("../controllers/ad
 const { serveComprobante } = require("../controllers/uploads.controller");
 const { listarPagosAdmin, descargarReciboPagoAdmin, aprobarPago, rechazarPago, actualizarLinkPago, registrarPagoManual } = require("../controllers/admin/pagos.admin.controller");
 const { getDashboardData } = require("../controllers/admin/dashboard.admin.controller");
-const { getControlOperativo, getScenarioContext, simularEscenario, getAnomalias } = require("../controllers/admin/control-operativo.admin.controller");
+const { getControlOperativo, getAnomalias } = require("../controllers/admin/control-operativo.admin.controller");
 const { getHistorialMensual } = require("../controllers/admin/historial.admin.controller");
 const { getProformaCotizacion, enviarProformaCotizacion } = require("../controllers/admin/proforma.admin.controller");
 const {
@@ -118,9 +118,12 @@ const {
 } = require("../controllers/admin/matriculas.admin.controller");
 const {
   listarOperaciones,
+  listarReservasPorDespachar,
+  crearOperacionDesdeReserva,
   crearOperacion,
   asignarOperacion,
   actualizarEstadoOperacion,
+  reabrirOperacion,
   historialOperacion,
 } = require("../controllers/admin/operaciones.admin.controller");
 const { consultarChatbotAdmin } = require("../controllers/admin/chatbot.admin.controller");
@@ -148,9 +151,12 @@ router.get("/control-operativo", getControlOperativo);
 router.get("/historial/mensual", getHistorialMensual);
 
 router.get("/operaciones", listarOperaciones);
+router.get("/operaciones/reservas-pendientes", listarReservasPorDespachar);
+router.post("/operaciones/reservas/:id/despachar", crearOperacionDesdeReserva);
 router.post("/operaciones", crearOperacion);
 router.patch("/operaciones/:id/asignar", asignarOperacion);
 router.patch("/operaciones/:id/estado", actualizarEstadoOperacion);
+router.patch("/operaciones/:id/reabrir", reabrirOperacion);
 router.get("/operaciones/:id/historial", historialOperacion);
 router.post("/chatbot", consultarChatbotAdmin);
 router.get("/viajes", listarViajesAdmin);
@@ -164,8 +170,6 @@ router.get("/inteligencia/analitica", getAnaliticaInteligente);
 router.get("/inteligencia/asignacion-recomendada", recomendarAsignacion);
 router.patch("/inteligencia/asignacion-recomendada/:id/decision", registrarDecisionAsignacion);
 router.get("/inteligencia/desempeno", getIndicesDesempeno);
-router.post("/inteligencia/simular", simularEscenario);
-router.get("/inteligencia/contexto-escenarios", getScenarioContext);
 router.get("/inteligencia/anomalias", getAnomalias);
 router.get("/badges-sidebar", getBadgesSidebar);
 

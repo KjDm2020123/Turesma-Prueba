@@ -39,32 +39,32 @@ son:
 
 - `GET /api/admin/inteligencia/dashboard`
 - `GET /api/admin/inteligencia/analitica`
-- `GET /api/admin/inteligencia/asignacion-recomendada?fecha=YYYY-MM-DD&pasajeros=N`
+- `GET /api/admin/inteligencia/asignacion-recomendada?fecha=YYYY-MM-DD&pasajeros=N&hora_inicio=HH:MM&hora_fin=HH:MM&operacion_id=N`
 - `PATCH /api/admin/inteligencia/asignacion-recomendada/:id/decision`
+- `GET /api/admin/operaciones/reservas-pendientes`
+- `POST /api/admin/operaciones/reservas/:id/despachar`
+- `PATCH /api/admin/operaciones/:id/reabrir`
+- `PATCH /api/admin/operaciones/:id/asignar`
 - `GET /api/admin/inteligencia/desempeno`
 - `GET /api/admin/control-operativo`
 - `GET /api/admin/inteligencia/anomalias`
-- `POST /api/admin/inteligencia/simular`
-
-El simulador también está disponible desde el módulo independiente
-`/admin/simulador`, con escenarios predeterminados, validación de parámetros,
-comparación gráfica entre situación actual y proyectada, nivel de riesgo,
-recomendación automática y supuestos del cálculo.
 
 El centro de control operativo consolida las operaciones del día, asignaciones
 pendientes, disponibilidad de flota, mantenimiento, pagos y un semáforo general.
-El simulador es de solo lectura: acepta porcentajes de variación de tarifa,
-demanda, combustible y días del periodo para proyectar reservas, ingresos,
-margen y riesgo sin modificar datos reales. La detección de anomalías analiza
-cancelaciones, pagos antiguos, utilización de vehículos y rutas con baja demanda.
+La detección de anomalías analiza cancelaciones, pagos antiguos, utilización de
+vehículos y rutas con baja demanda.
 
-La recomendación de asignación considera capacidad, disponibilidad, mantenimiento,
-calificación del conductor y carga operativa. El resultado muestra el desglose
-ponderado del puntaje y los filtros obligatorios aplicados. Cada recomendación se
-registra en `decisiones_sistema`; el personal administrativo puede registrar si la
-aceptó o eligió una alternativa e indicar el motivo del cambio. Este registro
-permite evaluar posteriormente la pertinencia de las recomendaciones; no ejecuta
-por sí mismo la asignación del servicio.
+El despacho muestra reservas confirmadas que aún necesitan vehículo o conductor.
+Al preparar una reserva se crea una operación vinculada, evitando registrar el
+mismo servicio dos veces. En la asignación, el administrador puede pedir una
+recomendación calculada para la fecha, horario y número de pasajeros. La
+recomendación considera capacidad, disponibilidad, mantenimiento, calificación
+del conductor y carga operativa; puede aceptarse o reemplazarse por una de las
+alternativas, indicando el motivo. La asignación final siempre requiere
+confirmación y el backend valida capacidad, mantenimiento, licencia y conflictos
+de horario. La decisión y la asignación se registran juntas para mantener su
+trazabilidad. Si se cancela un despacho, una reserva que siga confirmada vuelve
+a la cola y permite reabrir la operación existente, conservando su historial.
 
 Los comprobantes de pago ya no se sirven como archivos estáticos públicos. Se
 entregan mediante URLs temporales o rutas autorizadas, mientras que las imágenes
