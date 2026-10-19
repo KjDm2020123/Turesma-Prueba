@@ -3,6 +3,7 @@ export {};
 const pool = require("../config/db");
 const { notificarAdmins } = require("../config/notificaciones");
 const { createPayphonePayment, confirmPayphonePayment } = require("../config/payphone");
+const { obtenerPagoAprobado, enviarReciboPago } = require("../config/reciboPago");
 
 const METODOS_VALIDOS = ["transferencia", "link_pago", "payphone"];
 
@@ -168,9 +169,32 @@ const listarPagosDeReserva = async (req: any, res: any) => {
   }
 };
 
+const descargarReciboPago = async (req: any, res: any) => {
+  const userId = Number(req.user?.id);
+  const reservaId = Number(req.params.id);
+  const pagoId = Number(req.params.pagoId);
+  if (!Number.isInteger(userId) || userId <= 0
+    || !Number.isInteger(reservaId) || reservaId <= 0
+    || !Number.isInteger(pagoId) || pagoId <= 0) {
+    return res.status(400).json({ error: "Datos de recibo inválidos" });
+  }
+
+  try {
+    const pago = await obtenerPagoAprobado(pagoId, userId);
+    if (!pago || Number(pago.reserva_id) !== reservaId) {
+      return res.status(404).json({ error: "Recibo no encontrado o pago aún no aprobado" });
+    }
+    return await enviarReciboPago(res, pago);
+  } catch (error) {
+    console.error("Error generando recibo de pago para cliente:", error);
+    return res.status(500).json({ error: "No se pudo generar el recibo de pago" });
+  }
+};
+
 module.exports = {
   crearPagoReserva,
   listarPagosDeReserva,
+  descargarReciboPago,
   crearPagoPayphone,
   confirmarPagoPayphone,
 };

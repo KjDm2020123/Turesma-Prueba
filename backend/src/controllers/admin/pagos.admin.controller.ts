@@ -3,6 +3,7 @@ export {};
 const pool = require("../../config/db");
 const { crearNotificacion, usuarioIdDeConductor } = require("../../config/notificaciones");
 const { notificarClienteReserva } = require("../../config/reservaMailer");
+const { obtenerPagoAprobado, enviarReciboPago } = require("../../config/reciboPago");
 
 // Recalcula monto_pagado y estado_pago de una reserva a partir de sus pagos
 // APROBADOS. estado_pago pasa a 'confirmado' al alcanzar el 50% del total
@@ -70,6 +71,22 @@ const listarPagosAdmin = async (req: any, res: any) => {
   } catch (error) {
     console.error("Error listando pagos (admin):", error);
     return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const descargarReciboPagoAdmin = async (req: any, res: any) => {
+  const pagoId = Number(req.params.id);
+  if (!Number.isInteger(pagoId) || pagoId <= 0) {
+    return res.status(400).json({ error: "ID de pago inválido" });
+  }
+
+  try {
+    const pago = await obtenerPagoAprobado(pagoId);
+    if (!pago) return res.status(404).json({ error: "Recibo no encontrado o pago aún no aprobado" });
+    return await enviarReciboPago(res, pago);
+  } catch (error) {
+    console.error("Error generando recibo de pago para administración:", error);
+    return res.status(500).json({ error: "No se pudo generar el recibo de pago" });
   }
 };
 
@@ -218,6 +235,7 @@ const registrarPagoManual = async (req: any, res: any) => {
 
 module.exports = {
   listarPagosAdmin,
+  descargarReciboPagoAdmin,
   aprobarPago,
   rechazarPago,
   actualizarLinkPago,

@@ -77,6 +77,20 @@ marca TURESMA, encabezados, filtros y filas alternadas. La exportación respeta
 los filtros actuales de estado y búsqueda de la pantalla. También está disponible
 mediante `GET /api/admin/reportes/exportar-csv?tipo=reservas&formato=xlsx`.
 
+## Recibos de pago
+
+Cada pago aprobado genera un recibo PDF descargable desde el historial de pagos
+del cliente y desde el panel administrativo de pagos. El recibo incluye el pago,
+la reserva, el método y el total acumulado, y solo está disponible cuando el pago
+ha sido aprobado. Las rutas requieren autenticación y verifican la propiedad de
+la reserva para el acceso del cliente:
+
+- `GET /api/usuarios/mis-reservas/:id/pagos/:pagoId/recibo`
+- `GET /api/admin/pagos/:id/recibo`
+
+El recibo funciona como constancia de pago aprobado y no reemplaza una factura
+tributaria ni el comprobante emitido por la entidad financiera.
+
 ## Comprobaciones
 
 ```powershell

@@ -5,9 +5,10 @@ import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
+import { descargarArchivo } from "../../../lib/download";
 import {
   CreditCard, Loader2, CheckCircle2, XCircle,
-  MapPin, ArrowRight, X, Link2, Send, ImageIcon,
+  MapPin, ArrowRight, X, Link2, Send, ImageIcon, FileDown,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -49,6 +50,7 @@ export default function AdminPagosPage() {
   const [rechazarId, setRechazarId] = useState<number | null>(null);
   const [notaRechazo, setNotaRechazo] = useState("");
   const [actingId, setActingId] = useState<number | null>(null);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
 
   const [linkReservaId, setLinkReservaId] = useState("");
@@ -94,6 +96,17 @@ export default function AdminPagosPage() {
       load();
     } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
+  };
+
+  const downloadReceipt = async (pagoId: number) => {
+    setDownloadingReceiptId(pagoId);
+    setErr("");
+    const result = await descargarArchivo(
+      `/api/admin/pagos/${pagoId}/recibo`,
+      `recibo_pago_${pagoId}.pdf`
+    );
+    if (!result.ok) setErr(result.error || "No se pudo descargar el recibo");
+    setDownloadingReceiptId(null);
   };
 
   const rechazar = async () => {
@@ -254,6 +267,20 @@ export default function AdminPagosPage() {
 
               {p.estado === "rechazado" && p.notas_admin && (
                 <p className="text-[10px] text-red-500 bg-red-50 rounded-lg p-2">Motivo: {p.notas_admin}</p>
+              )}
+
+              {p.estado === "aprobado" && (
+                <button
+                  type="button"
+                  onClick={() => downloadReceipt(p.id)}
+                  disabled={downloadingReceiptId === p.id}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-50 py-2.5 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-60"
+                >
+                  {downloadingReceiptId === p.id
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <FileDown size={14} />}
+                  Descargar recibo de pago
+                </button>
               )}
 
               {p.estado === "pendiente" && (

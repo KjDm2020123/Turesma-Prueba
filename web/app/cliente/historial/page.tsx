@@ -6,12 +6,13 @@ import Image from "next/image";
 import {
   Bus, ArrowRight, DollarSign, Loader2,
   Star, CheckCircle2, MapPin, Phone, Navigation, CreditCard, X,
-  Building2, Link2, UploadCloud, Clock, AlertTriangle, ImageIcon,
+  Building2, Link2, UploadCloud, Clock, AlertTriangle, ImageIcon, FileDown,
 } from "lucide-react";
 import { getAuthHeaders, getStoredToken, handleUnauthorized } from "../../../lib/session";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
+import { descargarArchivo } from "../../../lib/download";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const LiveTripMap = dynamic(
@@ -95,6 +96,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -106,6 +108,17 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
       if (res.ok) setPagos(await res.json());
     } catch { /* silencio */ }
     finally { setLoadingPagos(false); }
+  };
+
+  const downloadReceipt = async (pagoId: number) => {
+    setDownloadingReceiptId(pagoId);
+    setErr("");
+    const result = await descargarArchivo(
+      `/api/usuarios/mis-reservas/${reserva.id}/pagos/${pagoId}/recibo`,
+      `recibo_pago_${pagoId}.pdf`
+    );
+    if (!result.ok) setErr(result.error || "No se pudo descargar el recibo");
+    setDownloadingReceiptId(null);
   };
 
   useEffect(() => { loadPagos();   }, []);
@@ -272,7 +285,22 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                       {p.estado === "rechazado" && p.notas_admin && <p className="text-[10px] text-red-500 truncate">{p.notas_admin}</p>}
                     </div>
                   </div>
-                  <span className={`flex-shrink-0 text-[9px] font-black uppercase px-2 py-1 rounded-full border ${ESTADO_COMPROBANTE_BADGE[p.estado] || ESTADO_COMPROBANTE_BADGE.pendiente}`}>{p.estado}</span>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {p.estado === "aprobado" && (
+                      <button
+                        type="button"
+                        onClick={() => downloadReceipt(p.id)}
+                        disabled={downloadingReceiptId === p.id}
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-2 py-1.5 text-[9px] font-black uppercase text-emerald-700 disabled:opacity-60"
+                      >
+                        {downloadingReceiptId === p.id
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <FileDown size={12} />}
+                        Recibo
+                      </button>
+                    )}
+                    <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-full border ${ESTADO_COMPROBANTE_BADGE[p.estado] || ESTADO_COMPROBANTE_BADGE.pendiente}`}>{p.estado}</span>
+                  </div>
                 </div>
               ))}
             </div>
