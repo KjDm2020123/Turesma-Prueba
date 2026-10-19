@@ -13,6 +13,7 @@ import {
   handleUnauthorized,
   isTokenExpired,
   normalizeRole,
+  refreshStoredUser,
   SessionUser,
 } from "../../../lib/session";
 
@@ -85,7 +86,7 @@ const useConductorPanelState = () => {
   const primeraCargaRef = useRef(true);
 
   useEffect(() => {
-    const checkSession = () => {
+    const checkSession = async () => {
       const currentUser = getStoredUser();
       // Sin usuario, sin token, o token expirado → cerrar sesión y volver al login.
       if (!currentUser || !getStoredToken() || isTokenExpired()) {
@@ -94,25 +95,37 @@ const useConductorPanelState = () => {
         return;
       }
 
-      const role = normalizeRole(currentUser.rol);
-      if (role !== "conductor" && role !== "vehiculo") {
-        router.replace(getRolePath(role));
-        return;
-      }
-
-      if (!currentUser.id) {
+      // Reconcile cached profile data with the identity encoded in the validated
+      // token before building self-scoped API URLs.
+      const sessionUser = await refreshStoredUser();
+      if (!sessionUser) {
         clearStoredUser();
         window.location.replace("/api/auth/logout");
         return;
       }
 
-      setUser(currentUser);
+      const role = normalizeRole(sessionUser.rol);
+      if (role !== "conductor" && role !== "vehiculo") {
+        router.replace(getRolePath(role));
+        return;
+      }
+
+      if (!sessionUser.id) {
+        clearStoredUser();
+        window.location.replace("/api/auth/logout");
+        return;
+      }
+
+      setUser(sessionUser);
       setCheckingSession(false);
     };
 
-    checkSession();
-    window.addEventListener("pageshow", checkSession);
-    return () => window.removeEventListener("pageshow", checkSession);
+    const handlePageShow = () => {
+      void checkSession();
+    };
+    handlePageShow();
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
   }, [router]);
 
   const loadPanel = async (silencioso = false) => {
