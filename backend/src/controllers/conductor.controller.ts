@@ -442,7 +442,23 @@ const getReservaActivaMismaFecha = async ({ conductorId, fechaReserva, excludeRe
 };
 
 const getVehiculoCompleto = async (usuarioId) => {
-  // 1) Buscar por asignación activa (admin asignó mediante asignacion_vehiculos)
+  // La interfaz administrativa identifica al conductor desde vehiculos.usuario_id.
+  // Dar prioridad a esa relación evita mostrar una asignación histórica que no
+  // coincida con el vehículo que administración tiene asignado actualmente.
+  const byUsuario = await pool.query(
+    `SELECT id, placa, modelo, tipo, estado, capacidad, color, imagen_url,
+            descripcion, marca, anio, kilometraje,
+            fecha_proximo_mantenimiento, proximo_km_mantenimiento
+     FROM vehiculos
+     WHERE usuario_id = $1
+       AND activo = true
+     ORDER BY id DESC
+     LIMIT 1`,
+    [usuarioId]
+  );
+  if (byUsuario.rowCount) return byUsuario.rows[0];
+
+  // Compatibilidad con asignaciones registradas en asignacion_vehiculos.
   const byAsignacion = await pool.query(
     `SELECT v.id, v.placa, v.modelo, v.tipo, v.estado, v.capacidad, v.color,
             v.imagen_url, v.descripcion, v.marca, v.anio, v.kilometraje,
@@ -457,21 +473,7 @@ const getVehiculoCompleto = async (usuarioId) => {
      LIMIT 1`,
     [usuarioId]
   );
-  if (byAsignacion.rowCount) return byAsignacion.rows[0];
-
-  // 2) Fallback: vehículo ligado directamente al usuario
-  const result = await pool.query(
-    `SELECT id, placa, modelo, tipo, estado, capacidad, color, imagen_url,
-            descripcion, marca, anio, kilometraje,
-            fecha_proximo_mantenimiento, proximo_km_mantenimiento
-     FROM vehiculos
-     WHERE usuario_id = $1
-       AND activo = true
-     ORDER BY id ASC
-     LIMIT 1`,
-    [usuarioId]
-  );
-  return result.rowCount ? result.rows[0] : null;
+  return byAsignacion.rowCount ? byAsignacion.rows[0] : null;
 };
 
 const listarReservasConductor = async (req, res) => {

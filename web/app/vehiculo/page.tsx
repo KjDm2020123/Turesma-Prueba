@@ -114,7 +114,7 @@ export default function ConductorInicioPage() {
             )}
 
             {vehiculo.imagen_url && (
-              <div className="mt-3 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 h-40 sm:h-52">
+              <div className="relative mt-3 h-40 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 sm:h-52">
                 <Image src={vehiculo.imagen_url} alt={vehiculo.placa} fill sizes="320px" unoptimized className="object-contain" />
               </div>
             )}

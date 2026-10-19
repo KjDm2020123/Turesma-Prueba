@@ -148,9 +148,7 @@ const useConductorPanelState = () => {
 
       setPanel({ pendientes: pendientesWithNew, activas, historial });
 
-      if (data.vehiculo) {
-        setVehiculo(data.vehiculo);
-      }
+      setVehiculo(data.vehiculo ?? null);
     } catch (loadError) {
       setErr(loadError instanceof Error ? loadError.message : "No se pudo cargar el panel");
     } finally {
