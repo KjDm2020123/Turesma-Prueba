@@ -422,6 +422,8 @@ const listarReservas = async (req, res) => {
          r.estado_pago,
          r.link_pago,
          r.fecha_creacion,
+         r.tipo_vehiculo,
+         r.notas,
          ${origenSelect},
          ${destinoSelect},
          ${fechaSalidaSelect},

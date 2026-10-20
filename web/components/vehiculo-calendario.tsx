@@ -15,11 +15,9 @@ const addDaysIso = (isoDate: string, n: number) => {
   return iso(dt);
 };
 
-// Calendario que muestra los días ya reservados/no disponibles de un vehículo
-// (bloqueados) y permite seleccionar una fecha libre. En modo `range` el cliente
-// elige un día de inicio y otro de fin (reserva de varios días).
+// Permite elegir fechas y, cuando hay una unidad concreta, muestra sus días no disponibles.
 export function VehiculoCalendario({
-  vehiculoId, value, onSelect, range = false, endValue = "", onSelectEnd, maxDays = 0,
+  vehiculoId, value, onSelect, range = false, endValue = "", onSelectEnd, maxDays = 0, allowUnassigned = false,
 }: {
   vehiculoId: number | null;
   value: string;
@@ -28,6 +26,7 @@ export function VehiculoCalendario({
   endValue?: string;
   onSelectEnd?: (fecha: string) => void;
   maxDays?: number; // tope de días seguidos en modo rango (0 = sin tope)
+  allowUnassigned?: boolean;
 }) {
   const [dispo, setDispo] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
@@ -35,23 +34,24 @@ export function VehiculoCalendario({
   const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
   useEffect(() => {
-    if (!vehiculoId) { setDispo({}); return; }
+    if (!vehiculoId || allowUnassigned) return;
     setLoading(true);
     const desde = iso(new Date());
     const hastaD = new Date(); hastaD.setDate(hastaD.getDate() + 90);
     fetch(`${API}/api/usuarios/vehiculos/${vehiculoId}/disponibilidad?desde=${desde}&hasta=${iso(hastaD)}`)
       .then(r => r.ok ? r.json() : [])
-      .then((rows: any[]) => {
+      .then((rows: { fecha: string; disponible: boolean }[]) => {
         const map: Record<string, boolean> = {};
         rows.forEach(r => { map[String(r.fecha).slice(0, 10)] = !!r.disponible; });
         setDispo(map);
       })
       .catch(() => setDispo({}))
       .finally(() => setLoading(false));
-  }, [vehiculoId]);
+  }, [vehiculoId, allowUnassigned]);
 
   const hoy = iso(new Date());
-  const esLibre = (f: string) => f >= hoy && (dispo[f] === undefined ? true : dispo[f] === true);
+  const esLibre = (f: string) => f >= hoy
+    && (!vehiculoId || allowUnassigned || dispo[f] === undefined || dispo[f] === true);
 
   // ¿Están libres TODOS los días entre a y b (inclusive)? Para validar el rango.
   const rangoLibre = (a: string, b: string) => {
@@ -99,7 +99,7 @@ export function VehiculoCalendario({
     onSelect(f); onSelectEnd?.("");
   };
 
-  if (!vehiculoId) {
+  if (!vehiculoId && !allowUnassigned) {
     return <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs font-bold text-slate-400">Selecciona un vehículo para ver sus días disponibles</div>;
   }
 
@@ -154,8 +154,10 @@ export function VehiculoCalendario({
             })}
           </div>
           <div className="flex items-center gap-3 mt-3 text-[9px] font-bold text-slate-400 flex-wrap">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> Libre</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" /> Reservado</span>
+            {vehiculoId && !allowUnassigned && <>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> Libre</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" /> Reservado</span>
+            </>}
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#E31E24] inline-block" /> Tu elección</span>
           </div>
         </>

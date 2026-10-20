@@ -27,6 +27,7 @@ type Reserva = {
   fecha_salida: string | null;
   fecha_llegada: string | null;
   num_personas: number | null;
+  tipo_vehiculo: string | null;
   total: number | null;
   origen: string | null;
   destino: string | null;
@@ -412,7 +413,7 @@ export default function AdminReservasPage() {
                 )}
                 <div className="flex items-center justify-between text-[11px] text-slate-500">
                   <span>{formatFecha(r.fecha_reserva)}{r.num_personas ? ` · ${r.num_personas} pers.` : ""}</span>
-                  <span className="font-semibold text-slate-700">{r.vehiculo_placa || "Sin vehículo"}</span>
+                  <span className="text-right font-semibold text-slate-700">{r.vehiculo_placa || "Sin asignar"}<br /><span className="text-[10px] text-slate-400">Preferencia: {r.tipo_vehiculo || "Sin preferencia"}</span></span>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button
@@ -465,8 +466,9 @@ export default function AdminReservasPage() {
                             {r.vehiculo_modelo && <span className="text-[10px] text-slate-400">· {r.vehiculo_modelo}</span>}
                           </div>
                         ) : (
-                          <span className="text-[10px] text-amber-500 font-bold">Sin vehículo</span>
+                          <span className="text-[10px] text-amber-500 font-bold">Preferencia: {r.tipo_vehiculo || "Sin indicar"} · unidad pendiente</span>
                         )}
+                        {r.vehiculo_placa && <span className="block text-[10px] text-slate-400">Preferencia: {r.tipo_vehiculo || "Sin indicar"}</span>}
                         {r.conductor_nombre && (
                           <div className="flex items-center gap-1">
                             <User size={11} className="text-slate-400" />

@@ -35,6 +35,7 @@ type ReservationReady = {
   destino?: string | null;
   num_personas: number;
   total: number;
+  tipo_vehiculo?: string | null;
   vehiculo_id?: number | null;
   conductor_id?: number | null;
   operacion_cancelada_id?: number | null;
@@ -301,6 +302,7 @@ export default function OperacionesPage() {
                     {String(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva).slice(0, 10)}
                     {" · "}{reservation.num_personas} pasajeros
                     {" · "}Vehículo: {reservation.vehiculo_placa || "pendiente"}
+                    {reservation.tipo_vehiculo && ` · Preferencia: ${reservation.tipo_vehiculo}`}
                     {" · "}Conductor: {reservation.conductor_id ? "asignado" : "pendiente"}
                   </p>
                 </div>

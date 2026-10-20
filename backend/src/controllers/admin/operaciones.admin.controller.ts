@@ -112,7 +112,7 @@ const listarReservasPorDespachar = async (_req: any, res: any) => {
   try {
     const result = await pool.query(
       `SELECT r.id, r.fecha_reserva, r.fecha_servicio, r.fecha_salida, r.fecha_llegada,
-              r.origen, r.destino, r.num_personas, r.total, r.vehiculo_id, r.conductor_id,
+              r.origen, r.destino, r.num_personas, r.total, r.vehiculo_id, r.tipo_vehiculo, r.conductor_id,
               u.nombre AS cliente_nombre, v.placa AS vehiculo_placa,
               (SELECT o.id FROM operaciones o
                WHERE o.reserva_id = r.id AND o.estado = 'cancelada'

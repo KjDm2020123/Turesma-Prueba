@@ -421,6 +421,7 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS fecha_servicio TIMESTAMP,
     ADD COLUMN IF NOT EXISTS notas TEXT,
     ADD COLUMN IF NOT EXISTS vehiculo_id INT REFERENCES vehiculos(id),
+    ADD COLUMN IF NOT EXISTS tipo_vehiculo VARCHAR(60),
     ADD COLUMN IF NOT EXISTS conductor_id INT REFERENCES usuarios(id),
     ADD COLUMN IF NOT EXISTS origen VARCHAR(300),
     ADD COLUMN IF NOT EXISTS destino VARCHAR(300),

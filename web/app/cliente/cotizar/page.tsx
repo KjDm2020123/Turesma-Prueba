@@ -1,7 +1,6 @@
 "use client";
 
 import React, { FormEvent, useEffect, useState } from "react";
-import Image from "next/image";
 import {
   MapPin, Calendar, Users, Car, FileText, Clock, CheckCircle2,
   XCircle, Loader2, RefreshCw, Send, ArrowRight,
@@ -80,6 +79,18 @@ export default function ClienteCotizarPage() {
   const [route, setRoute] = useState<RutaCalculada | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [tarifas, setTarifas] = useState<Tarifas | null>(null);
+  const categorias = Array.from(
+    vehiculos.reduce((result, vehiculo) => {
+      const tipo = String(vehiculo.tipo || "van").trim().toLowerCase();
+      const current = result.get(tipo);
+      result.set(tipo, {
+        tipo,
+        capacidad: Math.max(current?.capacidad || 0, Number(vehiculo.capacidad) || 0),
+      });
+      return result;
+    }, new Map<string, { tipo: string; capacidad: number }>())
+      .values()
+  );
 
   // Negociación
   const [counterId, setCounterId] = useState<number | null>(null);
@@ -108,8 +119,9 @@ export default function ClienteCotizarPage() {
 
   const [form, setForm] = useState({
     fecha_servicio: "", fecha_fin: "", num_personas: "1",
-    num_viajes: "1", vehiculo_id: "", valor_ofrecido: "", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2",
+    num_viajes: "1", tipo_vehiculo: "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2",
   });
+  const [wizardStep, setWizardStep] = useState(1);
   // false = servicio de un solo día · true = reserva de varios días (rango)
   const [variosDias, setVariosDias] = useState(false);
   const [origin, setOrigin] = useState<Punto | null>(null);
@@ -156,7 +168,13 @@ export default function ClienteCotizarPage() {
       const res = await fetch(`${API}/api/usuarios/vehiculos`);
       if (res.ok) {
         const data = await res.json();
-        setVehiculos(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setVehiculos(list);
+        const tipos = Array.from(new Set(list.map((vehiculo: Vehiculo) => String(vehiculo.tipo || "van").trim().toLowerCase())));
+        setForm(current => {
+          const tipoVehiculo = tipos.includes(current.tipo_vehiculo) ? current.tipo_vehiculo : tipos[0] || "";
+          return tipoVehiculo === current.tipo_vehiculo ? current : { ...current, tipo_vehiculo: tipoVehiculo };
+        });
       }
     } catch { /* silencio */ }
   };
@@ -188,6 +206,7 @@ export default function ClienteCotizarPage() {
         headers: getAuthHeaders(),
         body: JSON.stringify({
           num_personas: Number(form.num_personas) || 1,
+          tipo_vehiculo: form.tipo_vehiculo,
           fecha_servicio: form.fecha_servicio || null,
           fecha_fin: variosDias ? form.fecha_fin || form.fecha_servicio || null : form.fecha_servicio || null,
           notas: `${assistantPrompt} ${form.notas}`.trim(),
@@ -199,7 +218,7 @@ export default function ClienteCotizarPage() {
       setRecommendation(data.recommendation || null);
       setAlternatives(Array.isArray(data.alternatives) ? data.alternatives : []);
       setAssistantMsg(data.message || "Revisa estas opciones para tu viaje.");
-      if (data.recommendation) setForm(p => ({ ...p, vehiculo_id: String(data.recommendation.id) }));
+      if (data.recommendation) setForm(p => ({ ...p, tipo_vehiculo: String(data.recommendation.tipo || "van").trim().toLowerCase() }));
     } catch (e) {
       setAssistantErr(e instanceof Error ? e.message : "No se pudo consultar al asistente");
     } finally { setAssistantLoading(false); }
@@ -225,12 +244,43 @@ export default function ClienteCotizarPage() {
     loadTarifas();
   }, { enabled: !checkingSession && !!userId, intervalMs: 5000, immediate: false });
 
+  const advanceStep = () => {
+    setFormErr("");
+    if (wizardStep === 1 && (!origin || !destination)) {
+      setFormErr("Marca el punto de salida y el destino en el mapa.");
+      return;
+    }
+    if (wizardStep === 2) {
+      if (!form.fecha_servicio) { setFormErr("Selecciona la fecha de inicio del servicio."); return; }
+      if (variosDias && !form.fecha_fin) { setFormErr("Toca también el último día del viaje en el calendario."); return; }
+      if (variosDias && form.fecha_fin && diasEntre(form.fecha_servicio, form.fecha_fin) > MAX_DIAS) {
+        setFormErr(`El servicio no puede superar los ${MAX_DIAS} días seguidos.`);
+        return;
+      }
+    }
+    if (wizardStep === 3) {
+      const capacity = categorias.find(({ tipo }) => tipo === form.tipo_vehiculo)?.capacidad || 0;
+      if (!capacity) { setFormErr("Selecciona una categoría de vehículo disponible."); return; }
+      if (Number(form.num_personas) > capacity) {
+        setFormErr(`La categoría seleccionada admite hasta ${capacity} pasajeros. Elige otra categoría.`);
+        return;
+      }
+    }
+    setWizardStep(current => Math.min(4, current + 1));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (wizardStep < 4) { advanceStep(); return; }
     if (!origin || !destination) { setFormErr("Marca el punto de salida y el destino en el mapa."); return; }
-    if (!form.fecha_servicio) { setFormErr("Selecciona una fecha disponible en el calendario."); return; }
+    if (!form.fecha_servicio) { setFormErr("Selecciona la fecha de inicio del servicio."); return; }
     if (variosDias && !form.fecha_fin) { setFormErr("Elegiste varios días: toca también el último día del viaje en el calendario."); return; }
     if (variosDias && form.fecha_fin && diasEntre(form.fecha_servicio, form.fecha_fin) > MAX_DIAS) { setFormErr(`El servicio no puede superar los ${MAX_DIAS} días seguidos.`); return; }
+    const capacidadCategoria = categorias.find(({ tipo }) => tipo === form.tipo_vehiculo)?.capacidad || 0;
+    if (capacidadCategoria && Number(form.num_personas) > capacidadCategoria) {
+      setFormErr(`La categoría seleccionada admite hasta ${capacidadCategoria} pasajeros. Elige otra categoría.`);
+      return;
+    }
     setSending(true); setFormErr(""); setFormMsg("");
     try {
       const res = await fetch(`${API}/api/cotizaciones/reserva-directa`, {
@@ -244,10 +294,9 @@ export default function ClienteCotizarPage() {
           destino_lat: destination.lat, destino_lng: destination.lng,
           num_personas: Number(form.num_personas) || 1,
           num_viajes: Number(form.num_viajes) || 1,
+          tipo_vehiculo: form.tipo_vehiculo,
           modalidad_servicio: variosDias ? "varios_dias" : form.modalidad_servicio,
           duracion_horas: form.modalidad_servicio === "horas" ? Number(form.duracion_horas) || 1 : null,
-          vehiculo_id: form.vehiculo_id || null,
-          valor_ofrecido: form.valor_ofrecido ? Number(form.valor_ofrecido) : null,
           hora_salida: form.hora_salida || null,
         }),
       });
@@ -258,8 +307,9 @@ export default function ClienteCotizarPage() {
         window.location.assign(data.approval_url);
         return;
       }
-      setFormMsg("Reserva creada. Puedes pagar con PayPhone o transferencia desde Historial.");
-      setForm({ fecha_servicio: "", fecha_fin: "", num_personas: "1", num_viajes: "1", vehiculo_id: "", valor_ofrecido: "", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
+      setFormMsg(`Solicitud de reserva creada${data.total != null ? ` por $${Number(data.total).toFixed(2)}` : ""}. Ve a Historial para pagar el anticipo indicado; administración verificará el pago antes de confirmar la reserva y asignar el vehículo.`);
+      setForm({ fecha_servicio: "", fecha_fin: "", num_personas: "1", num_viajes: "1", tipo_vehiculo: categorias[0]?.tipo || "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
+      setWizardStep(1);
       setVariosDias(false);
       setOrigin(null); setDestination(null);
       locateMyLocation();
@@ -268,8 +318,7 @@ export default function ClienteCotizarPage() {
     finally { setSending(false); }
   };
 
-  const selectedVehicle = vehiculos.find((v) => String(v.id) === form.vehiculo_id) ?? null;
-  const tipoSeleccionado = (selectedVehicle?.tipo || "van").toString().trim().toLowerCase();
+  const tipoSeleccionado = form.tipo_vehiculo.toString().trim().toLowerCase();
   const selectedDays = form.fecha_servicio && variosDias && form.fecha_fin ? diasEntre(form.fecha_servicio, form.fecha_fin) : 1;
   const selectedTrips = Math.max(1, Number(form.num_viajes) || 1);
   const modalidad = variosDias ? "varios_dias" : form.modalidad_servicio;
@@ -309,7 +358,7 @@ export default function ClienteCotizarPage() {
       {/* TOGGLE FORM */}
       <button onClick={() => { setShowForm(f => !f); setFormErr(""); setFormMsg(""); }}
         className={`w-full flex items-center justify-between p-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg ${showForm ? "bg-slate-800 text-white" : "bg-[#E31E24] text-white hover:bg-red-700"}`}>
-        <span className="flex items-center gap-3"><div className="bg-white/20 p-2 rounded-xl"><FileText size={18} /></div>{showForm ? "Ocultar formulario" : "Nueva cotización"}</span>
+        <span className="flex items-center gap-3"><div className="bg-white/20 p-2 rounded-xl"><FileText size={18} /></div>{showForm ? "Ocultar formulario" : "Nueva solicitud de servicio"}</span>
         {showForm ? <ChevronUp size={18} /> : <ArrowRight size={18} />}
       </button>
 
@@ -318,13 +367,26 @@ export default function ClienteCotizarPage() {
         <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
           <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-6">
 
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-700">Paso {wizardStep} de 4</p>
+                <p className="text-[10px] font-bold text-slate-400">{["Ruta", "Fecha y pasajeros", "Vehículo y modalidad", "Resumen"][wizardStep - 1]}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {["Ruta", "Fecha", "Vehículo", "Resumen"].map((label, index) => (
+                  <div key={label} className={`h-1.5 rounded-full ${index < wizardStep ? "bg-[#E31E24]" : "bg-slate-200"}`} aria-label={label} />
+                ))}
+              </div>
+            </div>
+
+            <div className={`space-y-6 ${wizardStep === 3 ? "" : "hidden"}`}>
             <div className="rounded-3xl border border-blue-200 bg-[linear-gradient(135deg,#eff6ff,#ffffff)] p-4 sm:p-5 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="rounded-2xl bg-blue-600 p-2.5 text-white shadow-lg shadow-blue-200"><Sparkles size={18} /></div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Asistente inteligente</p>
                   <h2 className="text-base font-black text-slate-900">Cuéntame qué necesitas y te sugiero el vehículo ideal</h2>
-                  <p className="mt-1 text-xs text-slate-500">Usaré pasajeros, fechas, disponibilidad y tus preferencias para recomendarte una opción real.</p>
+                  <p className="mt-1 text-xs text-slate-500">Usaré pasajeros, fechas y tus preferencias para sugerirte una categoría. La unidad final se asigna después de confirmar la reserva.</p>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -344,95 +406,46 @@ export default function ClienteCotizarPage() {
                 <div className="grid gap-2 sm:grid-cols-3">
                   {[recommendation, ...alternatives].filter(Boolean).map((vehicle, index) => {
                     const item = vehicle as VehicleRecommendation;
-                    const selected = form.vehiculo_id === String(item.id);
-                    return <button key={item.id} type="button" onClick={() => setForm(p => ({ ...p, vehiculo_id: String(item.id) }))}
+                    const selected = form.tipo_vehiculo === String(item.tipo || "van").trim().toLowerCase();
+                    return <button key={item.id} type="button" onClick={() => setForm(p => ({ ...p, tipo_vehiculo: String(item.tipo || "van").trim().toLowerCase() }))}
                       className={`rounded-2xl border-2 bg-white p-3 text-left transition ${selected ? "border-blue-600 ring-2 ring-blue-100" : "border-white hover:border-blue-200"}`}>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">{index === 0 ? "Mejor coincidencia" : "Alternativa"}</p>
-                      <p className="mt-1 truncate text-sm font-black text-slate-800">{item.modelo || item.tipo}</p>
-                      <p className="text-[11px] font-semibold text-slate-500">{item.capacidad} pasajeros · {item.placa}</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">{index === 0 ? "Categoría sugerida" : "Alternativa"}</p>
+                      <p className="mt-1 truncate text-sm font-black capitalize text-slate-800">{item.tipo}</p>
+                      <p className="text-[11px] font-semibold text-slate-500">Hasta {item.capacidad} pasajeros</p>
                     </button>;
                   })}
                 </div>
               )}
             </div>
 
-            {/* PASO 1: VEHÍCULO (tarjetas con imagen) */}
+            {/* PASO 1: PREFERENCIA DE CATEGORÍA */}
             <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Car size={12} /> 1. Elige el vehículo</p>
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {vehiculos.map(v => {
-                    const sel = form.vehiculo_id === String(v.id);
-                    return (
-                      <button
-                        key={v.id}
-                        type="button"
-                        onClick={() => setForm(p => ({ ...p, vehiculo_id: sel ? "" : String(v.id), tipo_vehiculo: sel ? "" : String(v.tipo || "van").toLowerCase() }))}
-                        aria-pressed={sel}
-                        className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-100 ${
-                          sel
-                            ? "border-[#E31E24] ring-2 ring-[#E31E24]/15 shadow-lg shadow-red-100"
-                            : "border-slate-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                        }`}
-                      >
-                        <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
-                          {v.imagen_url ? (
-                            <Image
-                              src={v.imagen_url}
-                              alt={`${v.modelo || v.tipo} ${v.placa}`}
-                              fill
-                              sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                              className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                              <Bus size={36} strokeWidth={1.5} className="text-slate-400" />
-                            </div>
-                          )}
-                          <span className="absolute bottom-3 left-3 rounded-lg bg-slate-950/75 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-white shadow backdrop-blur-sm">
-                            {v.placa}
-                          </span>
-                          {sel && (
-                            <span className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#E31E24] text-white shadow-lg ring-2 ring-white">
-                              <CheckCircle2 size={18} />
-                            </span>
-                          )}
-                        </div>
-                        <div className="space-y-2.5 p-4">
-                          <h3 className="truncate text-base font-black tracking-tight text-slate-900">
-                            {v.modelo || v.tipo || "Vehículo"}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold capitalize text-slate-600">
-                              {v.tipo || "Transporte"}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
-                              <Users size={13} className="text-slate-400" />
-                              {v.capacidad || "—"} pasajeros
-                            </span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tipo detectado</label>
-                  <div className="mt-2 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-700">
-                    <span>{selectedVehicle ? selectedVehicle.tipo || "Vehículo" : "Sin vehículo seleccionado"}</span>
-                    {selectedVehicle && <span className="rounded-full bg-[#E31E24]/10 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-[#E31E24]">{tipoSeleccionado}</span>}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-slate-600 sm:grid-cols-3">
-                    <div className="rounded-xl bg-white p-2 border border-slate-200"><span className="font-black uppercase text-slate-400 block">Van</span><span>${Number(tarifas?.tarifa_van ?? tarifas?.tarifa_diaria ?? 0).toFixed(2)}/día</span></div>
-                    <div className="rounded-xl bg-white p-2 border border-slate-200"><span className="font-black uppercase text-slate-400 block">Bus</span><span>${Number(tarifas?.tarifa_bus ?? tarifas?.tarifa_diaria ?? 0).toFixed(2)}/día</span></div>
-                    <div className="rounded-xl bg-white p-2 border border-slate-200"><span className="font-black uppercase text-slate-400 block">SUV</span><span>${Number(tarifas?.tarifa_suv ?? tarifas?.tarifa_diaria ?? 0).toFixed(2)}/día</span></div>
-                    <div className="rounded-xl bg-white p-2 border border-slate-200"><span className="font-black uppercase text-slate-400 block">Minibus</span><span>${Number(tarifas?.tarifa_minibus ?? tarifas?.tarifa_diaria ?? 0).toFixed(2)}/día</span></div>
-                    <div className="rounded-xl bg-white p-2 border border-slate-200"><span className="font-black uppercase text-slate-400 block">Sedan</span><span>${Number(tarifas?.tarifa_sedan ?? tarifas?.tarifa_diaria ?? 0).toFixed(2)}/día</span></div>
-                  </div>
-                </div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Car size={12} /> 3. Elige una categoría de vehículo</p>
+              <p className="text-xs text-slate-500">Es una preferencia, no una reserva de una unidad o placa específica. Administración confirmará el vehículo asignado después de verificar el pago.</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {categorias.map(({ tipo, capacidad }) => {
+                  const selected = tipoSeleccionado === tipo;
+                  const exceedsCapacity = Number(form.num_personas) > capacidad;
+                  const rate = tipo === "bus" ? tarifas?.tarifa_bus
+                    : tipo === "suv" ? tarifas?.tarifa_suv
+                      : tipo === "minibus" ? tarifas?.tarifa_minibus
+                        : tipo === "sedan" ? tarifas?.tarifa_sedan : tarifas?.tarifa_van;
+                  return (
+                    <button key={tipo} type="button" disabled={exceedsCapacity}
+                      onClick={() => setForm(p => ({ ...p, tipo_vehiculo: tipo }))}
+                      aria-pressed={selected}
+                      className={`rounded-2xl border-2 p-4 text-left transition ${selected ? "border-[#E31E24] bg-red-50 ring-2 ring-red-100" : "border-slate-200 bg-white hover:border-slate-300"} ${exceedsCapacity ? "cursor-not-allowed opacity-45" : ""}`}>
+                      <span className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 font-black capitalize text-slate-800"><Bus size={18} className="text-[#E31E24]" />{tipo}</span>
+                        {selected && <CheckCircle2 size={17} className="text-[#E31E24]" />}
+                      </span>
+                      <span className="mt-2 block text-xs font-semibold text-slate-500">Hasta {capacidad} pasajeros</span>
+                      <span className="mt-1 block text-xs font-bold text-slate-700">{rate != null ? `Base $${Number(rate).toFixed(2)} · varía por modalidad` : "Tarifa según servicio"}</span>
+                    </button>
+                  );
+                })}
               </div>
-              <p className="text-[10px] text-slate-400">El tipo se toma del vehículo que selecciones; si no eliges uno, el administrador asignará el adecuado.</p>
+              {categorias.length === 0 && <p className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-700">No hay categorías de vehículos disponibles en este momento.</p>}
             </div>
 
             <div className="space-y-2">
@@ -453,12 +466,15 @@ export default function ClienteCotizarPage() {
                   <input type="number" min="1" max="24" step="1" value={form.duracion_horas} onChange={e => setForm(p => ({ ...p, duracion_horas: e.target.value }))} className="w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24]" />
                 </div>
               )}
-              <p className="text-[10px] text-slate-400">El precio cambia según el tipo de servicio y el vehículo seleccionado.</p>
+              <p className="text-[10px] text-slate-400">La estimación cambia según la categoría y la modalidad que elijas.</p>
+            </div>
             </div>
 
             {/* PASO 2: FECHA (calendario con días reservados bloqueados) */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Calendar size={12} /> 2. Elige la fecha disponible</p>
+            <div className={`space-y-4 ${wizardStep === 2 ? "" : "hidden"}`}>
+              <div className="space-y-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Calendar size={12} /> 2. Fecha del servicio</p>
+              <p className="text-xs text-slate-500">Selecciona las fechas que prefieres. La disponibilidad final se confirma después de revisar tu solicitud.</p>
 
               {/* Un día o varios días */}
               <div className="grid grid-cols-2 gap-2 bg-slate-100 rounded-2xl p-1">
@@ -475,13 +491,14 @@ export default function ClienteCotizarPage() {
               </div>
 
               <VehiculoCalendario
-                vehiculoId={form.vehiculo_id ? Number(form.vehiculo_id) : null}
+                vehiculoId={null}
                 value={form.fecha_servicio}
                 onSelect={(f) => setForm(p => ({ ...p, fecha_servicio: f }))}
                 range={variosDias}
                 endValue={form.fecha_fin}
                 onSelectEnd={(f) => setForm(p => ({ ...p, fecha_fin: f }))}
                 maxDays={MAX_DIAS}
+                allowUnassigned
               />
 
               {/* Resumen del rango elegido */}
@@ -493,12 +510,21 @@ export default function ClienteCotizarPage() {
                     : <span><b className="text-slate-700">{new Date(form.fecha_servicio + "T00:00").toLocaleDateString("es-EC")}</b>{variosDias ? " — elige el último día" : " · 1 día"}</span>}
                 </div>
               )}
+              </div>
+              <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5"><Users size={14} /> Personas</span>
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => step("num_personas", -1, 1)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600"><Minus size={14} /></button>
+                  <span className="w-6 text-center font-black text-slate-800">{form.num_personas}</span>
+                  <button type="button" onClick={() => step("num_personas", 1, 1)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600"><Plus size={14} /></button>
+                </div>
+              </div>
             </div>
 
             {/* PASO 3: MAPA origen/destino */}
-            <div className="space-y-2">
+            <div className={`space-y-2 ${wizardStep === 1 ? "" : "hidden"}`}>
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><MapPin size={12} /> 3. Marca tu destino en el mapa</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><MapPin size={12} /> 1. Indica la ruta</p>
                 <button type="button" onClick={locateMyLocation} disabled={locatingOrigin}
                   className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 disabled:opacity-50">
                   {locatingOrigin ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />} Usar mi ubicación actual
@@ -522,18 +548,9 @@ export default function ClienteCotizarPage() {
             </div>
 
             {/* PASO 4: detalles por selección */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Users size={12} /> 4. Detalles del servicio</p>
+            <div className={`space-y-4 ${wizardStep === 4 ? "" : "hidden"}`}>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Users size={12} /> 4. Detalles y resumen</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Personas (stepper) */}
-                <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-between">
-                  <span className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5"><Users size={14} /> Personas</span>
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={() => step("num_personas", -1, 1)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600"><Minus size={14} /></button>
-                    <span className="w-6 text-center font-black text-slate-800">{form.num_personas}</span>
-                    <button type="button" onClick={() => step("num_personas", 1, 1)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600"><Plus size={14} /></button>
-                  </div>
-                </div>
                 <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-between">
                   <span className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5"><RefreshCw size={14} /> Viajes</span>
                   <div className="flex items-center gap-3">
@@ -548,12 +565,6 @@ export default function ClienteCotizarPage() {
                   <input type="time" value={form.hora_salida} onChange={e => setForm(p => ({ ...p, hora_salida: e.target.value }))}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24]" />
                 </div>
-                {/* Valor ofrecido */}
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor que ofreces ($) — opcional, podrás negociarlo</label>
-                  <div className="relative"><DollarSign size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-                    <input type="number" min="0" step="0.01" value={form.valor_ofrecido} onChange={e => setForm(p => ({ ...p, valor_ofrecido: e.target.value }))} className={INPUT + " pl-9"} placeholder="Ej: 250" /></div>
-                </div>
                 {/* Mensaje / detalles opcional para el administrador */}
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><FileText size={12} /> Mensaje para el administrador (opcional)</label>
@@ -567,11 +578,11 @@ export default function ClienteCotizarPage() {
             {formErr && <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 font-bold">{formErr}</div>}
             {formMsg && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm text-emerald-700 font-bold flex items-center gap-2"><CheckCircle2 size={16} />{formMsg}</div>}
 
-            {estimatedTotal != null && (
+            {wizardStep === 4 && estimatedTotal != null && (
               <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Estimación automática</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Estimación referencial</p>
                     {tarifas?.oferta_activa && (
                       <p className="text-[10px] font-bold text-emerald-700">Oferta del día: {tarifas.oferta_descripcion || `Descuento ${tarifas.descuento_oferta_pct}%`}</p>
                     )}
@@ -579,19 +590,35 @@ export default function ClienteCotizarPage() {
                   <p className="text-2xl font-black text-emerald-700">${estimatedTotal.toFixed(2)}</p>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold text-emerald-800 sm:grid-cols-5">
-                  <span>Días: ${subtotalDiario.toFixed(2)}</span>
+                  <span>Servicio: ${subtotalDiario.toFixed(2)}</span>
                   <span>Km: ${subtotalKm.toFixed(2)}</span>
                   <span>Viajes: ${subtotalViajes.toFixed(2)}</span>
                   <span>Peajes: ${subtotalPeajes.toFixed(2)}</span>
-                  <span>Oferta: -${discountAmount.toFixed(2)}</span>
+                  {discountAmount > 0 && <span>Descuento: -${discountAmount.toFixed(2)}</span>}
                 </div>
+                <p className="mt-3 text-[11px] font-medium text-emerald-800">El total final se calcula al enviar la solicitud y puede variar ligeramente por la distancia de ruta. La fecha y el vehículo quedan sujetos a confirmación.</p>
               </div>
             )}
 
-            <button type="submit" disabled={sending}
-              className="w-full py-4 bg-[#E31E24] hover:bg-black text-white font-black text-sm uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60">
-              {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}{sending ? "Creando reserva..." : "Aceptar precio y pagar"}
-            </button>
+            <div className="flex justify-between gap-3">
+              {wizardStep > 1 && (
+                <button type="button" onClick={() => { setWizardStep(current => current - 1); setFormErr(""); }}
+                  className="rounded-2xl border-2 border-slate-200 px-5 py-3 text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50">
+                  Volver
+                </button>
+              )}
+              {wizardStep < 4 ? (
+                <button type="button" onClick={advanceStep}
+                  className="ml-auto inline-flex items-center gap-2 rounded-2xl bg-[#E31E24] px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-red-200 hover:bg-black">
+                  Continuar <ArrowRight size={15} />
+                </button>
+              ) : (
+                <button type="submit" disabled={sending || categorias.length === 0}
+                  className="ml-auto w-full py-4 bg-[#E31E24] hover:bg-black text-white font-black text-sm uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60">
+                  {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}{sending ? "Enviando solicitud..." : "Solicitar servicio"}
+                </button>
+              )}
+            </div>
           </form>
         </div>
       )}

@@ -142,11 +142,10 @@ const listarCotizaciones = async (req: any, res: any) => {
   }
 };
 
-// Cliente: acepta el precio visible y crea la reserva directamente, sin pasar
-// por la bandeja de cotizaciones del administrador.
+// Cliente: crea una reserva pendiente de pago sin pasar por la bandeja de cotizaciones.
 const crearReservaDirecta = async (req: any, res: any) => {
   const usuarioId = req.user?.id;
-  const { origen, destino, fecha_servicio, fecha_fin, num_personas, vehiculo_id,
+  const { origen, destino, fecha_servicio, fecha_fin, num_personas, vehiculo_id, tipo_vehiculo,
     origen_lat, origen_lng, destino_lat, destino_lng, num_viajes, modalidad_servicio, duracion_horas, hora_salida, notas } = req.body;
   if (!usuarioId || !origen || !destino || !fecha_servicio || !num_personas) {
     return res.status(400).json({ error: "Faltan datos para crear la reserva" });
@@ -162,7 +161,21 @@ const crearReservaDirecta = async (req: any, res: any) => {
     if (vehiculo_id && vehicle.rowCount === 0) {
       return res.status(400).json({ error: "El vehículo seleccionado ya no está disponible" });
     }
-    const tipoVehiculo = String(vehicle.rows[0]?.tipo || "van").trim().toLowerCase();
+    const tipoVehiculo = String(vehicle.rows[0]?.tipo || tipo_vehiculo || "van").trim().toLowerCase();
+    if (!vehiculo_id) {
+      const category = await client.query(
+        `SELECT MAX(capacidad)::int AS capacidad
+         FROM vehiculos
+         WHERE activo = true AND LOWER(tipo) = LOWER($1)`,
+        [tipoVehiculo]
+      );
+      if (category.rows[0]?.capacidad == null) {
+        return res.status(400).json({ error: "La categoría seleccionada ya no está disponible" });
+      }
+      if (Number(num_personas) > Number(category.rows[0].capacidad)) {
+        return res.status(400).json({ error: `La categoría seleccionada admite hasta ${category.rows[0].capacidad} pasajeros` });
+      }
+    }
     const fechaFin = typeof fecha_fin === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha_fin) && fecha_fin > String(fecha_servicio) ? fecha_fin : null;
     const days = fechaFin ? Math.max(1, Math.round((new Date(fechaFin).getTime() - new Date(String(fecha_servicio).slice(0, 10)).getTime()) / 86400000) + 1) : 1;
     const trips = Math.max(1, Math.floor(Number(num_viajes) || 1));
@@ -174,14 +187,14 @@ const crearReservaDirecta = async (req: any, res: any) => {
     const breakdown = calculateQuote({ pricing, distanceKm, days, trips, vehicleType: tipoVehiculo, serviceMode, hours });
     await client.query("BEGIN");
     const reservation = await client.query(
-      `INSERT INTO reservas (usuario_id, fecha_reserva, fecha_fin, num_personas, total, estado, origen, destino, vehiculo_id, monto_pagado, estado_pago, hora_salida)
-       VALUES ($1, $2, $3, $4, $5, 'pendiente_pago', $6, $7, $8, 0, 'pendiente', $9) RETURNING id, total`,
-      [usuarioId, fecha_servicio, fechaFin, Number(num_personas), breakdown.total, origen, destino, vehiculo_id ? Number(vehiculo_id) : null, hora_salida || null]
+      `INSERT INTO reservas (usuario_id, fecha_reserva, fecha_fin, num_personas, total, estado, origen, destino, vehiculo_id, tipo_vehiculo, notas, monto_pagado, estado_pago, hora_salida)
+       VALUES ($1, $2, $3, $4, $5, 'pendiente_pago', $6, $7, $8, $9, $10, 0, 'pendiente', $11) RETURNING id, total`,
+      [usuarioId, fecha_servicio, fechaFin, Number(num_personas), breakdown.total, origen, destino, vehiculo_id ? Number(vehiculo_id) : null, tipoVehiculo, notas || null, hora_salida || null]
     );
     await client.query("COMMIT");
     const reservaId = Number(reservation.rows[0].id);
     await notificarAdmins(usuarioId, `Nueva reserva directa #${reservaId} pendiente de pago por $${Number(breakdown.total).toFixed(2)}.`, "reserva", reservaId);
-    return res.status(201).json({ message: "Reserva creada. Continúa con el pago para confirmarla.", reserva_id: reservaId, total: breakdown.total, pago_minimo: Number(breakdown.total) * 0.5 });
+    return res.status(201).json({ message: "Solicitud de reserva creada. Continúa con el pago; administración confirmará la reserva después de verificarlo.", reserva_id: reservaId, total: breakdown.total, pago_minimo: Number(breakdown.total) * 0.5 });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Error creando reserva directa:", error);

@@ -237,7 +237,7 @@ const recomendarVehiculo = async (req: any, res: any) => {
 
     const recomendado = ranked[0] || null;
     const message = recomendado
-      ? `Te recomiendo el ${recomendado.modelo || recomendado.tipo} (${recomendado.capacidad} pasajeros): cubre tu grupo${fechaInicio ? " y está disponible en las fechas indicadas" : ""}. Puedes usarlo o comparar las alternativas.`
+      ? `La categoría ${recomendado.tipo} puede cubrir tu grupo (hasta ${recomendado.capacidad} pasajeros)${fechaInicio ? " según la disponibilidad consultada" : ""}. La unidad específica se confirmará al revisar tu solicitud.`
       : `No encontré un vehículo disponible para ${personas} pasajero${personas === 1 ? "" : "s"}${fechaInicio ? " en esas fechas" : ""}. Prueba con otro rango o reduce el número de pasajeros.`;
 
     return res.json({ message, recommendation: recomendado, alternatives: ranked.slice(1), criteria: { personas, fechaInicio, fechaFin } });
