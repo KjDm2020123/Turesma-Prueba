@@ -6,6 +6,37 @@ import { getAuthHeaders } from "../../../lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+type ApiList<T> = T[] | { data?: T[] };
+
+const getApiList = <T,>(payload: ApiList<T>) =>
+  Array.isArray(payload) ? payload : payload.data || [];
+
+const readApiJson = async <T,>(response: Response, path: string): Promise<T> => {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json") && !contentType.includes("+json")) {
+    throw new Error(
+      `La API devolvió HTML en ${path} (HTTP ${response.status}). Verifica NEXT_PUBLIC_API_URL y que el backend publicado tenga esta ruta.`
+    );
+  }
+
+  let payload: T;
+  try {
+    payload = await response.json() as T;
+  } catch {
+    throw new Error(`La API devolvió JSON inválido en ${path} (HTTP ${response.status}).`);
+  }
+
+  if (!response.ok) {
+    const errorMessage = typeof payload === "object" && payload !== null && "error" in payload
+      && typeof payload.error === "string"
+      ? payload.error
+      : `La solicitud a ${path} falló (HTTP ${response.status}).`;
+    throw new Error(errorMessage);
+  }
+
+  return payload;
+};
+
 type Operation = {
   id: number;
   reserva_id?: number | null;
@@ -98,17 +129,15 @@ export default function OperacionesPage() {
         fetch(`${API_URL}/api/admin/conductores`, { headers }),
       ]);
       const [operationsData, reservationsData, vehiclesData, driversData] = await Promise.all([
-        operationsRes.json(),
-        reservationsRes.json(),
-        vehiclesRes.json(),
-        driversRes.json(),
+        readApiJson<{ data?: Operation[] }>(operationsRes, "/api/admin/operaciones"),
+        readApiJson<{ data?: ReservationReady[] }>(reservationsRes, "/api/admin/operaciones/reservas-pendientes"),
+        readApiJson<ApiList<Vehicle>>(vehiclesRes, "/api/admin/vehiculos"),
+        readApiJson<ApiList<Driver>>(driversRes, "/api/admin/conductores"),
       ]);
-      if (!operationsRes.ok) throw new Error(operationsData.error || "No se pudieron cargar las operaciones");
-      if (!reservationsRes.ok) throw new Error(reservationsData.error || "No se pudieron cargar las reservas por despachar");
       setOperations(operationsData.data || []);
       setReservations(reservationsData.data || []);
-      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : vehiclesData.data || []);
-      setDrivers(Array.isArray(driversData) ? driversData : driversData.data || []);
+      setVehicles(getApiList(vehiclesData));
+      setDrivers(getApiList(driversData));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Error cargando datos operativos");
     } finally {
@@ -122,9 +151,7 @@ export default function OperacionesPage() {
 
   const request = async (url: string, options: RequestInit) => {
     const response = await fetch(`${API_URL}${url}`, { ...options, headers: { ...getAuthHeaders(), "Content-Type": "application/json" } });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "La operación no pudo completarse");
-    return data;
+    return readApiJson<Record<string, unknown>>(response, url);
   };
 
   const sendReservationToDispatch = async (reservation: ReservationReady) => {

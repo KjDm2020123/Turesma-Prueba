@@ -27,7 +27,7 @@ const CUENTA_EMPRESA = {
   tipo: "Cuenta Corriente",
   numero: "2100123456",
   titular: "Turesma S.A.",
-  ruc: "1391234567001",
+  ruc: "1391763581001",
 };
 
 type Reserva = {
