@@ -325,7 +325,9 @@ export default function RootPage() {
                 alt="Turesma S.A. · Transporte Turístico"
                 width={240}
                 height={77}
-                className="h-14 w-auto max-w-[42vw] object-contain sm:h-16"
+                sizes="(min-width: 640px) 218px, 48vw"
+                quality={100}
+                className="h-16 w-auto max-w-[48vw] object-contain sm:h-[4.5rem]"
                 priority
               />
             </Link>
