@@ -4,12 +4,12 @@
   "description": "Backend API para Turesma",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "test": "npm run build && node --test test/*.test.js",
     "start": "node dist/server.js",
-    "seed": "ts-node --transpile-only -r dotenv/config src/config/seed.ts",
-    "migrate:images": "ts-node --transpile-only -r dotenv/config src/config/migrateImages.ts"
+    "seed": "tsx -r dotenv/config src/config/seed.ts",
+    "migrate:images": "tsx -r dotenv/config src/config/migrateImages.ts"
   },
   "keywords": [
     "turesma",
@@ -37,18 +37,18 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^1.4.5-lts.2",
-    "nodemailer": "^8.0.4",
+    "nodemailer": "^10.2.1",
     "pdfkit": "^0.19.1",
     "pg": "^8.11.3",
     "sharp": "^0.35.4",
     "typescript": "^5.8.2"
   },
-  "devDependencies": {
-    "ts-node-dev": "^2.0.0"
-  },
   "overrides": {
     "exceljs": {
       "uuid": "11.1.1"
     }
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
   }
 }

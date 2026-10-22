@@ -54,12 +54,15 @@ export function AdminChatbot() {
     { id: "welcome", role: "assistant", text: "Soy el asistente operativo de TURESMA. Puedo consultar flota, operaciones, conductores, mantenimiento, pagos, clientes y cotizaciones con datos actuales del sistema." },
   ]);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const messageSequence = useRef(0);
 
   const sendMessage = async (eventOrValue: FormEvent | string) => {
     if (typeof eventOrValue !== "string") eventOrValue.preventDefault();
     const question = (typeof eventOrValue === "string" ? eventOrValue : input).trim();
     if (!question || loading) return;
-    const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const id = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `message-${messageSequence.current++}`;
     setMessages((previous) => [...previous, { id: `${id}-user`, role: "user", text: question }]);
     setInput("");
     setError("");
