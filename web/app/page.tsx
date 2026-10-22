@@ -319,7 +319,9 @@ export default function RootPage() {
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex h-full items-center bg-white">
-            <Image src="/logo.png" alt="Turesma S.A · Transporte Turístico" width={180} height={80} className="h-16 sm:h-20 w-auto" priority />
+            <Link href="/" className="whitespace-nowrap text-lg font-black italic tracking-tight text-[#E31E24] sm:text-xl" aria-label="Turesma S.A., inicio">
+              TURESMA S.A.
+            </Link>
           </div>
 
           {/* Menú Escritorio */}
@@ -388,9 +390,8 @@ export default function RootPage() {
         
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:flex lg:items-center">
           <div className="lg:w-2/3">
-            <h1 className="hero-intro hero-intro-title mb-6 text-3xl font-black leading-[1.1] tracking-tight text-white sm:text-5xl md:text-8xl italic">
-              <span className="block">TURESMA S.A.</span>
-              <span className="block text-yellow-400">VIAJA CON EXCELENCIA.</span>
+            <h1 className="hero-intro hero-intro-title mb-6 text-5xl font-black leading-[1.1] tracking-tight text-white md:text-8xl italic">
+              VIAJA CON <span className="text-yellow-400">EXCELENCIA.</span>
             </h1>
             <p className="hero-intro hero-intro-copy mb-10 max-w-2xl text-xl font-medium leading-relaxed text-gray-300 md:text-2xl">
               Soluciones de transporte de alta gama en Manta. Puntualidad, confort y seguridad en cada kilómetro del Ecuador.
