@@ -11,10 +11,10 @@ const positiveInt = (value: unknown) => {
 const listarViajesPublicos = async (_req: any, res: any) => {
   try {
     const result = await pool.query(`
-      SELECT t.id, t.titulo, t.descripcion, t.precio, t.duracion, t.capacidad, COALESCE((SELECT jsonb_agg(ti.imagen_url ORDER BY ti.orden) FROM tour_imagenes ti WHERE ti.tour_id = t.id), t.imagenes) AS imagenes,
+      SELECT t.id, t.titulo, t.descripcion, t.precio, t.duracion, COALESCE(v.capacidad, t.capacidad, 0)::int AS capacidad_personas, COALESCE((SELECT jsonb_agg(ti.imagen_url ORDER BY ti.orden) FROM tour_imagenes ti WHERE ti.tour_id = t.id), t.imagenes) AS imagenes,
              t.origen, t.destino, t.fecha_servicio, t.hora_salida, t.cupos_totales,
              t.tipo_servicio, t.imagen_url, v.placa AS vehiculo_placa, v.modelo AS vehiculo_modelo, v.imagen_url AS vehiculo_imagen_url,
-             GREATEST(COALESCE(t.cupos_totales, t.capacidad, 0) - COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND (t.fecha_servicio IS NULL OR r.fecha_reserva = t.fecha_servicio) AND r.estado NOT IN ('cancelada', 'finalizada')), 0), 0)::int AS cupos_disponibles
+             GREATEST(COALESCE(v.capacidad, t.cupos_totales, t.capacidad, 0) - COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND (t.fecha_servicio IS NULL OR r.fecha_reserva = t.fecha_servicio) AND r.estado NOT IN ('cancelada', 'finalizada')), 0), 0)::int AS cupos_disponibles
       FROM tours t
       LEFT JOIN vehiculos v ON v.id = t.vehiculo_id
       WHERE t.activo = true
@@ -52,8 +52,9 @@ const reservarViajePublicado = async (req: any, res: any) => {
     if (!tourResult.rowCount) return res.status(404).json({ success: false, error: "Viaje no encontrado o no publicado" });
     const tour = tourResult.rows[0];
     const occupied = await client.query(`SELECT COALESCE(SUM(num_personas), 0)::int AS total FROM reservas WHERE tour_id = $1 AND fecha_reserva = $2 AND estado NOT IN ('cancelada', 'finalizada')`, [tourId, travelDate]);
-    const capacity = Number(tour.cupos_totales || tour.capacidad || 0);
-    if (Number(occupied.rows[0].total) + passengers > capacity) return res.status(409).json({ success: false, error: "No hay cupos suficientes para este viaje" });
+    const vehicleResult = await client.query("SELECT capacidad FROM vehiculos WHERE id = $1 LIMIT 1", [tour.vehiculo_id || null]);
+    const capacity = Number(vehicleResult.rows[0]?.capacidad || tour.cupos_totales || tour.capacidad || 0);
+    if (Number(occupied.rows[0].total) + passengers > capacity) return res.status(409).json({ success: false, error: "No hay personas disponibles en el vehículo para este viaje" });
 
     const verified = await client.query("SELECT estado_verificacion FROM usuarios WHERE id = $1", [userId]);
     if (verified.rows[0]?.estado_verificacion && verified.rows[0].estado_verificacion !== "verificado") {

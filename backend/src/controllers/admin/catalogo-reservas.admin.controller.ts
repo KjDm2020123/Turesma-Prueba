@@ -429,8 +429,8 @@ const listarReservas = async (req, res) => {
          ${fechaSalidaSelect},
          ${fechaLlegadaSelect},
          ${fechaServicioSelect},
-         u.nombre AS usuario_nombre,
-         u.email AS usuario_email,
+         u.nombre AS cliente_nombre,
+         u.email AS cliente_email,
          t.titulo AS tour_titulo,
          v.placa AS vehiculo_placa,
          v.modelo AS vehiculo_modelo,
@@ -442,7 +442,7 @@ const listarReservas = async (req, res) => {
        LEFT JOIN conductores c ON c.id = r.conductor_id
        LEFT JOIN usuarios uc ON uc.id = c.usuario_id
        ${whereClause}
-       ORDER BY r.fecha_reserva DESC, r.id DESC`,
+       ORDER BY r.id DESC`,
       params
     );
 

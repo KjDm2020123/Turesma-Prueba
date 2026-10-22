@@ -12,9 +12,9 @@ const dateValue = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}
 const listarViajesAdmin = async (_req: any, res: any) => {
   try {
     const result = await pool.query(`
-      SELECT t.*, COALESCE((SELECT jsonb_agg(ti.imagen_url ORDER BY ti.orden) FROM tour_imagenes ti WHERE ti.tour_id = t.id), t.imagenes) AS imagenes, v.placa AS vehiculo_placa, v.modelo AS vehiculo_modelo, v.imagen_url AS vehiculo_imagen_url,
+      SELECT t.*, COALESCE(v.capacidad, t.capacidad, 0)::int AS capacidad_personas, COALESCE((SELECT jsonb_agg(ti.imagen_url ORDER BY ti.orden) FROM tour_imagenes ti WHERE ti.tour_id = t.id), t.imagenes) AS imagenes, v.placa AS vehiculo_placa, v.modelo AS vehiculo_modelo, v.imagen_url AS vehiculo_imagen_url,
         COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND r.estado NOT IN ('cancelada', 'finalizada')), 0)::int AS reservados,
-        GREATEST(COALESCE(t.cupos_totales, t.capacidad, 0) - COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND r.estado NOT IN ('cancelada', 'finalizada')), 0), 0)::int AS cupos_disponibles
+        GREATEST(COALESCE(v.capacidad, t.cupos_totales, t.capacidad, 0) - COALESCE((SELECT SUM(r.num_personas) FROM reservas r WHERE r.tour_id = t.id AND r.estado NOT IN ('cancelada', 'finalizada')), 0), 0)::int AS cupos_disponibles
       FROM tours t
       LEFT JOIN vehiculos v ON v.id = t.vehiculo_id
       ORDER BY t.fecha_servicio DESC NULLS LAST, t.id DESC
@@ -33,10 +33,8 @@ const crearViajeAdmin = async (req: any, res: any) => {
   const destination = String(body.destino || "").trim();
   const date = dateValue(body.fecha_servicio);
   const price = Number(body.precio);
-  const capacity = positiveInt(body.cupos_totales || body.capacidad);
-
-  if (!title || !origin || !destination || !Number.isFinite(price) || price < 0 || !capacity) {
-    return res.status(400).json({ success: false, error: "Origen, destino, precio y cupos válidos son obligatorios" });
+  if (!title || !origin || !destination || !Number.isFinite(price) || price < 0) {
+    return res.status(400).json({ success: false, error: "Origen, destino y precio válidos son obligatorios" });
   }
 
   try {
@@ -44,7 +42,8 @@ const crearViajeAdmin = async (req: any, res: any) => {
     const vehicle = await pool.query("SELECT id, capacidad, estado, activo FROM vehiculos WHERE id = $1 LIMIT 1", [vehicleId]);
     if (!vehicleId || !vehicle.rowCount) return res.status(400).json({ success: false, error: "Debes seleccionar un vehículo existente" });
     if (!vehicle.rows[0].activo || ["mantenimiento", "inactivo"].includes(vehicle.rows[0].estado)) return res.status(409).json({ success: false, error: "No se puede publicar el viaje con un vehículo inactivo o en mantenimiento" });
-    if (capacity > Number(vehicle.rows[0].capacidad || 0)) return res.status(400).json({ success: false, error: "Los cupos no pueden superar la capacidad del vehículo seleccionado" });
+    const capacity = Number(vehicle.rows[0].capacidad || 0);
+    if (!capacity) return res.status(400).json({ success: false, error: "El vehículo seleccionado no tiene una capacidad válida" });
     const result = await pool.query(`
       INSERT INTO tours (titulo, descripcion, precio, duracion, capacidad, ubicacion, imagen_url, imagenes, activo, origen, destino, fecha_servicio, hora_salida, cupos_totales, tipo_servicio, vehiculo_id, creado_por)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15, $16, $17)
@@ -74,13 +73,19 @@ const actualizarViajeAdmin = async (req: any, res: any) => {
     const current = await pool.query("SELECT * FROM tours WHERE id = $1", [id]);
     if (!current.rowCount) return res.status(404).json({ success: false, error: "Viaje no encontrado" });
     const old = current.rows[0];
-    const capacity = body.cupos_totales || body.capacidad ? positiveInt(body.cupos_totales || body.capacidad) : Number(old.cupos_totales || old.capacidad);
     const price = body.precio !== undefined ? Number(body.precio) : Number(old.precio);
-    if (!capacity || !Number.isFinite(price) || price < 0) return res.status(400).json({ success: false, error: "Precio o cupos inválidos" });
+    if (!Number.isFinite(price) || price < 0) return res.status(400).json({ success: false, error: "Precio inválido" });
+    const vehicleId = positiveInt(body.vehiculo_id) || old.vehiculo_id || null;
+    const vehicle = await pool.query("SELECT capacidad, activo, estado FROM vehiculos WHERE id = $1 LIMIT 1", [vehicleId]);
+    if (!vehicle.rowCount || !vehicle.rows[0].activo || ["mantenimiento", "inactivo"].includes(vehicle.rows[0].estado)) {
+      return res.status(409).json({ success: false, error: "El vehículo seleccionado no está disponible" });
+    }
+    const capacity = Number(vehicle.rows[0].capacidad || 0);
+    if (!capacity) return res.status(400).json({ success: false, error: "El vehículo seleccionado no tiene una capacidad válida" });
     const result = await pool.query(`
       UPDATE tours SET titulo = $1, descripcion = $2, precio = $3, fecha_servicio = $4, hora_salida = $5, cupos_totales = $6, capacidad = $6, tipo_servicio = $7, vehiculo_id = $8, activo = $9, origen = $10, destino = $11, ubicacion = $12, imagenes = $13::jsonb
       WHERE id = $14 RETURNING *
-    `, [body.titulo || old.titulo, body.descripcion ?? old.descripcion, price, dateValue(body.fecha_servicio) || old.fecha_servicio, body.hora_salida ?? old.hora_salida, capacity, body.tipo_servicio || old.tipo_servicio || "viaje", positiveInt(body.vehiculo_id) || old.vehiculo_id || null, body.activo !== undefined ? Boolean(body.activo) : old.activo, body.origen || old.origen, body.destino || old.destino, `${body.origen || old.origen} - ${body.destino || old.destino}`, JSON.stringify(Array.isArray(body.imagenes) ? body.imagenes.slice(0, 8) : old.imagenes || []) , id]);
+    `, [body.titulo || old.titulo, body.descripcion ?? old.descripcion, price, dateValue(body.fecha_servicio) || old.fecha_servicio, body.hora_salida ?? old.hora_salida, capacity, body.tipo_servicio || old.tipo_servicio || "viaje", vehicleId, body.activo !== undefined ? Boolean(body.activo) : old.activo, body.origen || old.origen, body.destino || old.destino, `${body.origen || old.origen} - ${body.destino || old.destino}`, JSON.stringify(Array.isArray(body.imagenes) ? body.imagenes.slice(0, 8) : old.imagenes || []) , id]);
     if (Array.isArray(body.imagenes)) {
       const images = body.imagenes.filter((url: unknown) => typeof url === "string" && url.trim()).slice(0, 8);
       await pool.query("DELETE FROM tour_imagenes WHERE tour_id = $1", [id]);

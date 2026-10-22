@@ -12,8 +12,8 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type MatriculaItem = {
   vehiculo_id: number; placa: string; modelo: string | null; tipo: string | null;
-  digito: number; mes: number; mes_nombre: string; target_year: number;
-  fecha_limite: string; dias_para_mes: number; ultima_matricula: string | null;
+  digito: number | null; mes: number | null; mes_nombre: string | null; target_year: number;
+  fecha_limite: string | null; dias_para_mes: number | null; ultima_matricula: string | null;
   estado: string; en_alerta: boolean;
 };
 type MatResumen = { al_dia: number; proximos: number; en_mes: number; vencidos: number; total: number };
@@ -24,6 +24,7 @@ const MAT_ESTADO: Record<string, { label: string; cls: string; dot: string }> = 
   en_mes:  { label: "Este mes",  cls: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500" },
   proximo: { label: "Próxima",   cls: "bg-amber-50 text-amber-700 border-amber-200",    dot: "bg-amber-500" },
   al_dia:  { label: "Al día",    cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  sin_placa: { label: "Sin placa", cls: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" },
 };
 
 const MESES_NOMBRE = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -148,21 +149,21 @@ export default function AdminCumplimientoPage() {
         ) : matriculas.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-14 gap-3 px-6 text-center">
             <Car size={44} className="text-slate-200" />
-            <p className="text-sm font-black uppercase text-slate-400 italic">Sin vehículos con placa</p>
-            <p className="text-xs text-slate-400 max-w-sm">Registra vehículos con placa para ver aquí su mes de matriculación automáticamente.</p>
+            <p className="text-sm font-black uppercase text-slate-400 italic">Sin vehículos registrados</p>
+            <p className="text-xs text-slate-400 max-w-sm">Registra vehículos para ver aquí sus datos de cumplimiento.</p>
           </div>
         ) : (
           <div className="overflow-x-auto border-t border-slate-100">
             <table className="min-w-[720px] w-full text-left border-collapse">
               <thead><tr className="bg-slate-50/60 border-b border-slate-100">
-                {["Vehículo", "Últ. dígito", "Mes que le toca", "Situación", "Última matrícula", "Acción"].map(h => (
+                {["Vehículo", "Tipo", "Últ. dígito", "Mes que le toca", "Situación", "Última matrícula", "Acción"].map(h => (
                   <th key={h} className="px-5 py-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
                 ))}
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {matriculas.map(m => {
                   const e = MAT_ESTADO[m.estado] || MAT_ESTADO.al_dia;
-                  const situacion = m.estado === "vencido" ? "Debía matricularse ya" : m.estado === "en_mes" ? "Le toca este mes" : m.estado === "proximo" ? `Faltan ${m.dias_para_mes} días` : "Al día";
+                  const situacion = m.estado === "sin_placa" ? "Falta registrar la placa" : m.estado === "vencido" ? "Debía matricularse ya" : m.estado === "en_mes" ? "Le toca este mes" : m.estado === "proximo" ? `Faltan ${m.dias_para_mes} días` : "Al día";
                   return (
                     <tr key={m.vehiculo_id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-5 py-3.5">
@@ -174,17 +175,18 @@ export default function AdminCumplimientoPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 text-slate-700 text-xs font-black">{m.digito}</span></td>
-                      <td className="px-5 py-3.5 text-sm font-bold text-slate-700 whitespace-nowrap">{m.mes_nombre}</td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-slate-600 uppercase">{m.tipo || "—"}</td>
+                      <td className="px-5 py-3.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 text-slate-700 text-xs font-black">{m.digito ?? "—"}</span></td>
+                      <td className="px-5 py-3.5 text-sm font-bold text-slate-700 whitespace-nowrap">{m.mes_nombre || "—"}</td>
                       <td className="px-5 py-3.5">
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-[9px] font-black uppercase border ${e.cls}`}>{e.label}</span>
                         <span className="block text-[10px] text-slate-400 mt-1">{situacion}</span>
                       </td>
                       <td className="px-5 py-3.5 text-xs font-bold text-slate-500 whitespace-nowrap">{m.ultima_matricula ? new Date(m.ultima_matricula).toLocaleDateString("es-EC") : <span className="text-slate-300 italic">Nunca</span>}</td>
                       <td className="px-5 py-3.5">
-                        <button onClick={() => marcarMatriculado(m.vehiculo_id)} disabled={matActingId === m.vehiculo_id}
+                        <button onClick={() => marcarMatriculado(m.vehiculo_id)} disabled={m.digito === null || matActingId === m.vehiculo_id}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-60">
-                          {matActingId === m.vehiculo_id ? <Loader2 size={12} className="animate-spin" /> : <CheckCheck size={12} />} Matriculado
+                          {matActingId === m.vehiculo_id ? <Loader2 size={12} className="animate-spin" /> : <CheckCheck size={12} />} {m.digito === null ? "Sin placa" : "Matriculado"}
                         </button>
                       </td>
                     </tr>

@@ -6,7 +6,7 @@ import Image from "next/image";
 import {
   Bus, ArrowRight, DollarSign, Loader2,
   Star, CheckCircle2, MapPin, Phone, Navigation, CreditCard, X,
-  Building2, Link2, UploadCloud, Clock, AlertTriangle, ImageIcon, FileDown,
+  Building2, UploadCloud, Clock, AlertTriangle, ImageIcon, FileDown,
 } from "lucide-react";
 import { getAuthHeaders, getStoredToken, handleUnauthorized } from "../../../lib/session";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
@@ -36,7 +36,7 @@ type Reserva = {
   vehiculo_placa?: string | null; vehiculo_modelo?: string | null;
   conductor_nombre?: string | null; conductor_telefono?: string | null;
   calificacion?: number | null; comentario_calificacion?: string | null;
-  monto_pagado?: number | null; estado_pago?: string | null; link_pago?: string | null;
+  monto_pagado?: number | null; estado_pago?: string | null;
   hora_salida?: string | null;
 };
 
@@ -82,7 +82,7 @@ function StarRating({ value, onChange, readOnly }: { value: number; onChange?: (
   );
 }
 
-// Modal para que el cliente pague (transferencia o link) y suba su comprobante.
+// Modal para que el cliente pague por transferencia o PayPhone.
 function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose: () => void; onSuccess: () => void }) {
   const total = Number(reserva.total) || 0;
   const minimo = total * 0.5;
@@ -91,7 +91,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
 
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loadingPagos, setLoadingPagos] = useState(true);
-  const [metodo, setMetodo] = useState<"transferencia" | "link_pago" | "payphone">(reserva.link_pago ? "link_pago" : "transferencia");
+  const [metodo, setMetodo] = useState<"transferencia" | "payphone">("transferencia");
   const [monto, setMonto] = useState(saldoPendiente.toFixed(2));
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -212,10 +212,6 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                 className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${metodo === "payphone" ? "bg-[#00a99d] border-[#00a99d] text-white" : "border-slate-100 text-slate-500"}`}>
                 <CreditCard size={14} /> PayPhone / Tarjeta
               </button>
-              <button type="button" onClick={() => setMetodo("link_pago")} disabled={!reserva.link_pago}
-                className={`col-span-2 flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${metodo === "link_pago" ? "bg-[#E31E24] border-[#E31E24] text-white" : "border-slate-100 text-slate-500"}`}>
-                <Link2 size={14} /> Link de pago
-              </button>
             </div>
           </div>
 
@@ -224,24 +220,13 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
               <p className="text-xs font-black text-teal-800">Pago seguro con PayPhone</p>
               <p className="text-[11px] text-teal-700">Serás enviado al formulario seguro de PayPhone para pagar con tarjeta. Turesma no guarda datos de tu tarjeta.</p>
             </div>
-          ) : metodo === "transferencia" ? (
+          ) : (
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-1.5 text-xs">
               <p className="font-black text-slate-700 uppercase text-[11px] mb-1">Datos para transferencia</p>
               <p><span className="text-slate-400">Banco:</span> <span className="font-bold text-slate-700">{CUENTA_EMPRESA.banco}</span></p>
               <p><span className="text-slate-400">{CUENTA_EMPRESA.tipo}:</span> <span className="font-bold text-slate-700">{CUENTA_EMPRESA.numero}</span></p>
               <p><span className="text-slate-400">Titular:</span> <span className="font-bold text-slate-700">{CUENTA_EMPRESA.titular}</span></p>
               <p><span className="text-slate-400">RUC:</span> <span className="font-bold text-slate-700">{CUENTA_EMPRESA.ruc}</span></p>
-            </div>
-          ) : (
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
-              {reserva.link_pago ? (
-                <a href={reserva.link_pago} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-3 bg-[#E31E24] hover:bg-black text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all">
-                  <Link2 size={14} /> Abrir link de pago
-                </a>
-              ) : (
-                <p className="text-xs text-slate-400">El administrador aún no ha enviado un link de pago para esta reserva.</p>
-              )}
             </div>
           )}
 

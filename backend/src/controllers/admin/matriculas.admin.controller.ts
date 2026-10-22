@@ -37,7 +37,25 @@ const ultimoDigito = (placa: string | null): number | null => {
 // ── Calcula el estado de matriculación de un vehículo ────────────────────────
 const computeEstado = (vehiculo: any, calMap: Record<number, number>, hoy: Date) => {
   const digito = ultimoDigito(vehiculo.placa);
-  if (digito === null) return null;
+  if (digito === null) {
+    return {
+      vehiculo_id: vehiculo.id,
+      placa: vehiculo.placa || null,
+      modelo: vehiculo.modelo || null,
+      tipo: vehiculo.tipo || null,
+      digito: null,
+      mes: null,
+      mes_nombre: null,
+      target_year: hoy.getFullYear(),
+      fecha_limite: null,
+      dias_para_mes: null,
+      ultima_matricula: vehiculo.fecha_matricula
+        ? new Date(vehiculo.fecha_matricula).toISOString().slice(0, 10)
+        : null,
+      estado: "sin_placa",
+      en_alerta: false,
+    };
+  }
   const mes = calMap[digito];
   if (!mes) return null;
 
@@ -121,8 +139,8 @@ const listarMatriculas = async (req: any, res: any) => {
     const veh = await pool.query(
       `SELECT id, placa, modelo, tipo, fecha_matricula
        FROM vehiculos
-       WHERE placa IS NOT NULL AND placa <> ''
-       ORDER BY placa ASC`
+       WHERE activo = true
+       ORDER BY placa ASC NULLS LAST, id DESC`
     );
     const hoy = new Date();
     const items = veh.rows
@@ -141,7 +159,7 @@ const listarMatriculas = async (req: any, res: any) => {
     };
 
     // Orden: primero los que requieren atención (por días para el mes).
-    const peso: Record<string, number> = { vencido: 0, en_mes: 1, proximo: 2, al_dia: 3 };
+    const peso: Record<string, number> = { vencido: 0, en_mes: 1, proximo: 2, al_dia: 3, sin_placa: 4 };
     items.sort((a: any, b: any) => (peso[a.estado] - peso[b.estado]) || (a.dias_para_mes - b.dias_para_mes));
 
     return res.status(200).json({ success: true, data: items, resumen });

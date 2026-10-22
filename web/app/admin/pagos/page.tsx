@@ -8,7 +8,7 @@ import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { descargarArchivo } from "../../../lib/download";
 import {
   CreditCard, Loader2, CheckCircle2, XCircle,
-  MapPin, ArrowRight, X, Link2, Send, ImageIcon, FileDown,
+  MapPin, ArrowRight, X, ImageIcon, FileDown,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -20,11 +20,6 @@ type Pago = {
   reserva_total: number; origen: string | null; destino: string | null; reserva_estado: string;
   reserva_monto_pagado: number; reserva_estado_pago: string;
   cliente_nombre: string; cliente_email: string;
-};
-
-type ReservaParaLink = {
-  id: number; usuario_nombre: string; origen: string | null; destino: string | null;
-  total: number; estado: string; estado_pago: string;
 };
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -53,11 +48,6 @@ export default function AdminPagosPage() {
   const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
 
-  const [linkReservaId, setLinkReservaId] = useState("");
-  const [linkPago, setLinkPago] = useState("");
-  const [savingLink, setSavingLink] = useState(false);
-  const [reservasParaLink, setReservasParaLink] = useState<ReservaParaLink[]>([]);
-
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     try {
@@ -67,24 +57,9 @@ export default function AdminPagosPage() {
     finally { setLoading(false); }
   };
 
-  const loadReservasParaLink = async () => {
-    try {
-      const res = await fetch(`${API}/api/admin/reservas`, { headers: getAuthHeaders() });
-      if (!res.ok) return;
-      const data: ReservaParaLink[] = await res.json();
-      // Solo tiene sentido mandar link de pago a reservas que aun no estan
-      // canceladas y que todavia no completan el minimo de pago requerido.
-      setReservasParaLink(
-        data
-          .filter(r => r.estado !== "cancelada" && !["confirmado", "pagado"].includes(r.estado_pago))
-          .sort((a, b) => b.id - a.id)
-      );
-    } catch { /* silencio */ }
-  };
+  useEffect(() => { if (!checkingSession) load(); }, [checkingSession, filtro]);
 
-  useEffect(() => { if (!checkingSession) { load(); loadReservasParaLink(); } }, [checkingSession, filtro]);
-
-  useAutoRefresh(() => { load(true); loadReservasParaLink(); }, { enabled: !checkingSession, immediate: false });
+  useAutoRefresh(() => load(true), { enabled: !checkingSession, immediate: false });
 
   const aprobar = async (id: number) => {
     setActingId(id); setErr(""); setMsg("");
@@ -141,25 +116,8 @@ export default function AdminPagosPage() {
       if (!res.ok) throw new Error(data.error || "No se pudo registrar el pago");
       setMsg(`La reserva #${pago.reserva_id} quedó pagada completamente`);
       load();
-      loadReservasParaLink();
     } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
-  };
-
-  const enviarLink = async () => {
-    if (!linkReservaId || !linkPago) { setErr("Selecciona una reserva e indica el link"); return; }
-    setSavingLink(true); setErr(""); setMsg("");
-    try {
-      const res = await fetch(`${API}/api/admin/reservas/${linkReservaId}/link-pago`, {
-        method: "PATCH", headers: getAuthHeaders(), body: JSON.stringify({ link_pago: linkPago }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "No se pudo enviar el link");
-      setMsg(`Link de pago enviado para la reserva #${linkReservaId}`);
-      setLinkReservaId(""); setLinkPago("");
-      loadReservasParaLink();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
-    finally { setSavingLink(false); }
   };
 
   const pendientes = pagos.filter(p => p.estado === "pendiente").length;
@@ -173,28 +131,6 @@ export default function AdminPagosPage() {
 
       {msg && <div className="p-4 bg-emerald-50 border-l-4 border-emerald-500 text-emerald-700 text-sm font-bold rounded-r-xl">{msg}</div>}
       {err && <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl">{err}</div>}
-
-      {/* ENVIAR LINK DE PAGO */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
-        <p className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mb-3"><Link2 size={14} /> Enviar link de pago a una reserva</p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <select value={linkReservaId} onChange={e => setLinkReservaId(e.target.value)} className={INPUT + " sm:w-72"}>
-            <option value="">
-              {reservasParaLink.length === 0 ? "Sin reservas pendientes de pago" : "Selecciona una reserva..."}
-            </option>
-            {reservasParaLink.map(r => (
-              <option key={r.id} value={r.id}>
-                #{r.id} · {r.usuario_nombre} · {r.origen || "—"} → {r.destino || "—"} · ${Number(r.total).toFixed(0)}
-              </option>
-            ))}
-          </select>
-          <input value={linkPago} onChange={e => setLinkPago(e.target.value)} placeholder="https://..." className={INPUT + " flex-1"} />
-          <button onClick={enviarLink} disabled={savingLink}
-            className="flex items-center justify-center gap-2 bg-[#E31E24] hover:bg-black text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60 flex-shrink-0">
-            {savingLink ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar
-          </button>
-        </div>
-      </div>
 
       {/* FILTROS */}
       <div className="flex gap-2 flex-wrap bg-white p-3 sm:p-4 rounded-2xl border border-gray-100 shadow-sm">
