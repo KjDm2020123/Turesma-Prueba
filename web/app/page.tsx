@@ -319,8 +319,15 @@ export default function RootPage() {
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex h-full items-center bg-white">
-            <Link href="/" className="whitespace-nowrap text-lg font-black italic tracking-tight text-[#E31E24] sm:text-xl" aria-label="Turesma S.A., inicio">
-              TURESMA S.A.
+            <Link href="/" className="flex items-center" aria-label="Turesma S.A., inicio">
+              <Image
+                src="/logo.png"
+                alt="Turesma S.A. · Transporte Turístico"
+                width={240}
+                height={77}
+                className="h-14 w-auto max-w-[42vw] object-contain sm:h-16"
+                priority
+              />
             </Link>
           </div>
 
