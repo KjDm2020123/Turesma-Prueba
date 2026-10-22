@@ -13,15 +13,37 @@ export default function AuthCarousel() {
   const [imagenes, setImagenes] = useState<ImagenCarrusel[]>([]);
   const [index, setIndex] = useState(0);
   const [pausado, setPausado] = useState(false);
+  const [transicionesActivas, setTransicionesActivas] = useState(false);
 
   // Usa la misma fuente publica que el carrusel "Nuestra Flota" de la pagina
   // de inicio, para que cualquier vehiculo que el admin agregue, edite o
   // desactive se refleje automaticamente aqui tambien.
   useEffect(() => {
+    let activo = true;
+
+    const precargarImagenes = (items: ImagenCarrusel[]) =>
+      Promise.all(
+        items.map(
+          (item) =>
+            new Promise<void>((resolve) => {
+              const imagen = new window.Image();
+              imagen.onload = () => resolve();
+              imagen.onerror = () => resolve();
+              imagen.src = item.src;
+            })
+        )
+      );
+
     fetch(`${API_URL}/api/usuarios/vehiculos`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`No se pudieron cargar los vehiculos (${r.status})`);
+        return r.json();
+      })
       .then((data: unknown) => {
-        if (!Array.isArray(data)) return;
+        if (!Array.isArray(data)) {
+          setTransicionesActivas(true);
+          return;
+        }
         const conFoto: ImagenCarrusel[] = (data as Array<Record<string, unknown>>)
           .filter((v) => typeof v?.imagen_url === "string" && v.imagen_url)
           .map((v) => ({
@@ -29,11 +51,23 @@ export default function AuthCarousel() {
             alt: `${(v.tipo as string) || "Vehiculo"} ${(v.placa as string) || ""} de la flota Turesma`,
           }));
         if (conFoto.length > 0) {
-          setImagenes(conFoto);
-          setIndex(0);
+          return precargarImagenes(conFoto).then(() => {
+            if (!activo) return;
+            setImagenes(conFoto);
+            setIndex(0);
+            setTransicionesActivas(true);
+          });
         }
+        setTransicionesActivas(true);
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        console.error("Error cargando las imagenes de la flota:", error);
+        setTransicionesActivas(true);
+      });
+
+    return () => {
+      activo = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -68,7 +102,9 @@ export default function AuthCarousel() {
           fill
           sizes="42vw"
           unoptimized
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ease-in-out ${
+          className={`absolute inset-0 w-full h-full object-contain ${
+            transicionesActivas ? "transition-opacity duration-1000 ease-in-out" : ""
+          } ${
             i === index ? "opacity-100" : "opacity-0"
           }`}
         />

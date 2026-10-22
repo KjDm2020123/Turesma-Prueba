@@ -39,6 +39,22 @@ const state = {
       usuario_id: 902,
       cliente_nombre: "Segundo cliente",
     },
+    {
+      id: 803,
+      fecha_reserva: "2026-10-19",
+      fecha_servicio: "2026-10-21T09:00:00.000Z",
+      fecha_salida: "2026-10-21T09:00:00.000Z",
+      fecha_llegada: "2026-10-21T11:00:00.000Z",
+      origen: "Quito",
+      destino: "Latacunga",
+      num_personas: 4,
+      total: 120,
+      estado: "confirmada",
+      vehiculo_id: 701,
+      conductor_id: 301,
+      usuario_id: 903,
+      cliente_nombre: "Reserva que ocupa recursos",
+    },
   ],
   vehicles: [
     { id: 701, placa: "TEST-701", modelo: "Van test 1", capacidad: 12, estado: "disponible", activo: true, usuario_id: 301 },
@@ -262,6 +278,29 @@ const pool = {
             conductor_nombre: `Conductor ${driverForUser(driverId)?.usuario_id}`,
           }] : []);
         }
+        if (query.startsWith("select r.id as reserva_id, r.vehiculo_id, v.placa")) {
+          const [operationId, dateValue, startValue, endValue, vehicleId, driverUserId, driverId] = params;
+          const operation = operationFor(operationId);
+          const date = asDate(dateValue);
+          const start = startValue ? asTime(startValue) : null;
+          const end = endValue ? asTime(endValue) : null;
+          const conflict = state.reservations.find((reservation) => {
+            const reservationDate = asDate(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva);
+            if (reservation.id === operation?.reserva_id
+              || reservationDate !== date
+              || ["cancelada", "finalizada"].includes(reservation.estado)) return false;
+            const conductorOcupado = reservation.conductor_id === Number(driverUserId)
+              || reservation.conductor_id === Number(driverId);
+            if (reservation.vehiculo_id !== Number(vehicleId) && !conductorOcupado) return false;
+            return intersects(
+              start,
+              end,
+              reservation.fecha_salida && asTime(reservation.fecha_salida),
+              reservation.fecha_llegada && asTime(reservation.fecha_llegada)
+            );
+          });
+          return result(conflict ? [{ reserva_id: conflict.id, vehiculo_id: conflict.vehiculo_id, placa: vehicleFor(conflict.vehiculo_id)?.placa }] : []);
+        }
         if (query.startsWith("update operaciones set vehiculo_id")) {
           const operation = operationFor(params[2]);
           Object.assign(operation, { vehiculo_id: Number(params[0]), conductor_id: Number(params[1]), estado: "asignada" });
@@ -386,6 +425,21 @@ test("despacha, recomienda, asigna, sincroniza estados y reabre usando HTTP con 
 
     const duplicate = await request("/api/admin/operaciones/reservas/801/despachar", { method: "POST", body: {} });
     assert.equal(duplicate.status, 409);
+
+    const unavailableVehicle = await request(`/api/admin/operaciones/${operationId}/asignar`, {
+      method: "PATCH",
+      body: { vehiculo_id: 701, conductor_id: 302 },
+    });
+    assert.equal(unavailableVehicle.status, 409);
+    assert.match(unavailableVehicle.body.error, /No Disponible.*vehículo/i);
+
+    const unavailableDriver = await request(`/api/admin/operaciones/${operationId}/asignar`, {
+      method: "PATCH",
+      body: { vehiculo_id: 702, conductor_id: 301 },
+    });
+    assert.equal(unavailableDriver.status, 409);
+    assert.match(unavailableDriver.body.error, /No Disponible.*conductor/i);
+    assert.equal(operationFor(operationId).vehiculo_id, null);
 
     const recommendation = await request(`/api/admin/inteligencia/asignacion-recomendada?fecha=2026-10-21&pasajeros=8&hora_inicio=09%3A00&hora_fin=11%3A00&operacion_id=${operationId}`);
     assert.equal(recommendation.status, 200);

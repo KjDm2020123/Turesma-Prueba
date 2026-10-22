@@ -378,6 +378,9 @@ export default function RootPage() {
             fill
             sizes="100vw"
             unoptimized
+            priority
+            placeholder="blur"
+            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/AP/EABQQAQAAAAAAAAAAAAAAAAAAACD/2gAIAQEAAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAACD/2gAIAQIBAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAACD/2gAIAQMBAT8Af//Z"
             className="h-full w-full object-cover opacity-40 transition-transform duration-[10s] hover:scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
@@ -385,8 +388,9 @@ export default function RootPage() {
         
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 lg:flex lg:items-center">
           <div className="lg:w-2/3">
-            <h1 className="hero-intro hero-intro-title mb-6 text-5xl font-black leading-[1.1] tracking-tight text-white md:text-8xl italic">
-              VIAJA CON <span className="text-yellow-400">EXCELENCIA.</span>
+            <h1 className="hero-intro hero-intro-title mb-6 text-3xl font-black leading-[1.1] tracking-tight text-white sm:text-5xl md:text-8xl italic">
+              <span className="block">TURESMA S.A.</span>
+              <span className="block text-yellow-400">VIAJA CON EXCELENCIA.</span>
             </h1>
             <p className="hero-intro hero-intro-copy mb-10 max-w-2xl text-xl font-medium leading-relaxed text-gray-300 md:text-2xl">
               Soluciones de transporte de alta gama en Manta. Puntualidad, confort y seguridad en cada kilómetro del Ecuador.
