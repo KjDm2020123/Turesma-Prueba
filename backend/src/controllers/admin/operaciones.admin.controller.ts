@@ -29,7 +29,7 @@ const recordHistory = async (client: any, operationId: number, userId: number | 
   );
 };
 
-const findScheduleConflict = async (client: any, operationId: number, date: string, start: string | null, end: string | null, vehicleId: number | null, driverId: number | null) => {
+const findScheduleConflict = async (client: any, operationId: number, date: string, start: string | null, end: string | null, vehicleId: number | null, driverId: number | null, driverUserId: number | null) => {
   if (!vehicleId && !driverId) return null;
 
   const result = await client.query(
@@ -50,7 +50,40 @@ const findScheduleConflict = async (client: any, operationId: number, date: stri
     [operationId, date, start, end, ACTIVE_STATES, vehicleId, driverId]
   );
 
-  return result.rows[0] || null;
+  if (result.rows[0]) return result.rows[0];
+
+  const reservationConflict = await client.query(
+    `SELECT r.id AS reserva_id, r.vehiculo_id, v.placa
+     FROM reservas r
+     LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
+     WHERE r.id <> COALESCE((SELECT reserva_id FROM operaciones WHERE id = $1), -1)
+       AND COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date) = $2::date
+       AND r.estado NOT IN ('cancelada', 'finalizada')
+       AND (
+         r.vehiculo_id = $5
+         OR r.conductor_id = CASE
+           WHEN EXISTS (
+             SELECT 1
+             FROM information_schema.table_constraints tc
+             INNER JOIN information_schema.key_column_usage kcu
+               ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+             INNER JOIN information_schema.constraint_column_usage ccu
+               ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+             WHERE tc.table_schema = 'public' AND tc.table_name = 'reservas'
+               AND tc.constraint_type = 'FOREIGN KEY' AND kcu.column_name = 'conductor_id'
+               AND ccu.table_name = 'conductores'
+           ) THEN $7 ELSE $6
+         END
+       )
+       AND (
+         $3::time IS NULL OR r.fecha_salida IS NULL OR $4::time IS NULL OR r.fecha_llegada IS NULL
+         OR (r.fecha_salida::time < $4::time AND $3::time < r.fecha_llegada::time)
+       )
+     LIMIT 1`,
+    [operationId, date, start, end, vehicleId, driverUserId, driverId]
+  );
+
+  return reservationConflict.rows[0] || null;
 };
 
 const getOperation = async (client: any, id: number) => {
@@ -307,10 +340,16 @@ const asignarOperacion = async (req: any, res: any) => {
       return reject(409, { success: false, error: "La licencia del conductor está vencida" });
     }
 
-    const conflict = await findScheduleConflict(client, operationId, current.fecha_programada, current.hora_inicio, current.hora_fin, vehicleId, driverId);
+    const conflict = await findScheduleConflict(client, operationId, current.fecha_programada, current.hora_inicio, current.hora_fin, vehicleId, driverId, driverUserId);
     if (conflict) {
-      const resource = conflict.vehiculo_id === vehicleId ? `vehículo ${conflict.placa || vehicleId}` : `conductor ${conflict.conductor_nombre || driverId}`;
-      return reject(409, { success: false, error: `Existe un conflicto de horario con el ${resource}`, conflicto: conflict });
+      const isVehicleConflict = Number(conflict.vehiculo_id) === vehicleId;
+      const resource = isVehicleConflict
+        ? `vehículo ${conflict.placa || vehicleId}`
+        : "conductor seleccionado";
+      const occupation = conflict.reserva_id
+        ? `ocupado en otra reserva #${conflict.reserva_id}`
+        : "ocupado en otro servicio";
+      return reject(409, { success: false, error: `No Disponible: el ${resource} está ${occupation}.`, conflicto: conflict });
     }
 
     await client.query(
