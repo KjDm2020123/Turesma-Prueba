@@ -122,6 +122,7 @@ const {
   crearOperacionDesdeReserva,
   crearOperacion,
   asignarOperacion,
+  actualizarSubcontratacion,
   actualizarEstadoOperacion,
   reabrirOperacion,
   historialOperacion,
@@ -155,6 +156,7 @@ router.get("/operaciones/reservas-pendientes", listarReservasPorDespachar);
 router.post("/operaciones/reservas/:id/despachar", crearOperacionDesdeReserva);
 router.post("/operaciones", crearOperacion);
 router.patch("/operaciones/:id/asignar", asignarOperacion);
+router.patch("/operaciones/:id/subcontratacion", actualizarSubcontratacion);
 router.patch("/operaciones/:id/estado", actualizarEstadoOperacion);
 router.patch("/operaciones/:id/reabrir", reabrirOperacion);
 router.get("/operaciones/:id/historial", historialOperacion);

@@ -5,6 +5,7 @@ import { Loader2, Bus, Flag, MapPin, Phone, RefreshCw, Clock, Navigation } from 
 import { ensureLeaflet, calcularRuta, formatDuracion } from "../lib/leaflet";
 import { getAuthHeaders } from "../lib/session";
 import { WhatsAppButton } from "./whatsapp-button";
+import { LocalizedContent, useLocale } from "../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const POLL_MS = 2000;
@@ -20,6 +21,7 @@ type Seguimiento = {
 // Mapa de seguimiento en vivo para el cliente: muestra la posición del vehículo
 // de su reserva en tiempo real (poll cada 2s) + el destino.
 export function LiveTripMap({ reservaId }: { reservaId: number }) {
+  const { language } = useLocale();
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const vehMarker = useRef<any>(null);
@@ -123,9 +125,10 @@ export function LiveTripMap({ reservaId }: { reservaId: number }) {
   }, [data]);
 
   const sinUbicacion = !data?.vehiculo;
-  const ultima = data?.vehiculo?.creado_en ? new Date(data.vehiculo.creado_en).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" }) : null;
+  const ultima = data?.vehiculo?.creado_en ? new Date(data.vehiculo.creado_en).toLocaleTimeString(language === "en" ? "en-US" : "es-EC", { hour: "2-digit", minute: "2-digit" }) : null;
 
   return (
+    <LocalizedContent>
     <div className="bg-white rounded-2xl border-2 border-blue-200 shadow-sm overflow-hidden">
       <div className="bg-[#0b0f1a] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -172,5 +175,6 @@ export function LiveTripMap({ reservaId }: { reservaId: number }) {
         </div>
       )}
     </div>
+    </LocalizedContent>
   );
 }

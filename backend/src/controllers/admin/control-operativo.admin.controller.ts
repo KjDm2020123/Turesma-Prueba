@@ -63,6 +63,12 @@ const getControlOperativo = async (_req: any, res: any) => {
         WHERE fecha_reserva >= CURRENT_DATE
           AND estado IN ('confirmada','en_curso')
           AND (vehiculo_id IS NULL OR conductor_id IS NULL)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM operaciones o
+            WHERE o.reserva_id = reservas.id
+              AND o.subcontratacion_estado = 'confirmada'
+          )
       `),
     ]);
 

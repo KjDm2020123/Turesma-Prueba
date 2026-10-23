@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { LocalizedContent, useLocale } from "../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -17,7 +18,7 @@ const addDaysIso = (isoDate: string, n: number) => {
 
 // Permite elegir fechas y, cuando hay una unidad concreta, muestra sus días no disponibles.
 export function VehiculoCalendario({
-  vehiculoId, value, onSelect, range = false, endValue = "", onSelectEnd, maxDays = 0, allowUnassigned = false,
+  vehiculoId, value, onSelect, range = false, endValue = "", onSelectEnd, maxDays = 0, allowUnassigned = false, localized = false,
 }: {
   vehiculoId: number | null;
   value: string;
@@ -27,11 +28,13 @@ export function VehiculoCalendario({
   onSelectEnd?: (fecha: string) => void;
   maxDays?: number; // tope de días seguidos en modo rango (0 = sin tope)
   allowUnassigned?: boolean;
+  localized?: boolean;
 }) {
   const [dispo, setDispo] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [aviso, setAviso] = useState("");
   const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const { language } = useLocale();
 
   useEffect(() => {
     if (!vehiculoId || allowUnassigned) return;
@@ -100,10 +103,11 @@ export function VehiculoCalendario({
   };
 
   if (!vehiculoId && !allowUnassigned) {
-    return <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs font-bold text-slate-400">Selecciona un vehículo para ver sus días disponibles</div>;
+    return <LocalizedContent enabled={localized}><div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center text-xs font-bold text-slate-400">Selecciona un vehículo para ver sus días disponibles</div></LocalizedContent>;
   }
 
   return (
+    <LocalizedContent enabled={localized}>
     <div className="bg-white border-2 border-slate-100 rounded-2xl p-4">
       <div className="flex items-center justify-between mb-3">
         <button type="button" onClick={() => cambiarMes(-1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ChevronLeft size={18} /></button>
@@ -124,7 +128,7 @@ export function VehiculoCalendario({
       ) : (
         <>
           <div className="grid grid-cols-7 gap-1 mb-1">
-            {DIAS.map((d, i) => <div key={i} className="text-center text-[9px] font-black uppercase text-slate-300">{d}</div>)}
+            {(localized && language === "en" ? ["S", "M", "T", "W", "T", "F", "S"] : DIAS).map((d, i) => <div key={i} className="text-center text-[9px] font-black uppercase text-slate-300">{d}</div>)}
           </div>
           <div className="grid grid-cols-7 gap-1">
             {dias.map((f, i) => {
@@ -163,5 +167,6 @@ export function VehiculoCalendario({
         </>
       )}
     </div>
+    </LocalizedContent>
   );
 }

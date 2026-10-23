@@ -306,6 +306,36 @@ const pool = {
           Object.assign(operation, { vehiculo_id: Number(params[0]), conductor_id: Number(params[1]), estado: "asignada" });
           return result();
         }
+        if (query.startsWith("update operaciones set subcontratacion_estado")) {
+          const [
+            subcontractingState,
+            company,
+            contact,
+            phone,
+            vehicle,
+            plate,
+            driver,
+            driverPhone,
+            cost,
+            operationState,
+            operationId,
+          ] = params;
+          Object.assign(operationFor(operationId), {
+            subcontratacion_estado: subcontractingState,
+            subcontratista_empresa: company,
+            subcontratista_contacto: contact,
+            subcontratista_telefono: phone,
+            subcontratista_vehiculo: vehicle,
+            subcontratista_placa: plate,
+            subcontratista_conductor: driver,
+            subcontratista_conductor_telefono: driverPhone,
+            subcontratacion_costo: cost,
+            vehiculo_id: null,
+            conductor_id: null,
+            estado: operationState,
+          });
+          return result();
+        }
         if (query.startsWith("select id, estado from reservas")) {
           const reservation = reservationFor(params[0]);
           return result(reservation ? [{ id: reservation.id, estado: reservation.estado }] : []);
@@ -519,5 +549,79 @@ test("despacha, recomienda, asigna, sincroniza estados y reabre usando HTTP con 
     assert.equal(assignedAlternative.body.data.vehiculo_id, alternativeVehicle.vehiculo_id);
     assert.equal(state.decisions[1].resultado, "alternativa");
     assert.equal(state.decisions[1].factores.decision_operador.motivo, "Se distribuye la carga de trabajo de la flota.");
+
+    const pendingSubcontract = await request(`/api/admin/operaciones/${operationId}/subcontratacion`, {
+      method: "PATCH",
+      body: { estado: "pendiente", empresa: "Transportes externos" },
+    });
+    assert.equal(pendingSubcontract.status, 200);
+    assert.equal(pendingSubcontract.body.data.subcontratacion_estado, "pendiente");
+    assert.equal(pendingSubcontract.body.data.estado, "programada");
+    assert.equal(state.reservations[1].vehiculo_id, null);
+    assert.equal(state.reservations[1].conductor_id, null);
+
+    const startBeforeConfirmation = await request(`/api/admin/operaciones/${operationId}/estado`, {
+      method: "PATCH",
+      body: { estado: "en_curso" },
+    });
+    assert.equal(startBeforeConfirmation.status, 409);
+
+    const missingDetails = await request(`/api/admin/operaciones/${operationId}/subcontratacion`, {
+      method: "PATCH",
+      body: { estado: "confirmada", empresa: "Transportes externos" },
+    });
+    assert.equal(missingDetails.status, 400);
+    assert.equal(operationFor(operationId).subcontratacion_estado, "pendiente");
+
+    const confirmedSubcontract = await request(`/api/admin/operaciones/${operationId}/subcontratacion`, {
+      method: "PATCH",
+      body: {
+        estado: "confirmada",
+        empresa: "Transportes externos",
+        contacto: "Contacto externo",
+        telefono: "0991234567",
+        vehiculo: "Van 15 pasajeros",
+        placa: "ABC-1234",
+        conductor: "Conductor externo",
+        conductor_telefono: "0987654321",
+        costo: 180,
+      },
+    });
+    assert.equal(confirmedSubcontract.status, 200, JSON.stringify(confirmedSubcontract.body));
+    assert.equal(confirmedSubcontract.body.data.estado, "asignada");
+    assert.equal(confirmedSubcontract.body.data.subcontratacion_estado, "confirmada");
+    assert.equal(confirmedSubcontract.body.data.vehiculo_id, null);
+    assert.equal(confirmedSubcontract.body.data.subcontratista_placa, "ABC-1234");
+
+    const removedSubcontract = await request(`/api/admin/operaciones/${operationId}/subcontratacion`, {
+      method: "PATCH",
+      body: { estado: "no_requerida" },
+    });
+    assert.equal(removedSubcontract.status, 200);
+    assert.equal(removedSubcontract.body.data.estado, "programada");
+    assert.equal(removedSubcontract.body.data.subcontratacion_estado, "no_requerida");
+    assert.equal(removedSubcontract.body.data.subcontratista_placa, null);
+
+    const reconfirmedSubcontract = await request(`/api/admin/operaciones/${operationId}/subcontratacion`, {
+      method: "PATCH",
+      body: {
+        estado: "confirmada",
+        empresa: "Transportes externos",
+        contacto: "Contacto externo",
+        telefono: "0991234567",
+        vehiculo: "Van 15 pasajeros",
+        placa: "ABC-1234",
+        conductor: "Conductor externo",
+        conductor_telefono: "0987654321",
+        costo: 180,
+      },
+    });
+    assert.equal(reconfirmedSubcontract.status, 200);
+
+    const startedExternally = await request(`/api/admin/operaciones/${operationId}/estado`, { method: "PATCH", body: { estado: "en_curso" } });
+    assert.equal(startedExternally.status, 200);
+    const completedExternally = await request(`/api/admin/operaciones/${operationId}/estado`, { method: "PATCH", body: { estado: "completada" } });
+    assert.equal(completedExternally.status, 200);
+    assert.equal(state.reservations[1].estado, "finalizada");
   });
 });

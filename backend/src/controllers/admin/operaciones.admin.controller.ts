@@ -4,6 +4,7 @@ const pool = require("../../config/db");
 
 const ACTIVE_STATES = ["programada", "asignada", "en_curso", "incidencia"];
 const VALID_STATES = ["programada", "asignada", "en_curso", "completada", "cancelada", "incidencia"];
+const VALID_SUBCONTRACTING_STATES = ["no_requerida", "pendiente", "confirmada"];
 
 const numberOrNull = (value: unknown) => {
   if (value === null || value === undefined || value === "") return null;
@@ -20,6 +21,17 @@ const timeOrNull = (value: unknown) => {
   if (value === null || value === undefined || value === "") return null;
   return typeof value === "string" && /^\d{2}:\d{2}(:\d{2})?$/.test(value) ? value : null;
 };
+
+const textOrNull = (value: unknown, maxLength: number) => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return text && text.length <= maxLength ? text : null;
+};
+
+const hasInvalidText = (value: unknown, maxLength: number) =>
+  value !== null && value !== undefined && value !== ""
+  && (typeof value !== "string" || value.trim().length > maxLength);
 
 const recordHistory = async (client: any, operationId: number, userId: number | null, action: string, oldState: string | null, newState: string | null, detail: Record<string, unknown> = {}) => {
   await client.query(
@@ -304,6 +316,9 @@ const asignarOperacion = async (req: any, res: any) => {
     if (!["programada", "asignada", "incidencia"].includes(current.estado)) {
       return reject(409, { success: false, error: "La operación no permite cambiar la asignación en su estado actual" });
     }
+    if (current.subcontratacion_estado && current.subcontratacion_estado !== "no_requerida") {
+      return reject(409, { success: false, error: "Retira la subcontratación antes de asignar recursos propios" });
+    }
 
     const vehicle = await client.query(
       `SELECT id, placa, capacidad, estado, activo,
@@ -455,6 +470,121 @@ const asignarOperacion = async (req: any, res: any) => {
   }
 };
 
+const actualizarSubcontratacion = async (req: any, res: any) => {
+  const operationId = Number(req.params.id);
+  const body = req.body || {};
+  const subcontractingState = String(body.estado || "");
+  if (!Number.isInteger(operationId) || operationId <= 0
+    || !VALID_SUBCONTRACTING_STATES.includes(subcontractingState)) {
+    return res.status(400).json({ success: false, error: "Operación o estado de subcontratación inválidos" });
+  }
+
+  const details = {
+    empresa: textOrNull(body.empresa, 160),
+    contacto: textOrNull(body.contacto, 120),
+    telefono: textOrNull(body.telefono, 40),
+    vehiculo: textOrNull(body.vehiculo, 120),
+    placa: textOrNull(body.placa, 30),
+    conductor: textOrNull(body.conductor, 120),
+    conductorTelefono: textOrNull(body.conductor_telefono, 40),
+  };
+  const rawCost = body.costo;
+  const cost = rawCost === "" || rawCost === null || rawCost === undefined ? null : Number(rawCost);
+  if (hasInvalidText(body.empresa, 160)
+    || hasInvalidText(body.contacto, 120)
+    || hasInvalidText(body.telefono, 40)
+    || hasInvalidText(body.vehiculo, 120)
+    || hasInvalidText(body.placa, 30)
+    || hasInvalidText(body.conductor, 120)
+    || hasInvalidText(body.conductor_telefono, 40)) {
+    return res.status(400).json({ success: false, error: "Uno o más datos de subcontratación no son válidos o superan el límite permitido" });
+  }
+  if (rawCost !== "" && rawCost !== null && rawCost !== undefined
+    && (cost === null || !Number.isFinite(cost) || cost < 0 || cost > 99999999.99)) {
+    return res.status(400).json({ success: false, error: "El costo de subcontratación debe ser un valor válido y no negativo" });
+  }
+  if (subcontractingState === "confirmada"
+    && (!details.empresa || !details.contacto || !details.telefono || !details.vehiculo
+      || !details.placa || !details.conductor || !details.conductorTelefono || cost === null)) {
+    return res.status(400).json({ success: false, error: "Para confirmar registra empresa, contacto, teléfono, vehículo, placa, conductor, teléfono del conductor y costo acordado" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const currentResult = await client.query("SELECT * FROM operaciones WHERE id = $1 FOR UPDATE", [operationId]);
+    if (!currentResult.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ success: false, error: "Operación no encontrada" });
+    }
+
+    const current = currentResult.rows[0];
+    if (!["programada", "asignada", "incidencia"].includes(current.estado)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ success: false, error: "La operación no permite cambiar la subcontratación en su estado actual" });
+    }
+
+    const nextOperationState = subcontractingState === "confirmada" ? "asignada" : "programada";
+    const clearDetails = subcontractingState === "no_requerida";
+    await client.query(
+      `UPDATE operaciones
+       SET subcontratacion_estado = $1,
+           subcontratista_empresa = $2,
+           subcontratista_contacto = $3,
+           subcontratista_telefono = $4,
+           subcontratista_vehiculo = $5,
+           subcontratista_placa = $6,
+           subcontratista_conductor = $7,
+           subcontratista_conductor_telefono = $8,
+           subcontratacion_costo = $9,
+           vehiculo_id = NULL,
+           conductor_id = NULL,
+           estado = $10,
+           actualizado_en = CURRENT_TIMESTAMP
+       WHERE id = $11`,
+      [
+        subcontractingState,
+        clearDetails ? null : details.empresa,
+        clearDetails ? null : details.contacto,
+        clearDetails ? null : details.telefono,
+        clearDetails ? null : details.vehiculo,
+        clearDetails ? null : details.placa,
+        clearDetails ? null : details.conductor,
+        clearDetails ? null : details.conductorTelefono,
+        clearDetails ? null : cost,
+        nextOperationState,
+        operationId,
+      ]
+    );
+
+    if (current.reserva_id) {
+      await client.query(
+        "UPDATE reservas SET vehiculo_id = NULL, conductor_id = NULL WHERE id = $1",
+        [current.reserva_id]
+      );
+    }
+
+    await recordHistory(
+      client,
+      operationId,
+      req.user?.id || null,
+      "actualizar_subcontratacion",
+      current.subcontratacion_estado || "no_requerida",
+      subcontractingState,
+      clearDetails ? { accion: "retirada" } : { ...details, costo: cost }
+    );
+    const updated = await getOperation(client, operationId);
+    await client.query("COMMIT");
+    return res.json({ success: true, data: updated });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Error actualizando subcontratación:", error);
+    return res.status(500).json({ success: false, error: "No se pudo actualizar la subcontratación" });
+  } finally {
+    client.release();
+  }
+};
+
 const actualizarEstadoOperacion = async (req: any, res: any) => {
   const operationId = Number(req.params.id);
   const nextState = String(req.body?.estado || "");
@@ -471,7 +601,13 @@ const actualizarEstadoOperacion = async (req: any, res: any) => {
       return res.status(404).json({ success: false, error: "Operación no encontrada" });
     }
     const operation = current.rows[0];
-    if (nextState === "en_curso" && (!operation.vehiculo_id || !operation.conductor_id)) {
+    const hasOwnResources = operation.vehiculo_id && operation.conductor_id;
+    const hasConfirmedSubcontracting = operation.subcontratacion_estado === "confirmada"
+      && operation.subcontratista_empresa
+      && operation.subcontratista_vehiculo
+      && operation.subcontratista_placa
+      && operation.subcontratista_conductor;
+    if (nextState === "en_curso" && !hasOwnResources && !hasConfirmedSubcontracting) {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, error: "No se puede iniciar una operación sin vehículo y conductor" });
     }
@@ -581,6 +717,7 @@ module.exports = {
   crearOperacionDesdeReserva,
   crearOperacion,
   asignarOperacion,
+  actualizarSubcontratacion,
   actualizarEstadoOperacion,
   reabrirOperacion,
   historialOperacion,

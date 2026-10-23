@@ -9,6 +9,7 @@ import {
 import { getAuthHeaders, getStoredUser, setStoredUser, handleUnauthorized } from "../../../lib/session";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
+import { LocalizedContent } from "../../../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -135,6 +136,7 @@ export default function ClientePerfilPage() {
   const estadoInfo = ESTADO[estado] || ESTADO.no_verificado;
 
   return (
+    <LocalizedContent>
     <div className="space-y-5 max-w-3xl mx-auto">
       {/* CABECERA */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
@@ -151,7 +153,7 @@ export default function ClientePerfilPage() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Cliente</p>
-          <h1 className="text-2xl font-black text-slate-900 truncate">{perfil?.nombre}</h1>
+          <h1 data-no-translate className="text-2xl font-black text-slate-900 truncate">{perfil?.nombre}</h1>
           <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1.5 justify-center sm:justify-start"><Mail size={13} /> {perfil?.email}</p>
         </div>
         <span className={`shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-full border ${estadoInfo.cls}`}>
@@ -230,5 +232,6 @@ export default function ClientePerfilPage() {
         {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}{saving ? "Guardando..." : "Guardar cambios"}
       </button>
     </div>
+    </LocalizedContent>
   );
 }

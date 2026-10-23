@@ -12,10 +12,12 @@ import { getAuthHeaders, handleUnauthorized } from "../../lib/session";
 import { useClienteGuard } from "../../lib/use-cliente-guard";
 import { LiveTripMap } from "../../components/live-trip-map";
 import { MapPicker, Punto } from "../../components/map-picker";
+import { formatLocalizedDate, LocalizedContent, useLocale } from "../../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function ClienteInicioPage() {
+  const { language } = useLocale();
   const { user, checkingSession } = useClienteGuard();
   const [cotPendientes, setCotPendientes] = useState(0);
   const [cotAprobadas, setCotAprobadas] = useState(0);
@@ -96,6 +98,7 @@ export default function ClienteInicioPage() {
   if (checkingSession) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#E31E24]" size={36} /></div>;
 
   return (
+    <LocalizedContent>
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* KPIs */}
       <div className="grid grid-cols-3 gap-3">
@@ -149,17 +152,17 @@ export default function ClienteInicioPage() {
               )}
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-black text-slate-900">{viaje.titulo}</h3>
+                  <h3 data-no-translate className="font-black text-slate-900">{viaje.titulo}</h3>
                   <span className="text-lg font-black text-[#E31E24]">${Number(viaje.precio).toFixed(2)}</span>
                 </div>
                 <p className="mt-3 flex items-center gap-2 text-sm font-bold text-slate-600">
-                  <MapPin size={15} className="text-[#E31E24]" />{viaje.origen} <ArrowRight size={13} /> {viaje.destino}
+                  <MapPin size={15} className="text-[#E31E24]" /><span data-no-translate>{viaje.origen}</span> <ArrowRight size={13} /> <span data-no-translate>{viaje.destino}</span>
                 </p>
                 <p className="mt-2 text-xs font-semibold text-slate-500">
                   {viaje.vehiculo_placa ? `Vehículo ${viaje.vehiculo_placa} · ${viaje.vehiculo_modelo || ""}` : "Vehículo por confirmar"}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                  <span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.fecha_servicio}</span>
+                  <span className="rounded-lg bg-slate-50 px-2 py-1">{formatLocalizedDate(String(viaje.fecha_servicio || ""), language)}</span>
                   <span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.hora_salida || "Hora por definir"}</span>
                   <span className="rounded-lg bg-slate-50 px-2 py-1">Vehículo: {viaje.capacidad_personas} personas</span>
                   <span className="rounded-lg bg-slate-50 px-2 py-1">{viaje.cupos_disponibles} disponibles</span>
@@ -189,7 +192,7 @@ export default function ClienteInicioPage() {
         {!catalogoViajes.length && <p className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-bold text-slate-400">No hay viajes publicados en este momento.</p>}
       </section>
 
-      {viajeCompra && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4"><form onSubmit={(event) => { event.preventDefault(); void reservarViaje(); }} className="my-4 w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-[#E31E24]">Confirmar compra</p><h2 className="mt-1 text-xl font-black text-slate-900">{viajeCompra.titulo}</h2></div><button type="button" onClick={() => setViajeCompra(null)} className="text-2xl text-slate-400">×</button></div>      <p className="text-sm font-semibold text-slate-600">{viajeCompra.origen} → {viajeCompra.destino} · ${Number(viajeCompra.precio).toFixed(2)} por persona</p><p className="rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">Capacidad del vehículo: {viajeCompra.capacidad_personas} personas</p><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Personas que van<input type="number" min="1" max={viajeCompra.cupos_disponibles} value={compraForm.pasajeros} onChange={(e) => setCompraForm({ ...compraForm, pasajeros: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm" required /></label><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Fecha del viaje<input type="date" value={compraForm.fecha} onChange={(e) => setCompraForm({ ...compraForm, fecha: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm" required /></label><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Hora de salida<input type="time" value={compraForm.hora} onChange={(e) => setCompraForm({ ...compraForm, hora: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm" required /></label><div className="space-y-2"><p className="text-xs font-black uppercase tracking-wider text-slate-500">Ubicación de recogida</p><MapPicker pickupOnly origin={pickupPoint} destination={null} onChange={(which, point) => { if (which === "origin") { setPickupPoint(point); setCompraForm((current) => ({ ...current, ubicacion: point.label })); } }} /><input value={compraForm.ubicacion} onChange={(e) => setCompraForm({ ...compraForm, ubicacion: e.target.value })} className="w-full rounded-xl border p-3 text-sm normal-case" placeholder="Dirección o punto de encuentro" required /><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Referencia (opcional)<textarea value={compraForm.referencia} onChange={(e) => setCompraForm({ ...compraForm, referencia: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm normal-case" rows={2} placeholder="Ej.: junto a la farmacia, puerta azul..." /></label></div><button disabled={comprando} className="w-full rounded-xl bg-[#E31E24] py-3 font-black text-white disabled:opacity-50">{comprando ? "Registrando..." : "Confirmar reserva"}</button></form></div>}
+      {viajeCompra && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4"><form onSubmit={(event) => { event.preventDefault(); void reservarViaje(); }} className="my-4 w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase tracking-widest text-[#E31E24]">Confirmar compra</p><h2 className="mt-1 text-xl font-black text-slate-900">{viajeCompra.titulo}</h2></div><button type="button" onClick={() => setViajeCompra(null)} className="text-2xl text-slate-400">×</button></div>      <p className="text-sm font-semibold text-slate-600">{viajeCompra.origen} → {viajeCompra.destino} · ${Number(viajeCompra.precio).toFixed(2)} por persona</p><p className="rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">Capacidad del vehículo: {viajeCompra.capacidad_personas} personas</p><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Personas que van<input type="number" min="1" max={viajeCompra.cupos_disponibles} value={compraForm.pasajeros} onChange={(e) => setCompraForm({ ...compraForm, pasajeros: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm" required /></label><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Fecha del viaje<input type="date" value={compraForm.fecha} onChange={(e) => setCompraForm({ ...compraForm, fecha: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm" required /></label><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Hora de salida<input type="time" value={compraForm.hora} onChange={(e) => setCompraForm({ ...compraForm, hora: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm" required /></label><div className="space-y-2"><p className="text-xs font-black uppercase tracking-wider text-slate-500">Ubicación de recogida</p>      <MapPicker localized pickupOnly origin={pickupPoint} destination={null} onChange={(which, point) => { if (which === "origin") { setPickupPoint(point); setCompraForm((current) => ({ ...current, ubicacion: point.label })); } }} /><input value={compraForm.ubicacion} onChange={(e) => setCompraForm({ ...compraForm, ubicacion: e.target.value })} className="w-full rounded-xl border p-3 text-sm normal-case" placeholder="Dirección o punto de encuentro" required /><label className="block text-xs font-black uppercase tracking-wider text-slate-500">Referencia (opcional)<textarea value={compraForm.referencia} onChange={(e) => setCompraForm({ ...compraForm, referencia: e.target.value })} className="mt-1 w-full rounded-xl border p-3 text-sm normal-case" rows={2} placeholder="Ej.: junto a la farmacia, puerta azul..." /></label></div><button disabled={comprando} className="w-full rounded-xl bg-[#E31E24] py-3 font-black text-white disabled:opacity-50">{comprando ? "Registrando..." : "Confirmar reserva"}</button></form></div>}
 
       {/* VIAJE ACTIVO — SEGUIMIENTO EN VIVO */}
       {viajeActivo && (
@@ -254,5 +257,6 @@ export default function ClienteInicioPage() {
       </div>
 
     </div>
+    </LocalizedContent>
   );
 }

@@ -3,6 +3,7 @@
 import { Bot, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { LocalizedContent } from "../lib/i18n";
 
 type ChatMessage = {
   id: string;
@@ -189,6 +190,7 @@ export function ClienteChatbot() {
   };
 
   return (
+    <LocalizedContent>
     <div className="fixed bottom-4 right-4 z-50">
       {isOpen ? (
         <div className="w-[360px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.2)]">
@@ -230,6 +232,7 @@ export function ClienteChatbot() {
               {messages.map((message) => (
                 <div
                   key={message.id}
+                  data-no-translate={message.role === "user" ? "true" : undefined}
                   className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm ${
                     message.role === "assistant"
                       ? "bg-white text-slate-700 border border-slate-200"
@@ -290,5 +293,6 @@ export function ClienteChatbot() {
         </button>
       )}
     </div>
+    </LocalizedContent>
   );
 }

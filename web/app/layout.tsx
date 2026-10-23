@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import { ConfirmProvider } from "../components/confirm-dialog";
+import { LocaleProvider } from "../lib/i18n";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
 
@@ -77,7 +78,9 @@ export default function RootLayout({
             }),
           }}
         />
-        <ConfirmProvider>{children}</ConfirmProvider>
+        <LocaleProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

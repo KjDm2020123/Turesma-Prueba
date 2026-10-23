@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MapPin, Flag, Loader2, LocateFixed } from "lucide-react";
 import { ensureLeaflet, reverseGeocode } from "../lib/leaflet";
+import { LocalizedContent } from "../lib/i18n";
 
 export type Punto = { lat: number; lng: number; label: string };
 
@@ -10,12 +11,13 @@ export type Punto = { lat: number; lng: number; label: string };
 // los puntos (sin escribir). Hace geocodificación inversa para mostrar el nombre.
 export function MapPicker({
   origin, destination, onChange, focusDestinationSignal = 0,
-  pickupOnly = false,
+  pickupOnly = false, localized = false,
 }: {
   origin: Punto | null;
   destination: Punto | null;
   onChange: (which: "origin" | "destination", val: Punto) => void;
   pickupOnly?: boolean;
+  localized?: boolean;
   // Al incrementar este número (p.ej. tras autocompletar el origen por GPS),
   // el mapa cambia el foco a "destino" para que el usuario solo tenga que
   // seleccionar ese punto. Ignorado si no se usa.
@@ -117,6 +119,7 @@ export function MapPicker({
   }, [ready, origin, destination]);
 
   return (
+    <LocalizedContent enabled={localized}>
     <div className="space-y-2">
       {/* Selector de qué punto se está marcando */}
       {pickupOnly ? (
@@ -168,5 +171,6 @@ export function MapPicker({
         )}
       </div>
     </div>
+    </LocalizedContent>
   );
 }

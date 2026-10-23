@@ -14,6 +14,7 @@ import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { MapPicker, Punto } from "../../../components/map-picker";
 import { VehiculoCalendario } from "../../../components/vehiculo-calendario";
 import { calcularRuta, reverseGeocode, RutaCalculada } from "../../../lib/leaflet";
+import { formatLocalizedDate, LocalizedContent, useLocale } from "../../../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -61,7 +62,9 @@ const diasEntre = (a: string, b: string) => {
 };
 
 export default function ClienteCotizarPage() {
+  const { language } = useLocale();
   const { user, checkingSession } = useClienteGuard();
+  const dateLocale = language === "en" ? "en-US" : "es-EC";
   const userId = user?.id;
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
@@ -353,6 +356,7 @@ export default function ClienteCotizarPage() {
   );
 
   return (
+    <LocalizedContent>
     <div className="space-y-6">
 
       {/* TOGGLE FORM */}
@@ -491,6 +495,7 @@ export default function ClienteCotizarPage() {
               </div>
 
               <VehiculoCalendario
+                localized
                 vehiculoId={null}
                 value={form.fecha_servicio}
                 onSelect={(f) => setForm(p => ({ ...p, fecha_servicio: f }))}
@@ -506,8 +511,8 @@ export default function ClienteCotizarPage() {
                 <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-slate-500 bg-emerald-50 border border-emerald-200 rounded-xl py-2 px-3">
                   <Calendar size={13} className="text-emerald-600" />
                   {variosDias && form.fecha_fin
-                    ? <span>Del <b className="text-slate-700">{new Date(form.fecha_servicio + "T00:00").toLocaleDateString("es-EC")}</b> al <b className="text-slate-700">{new Date(form.fecha_fin + "T00:00").toLocaleDateString("es-EC")}</b> · {diasEntre(form.fecha_servicio, form.fecha_fin)} días</span>
-                    : <span><b className="text-slate-700">{new Date(form.fecha_servicio + "T00:00").toLocaleDateString("es-EC")}</b>{variosDias ? " — elige el último día" : " · 1 día"}</span>}
+                    ? <span>Del <b className="text-slate-700">{new Date(form.fecha_servicio + "T00:00").toLocaleDateString(dateLocale)}</b> al <b className="text-slate-700">{new Date(form.fecha_fin + "T00:00").toLocaleDateString(dateLocale)}</b> · {diasEntre(form.fecha_servicio, form.fecha_fin)} días</span>
+                    : <span><b className="text-slate-700">{new Date(form.fecha_servicio + "T00:00").toLocaleDateString(dateLocale)}</b>{variosDias ? " — elige el último día" : " · 1 día"}</span>}
                 </div>
               )}
               </div>
@@ -541,7 +546,7 @@ export default function ClienteCotizarPage() {
                 <p className="text-[11px] text-amber-600 font-bold flex items-center gap-1.5"><AlertCircle size={12} /> {locationError}</p>
               )}
 
-              <MapPicker origin={origin} destination={destination} onChange={onMapChange} focusDestinationSignal={focusSignal} />
+              <MapPicker localized origin={origin} destination={destination} onChange={onMapChange} focusDestinationSignal={focusSignal} />
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-800">
                 {routeLoading ? "Calculando distancia por carretera…" : route ? `Distancia estimada: ${route.distanciaKm.toFixed(1)} km · Duración: ${Math.round(route.duracionMin)} min` : "Marca ambos puntos para calcular la distancia."}
               </div>
@@ -648,13 +653,13 @@ export default function ClienteCotizarPage() {
                         <span className="text-[9px] text-slate-400 font-bold">#{cot.id}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-                        <MapPin size={13} className="text-[#E31E24] flex-shrink-0" /><span className="truncate">{cot.origen}</span>
-                        <ArrowRight size={13} className="text-slate-400 flex-shrink-0" /><span className="truncate">{cot.destino}</span>
+                        <MapPin size={13} className="text-[#E31E24] flex-shrink-0" />                        <span data-no-translate className="truncate">{cot.origen}</span>
+                        <ArrowRight size={13} className="text-slate-400 flex-shrink-0" /><span data-no-translate className="truncate">{cot.destino}</span>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400 flex-wrap">
                         <span className="flex items-center gap-1"><Calendar size={10} />
-                          {new Date(cot.fecha_servicio).toLocaleDateString("es-EC")}
-                          {cot.fecha_fin && <> → {new Date(cot.fecha_fin).toLocaleDateString("es-EC")}</>}
+                          {formatLocalizedDate(cot.fecha_servicio, language)}
+                          {cot.fecha_fin && <> → {formatLocalizedDate(cot.fecha_fin, language)}</>}
                         </span>
                         {cot.hora_salida && <span className="flex items-center gap-1"><Clock size={10} />{cot.hora_salida}</span>}
                         <span className="flex items-center gap-1"><Users size={10} />{cot.num_personas}</span>
@@ -679,7 +684,7 @@ export default function ClienteCotizarPage() {
                               <p className="text-2xl font-black text-purple-700">${Number(cot.precio_propuesto).toFixed(2)}</p>
                             </div>
                           </div>
-                          {cot.respuesta_admin && <p className="text-sm text-purple-800 bg-white/60 rounded-xl p-2.5">{cot.respuesta_admin}</p>}
+                          {cot.respuesta_admin && <p data-no-translate className="text-sm text-purple-800 bg-white/60 rounded-xl p-2.5">{cot.respuesta_admin}</p>}
 
                           {counterId === cot.id ? (
                             <div className="space-y-2">
@@ -711,12 +716,12 @@ export default function ClienteCotizarPage() {
                       {cot.valor_ofrecido && (
                         <div className="flex items-center gap-2 text-xs text-slate-500"><DollarSign size={13} className="text-slate-400" />Valor ofrecido: <b className="text-slate-700">${Number(cot.valor_ofrecido).toFixed(2)}</b></div>
                       )}
-                      {cot.notas && <div className="bg-slate-50 rounded-xl p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Tus notas</p><p className="text-sm text-slate-600">{cot.notas}</p></div>}
+                      {cot.notas && <div className="bg-slate-50 rounded-xl p-3"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Tus notas</p><p data-no-translate className="text-sm text-slate-600">{cot.notas}</p></div>}
                       {cot.precio_final && (
                         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3"><DollarSign size={20} className="text-emerald-600 flex-shrink-0" />
                           <div><p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Precio acordado</p><p className="text-xl font-black text-emerald-700">${Number(cot.precio_final).toFixed(2)}</p></div></div>
                       )}
-                      {cot.respuesta_admin && <div className={`rounded-xl p-4 border ${info.bg}`}><p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${info.color}`}>Respuesta de Turesma</p><p className="text-sm text-slate-700">{cot.respuesta_admin}</p></div>}
+                      {cot.respuesta_admin && <div className={`rounded-xl p-4 border ${info.bg}`}><p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${info.color}`}>Respuesta de Turesma</p><p data-no-translate className="text-sm text-slate-700">{cot.respuesta_admin}</p></div>}
                       {cot.reserva_id && (
                         <div className="bg-orange-50 border border-orange-300 rounded-xl p-4 flex items-center gap-3"><Zap size={18} className="text-orange-600" />
                           <div><p className="text-xs font-black text-orange-700">Reserva #{cot.reserva_id} creada — pendiente de pago</p><p className="text-[10px] text-orange-600">Paga al menos el 50% en tu Historial para confirmarla.</p></div></div>
@@ -730,5 +735,6 @@ export default function ClienteCotizarPage() {
         )}
       </div>
     </div>
+    </LocalizedContent>
   );
 }

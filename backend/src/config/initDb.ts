@@ -364,13 +364,53 @@ const initDatabase = async () => {
       kilometros_reales NUMERIC(10, 2),
       hora_inicio_real TIMESTAMP,
       hora_fin_real TIMESTAMP,
+      subcontratacion_estado VARCHAR(20) NOT NULL DEFAULT 'no_requerida',
+      subcontratista_empresa VARCHAR(160),
+      subcontratista_contacto VARCHAR(120),
+      subcontratista_telefono VARCHAR(40),
+      subcontratista_vehiculo VARCHAR(120),
+      subcontratista_placa VARCHAR(30),
+      subcontratista_conductor VARCHAR(120),
+      subcontratista_conductor_telefono VARCHAR(40),
+      subcontratacion_costo NUMERIC(10, 2),
       observaciones TEXT,
       creado_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT operaciones_horas_validas CHECK (hora_fin IS NULL OR hora_inicio IS NULL OR hora_fin > hora_inicio),
-      CONSTRAINT operaciones_estado_valido CHECK (estado IN ('programada', 'asignada', 'en_curso', 'completada', 'cancelada', 'incidencia'))
+      CONSTRAINT operaciones_estado_valido CHECK (estado IN ('programada', 'asignada', 'en_curso', 'completada', 'cancelada', 'incidencia')),
+      CONSTRAINT operaciones_subcontratacion_estado_check CHECK (subcontratacion_estado IN ('no_requerida', 'pendiente', 'confirmada')),
+      CONSTRAINT operaciones_subcontratacion_costo_check CHECK (subcontratacion_costo IS NULL OR subcontratacion_costo >= 0)
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE operaciones
+    ADD COLUMN IF NOT EXISTS subcontratacion_estado VARCHAR(20) NOT NULL DEFAULT 'no_requerida',
+    ADD COLUMN IF NOT EXISTS subcontratista_empresa VARCHAR(160),
+    ADD COLUMN IF NOT EXISTS subcontratista_contacto VARCHAR(120),
+    ADD COLUMN IF NOT EXISTS subcontratista_telefono VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS subcontratista_vehiculo VARCHAR(120),
+    ADD COLUMN IF NOT EXISTS subcontratista_placa VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS subcontratista_conductor VARCHAR(120),
+    ADD COLUMN IF NOT EXISTS subcontratista_conductor_telefono VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS subcontratacion_costo NUMERIC(10, 2);
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'operaciones_subcontratacion_estado_check') THEN
+        ALTER TABLE operaciones
+        ADD CONSTRAINT operaciones_subcontratacion_estado_check
+        CHECK (subcontratacion_estado IN ('no_requerida', 'pendiente', 'confirmada'));
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'operaciones_subcontratacion_costo_check') THEN
+        ALTER TABLE operaciones
+        ADD CONSTRAINT operaciones_subcontratacion_costo_check
+        CHECK (subcontratacion_costo IS NULL OR subcontratacion_costo >= 0);
+      END IF;
+    END $$;
   `);
 
   await pool.query(`

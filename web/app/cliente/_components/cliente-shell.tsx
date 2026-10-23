@@ -21,6 +21,7 @@ import { ClienteChatbot } from "../../../components/cliente-chatbot";
 import { useClienteBadges } from "./use-cliente-badges";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 import { useClienteGuard } from "../../../lib/use-cliente-guard";
+import { LanguageSwitcher, LocalizedContent } from "../../../lib/i18n";
 
 type MenuItem = {
   href: string;
@@ -65,6 +66,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
   };
 
   return (
+    <LocalizedContent>
     <div className="min-h-screen bg-[#f8f9fa] flex font-sans text-[#1a1a1a]">
       <aside className="hidden lg:flex w-72 flex-col bg-[#0b0f1a] text-white fixed h-full shadow-[10px_0_30px_rgba(0,0,0,0.1)] z-50">
         <div className="p-8 border-b border-white/5">
@@ -128,7 +130,7 @@ export function ClienteShell({ children }: ClienteShellProps) {
               </div>
               <div className="overflow-hidden">
                 <p className="text-sm font-bold truncate text-white">
-                  {user?.nombre || "Cliente"}
+                  {user?.nombre ? <span data-no-translate>{user.nombre}</span> : "Cliente"}
                 </p>
                 <p className="text-[10px] text-gray-400 truncate">Cliente</p>
               </div>
@@ -218,11 +220,12 @@ export function ClienteShell({ children }: ClienteShellProps) {
           </div>
 
           <div className="flex items-center gap-3 md:gap-6">
+            <LanguageSwitcher />
             <NotificationBell userId={user?.id} accent="red" portal="cliente" />
 
             <div className="flex items-center gap-3 border-l border-gray-200 pl-3 md:pl-6">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-semibold text-gray-900 leading-tight">{user?.nombre || "Cliente"}</p>
+                <p className="text-sm font-semibold text-gray-900 leading-tight">{user?.nombre ? <span data-no-translate>{user.nombre}</span> : "Cliente"}</p>
                 <p className="text-[11px] text-gray-400">Cliente</p>
               </div>
               {user?.imagen_url ? (
@@ -270,5 +273,6 @@ export function ClienteShell({ children }: ClienteShellProps) {
         }}
       />
     </div>
+    </LocalizedContent>
   );
 }

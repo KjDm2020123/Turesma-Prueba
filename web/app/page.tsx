@@ -27,10 +27,10 @@ import {
   Volume2,
   VolumeX
 } from "lucide-react";
+import { LanguageSwitcher, LocalizedContent } from "../lib/i18n";
 
 type VehiculoPublico = {
   id: number;
-  placa: string;
   tipo: string | null;
   modelo: string | null;
   capacidad: number | null;
@@ -100,6 +100,7 @@ function VideoPlayer({ src, title }: { src: string; title: string | null }) {
   };
 
   return (
+    <LocalizedContent>
     <div className="video-player group/video relative aspect-video w-full overflow-hidden bg-black">
       <video
         ref={videoRef}
@@ -136,6 +137,7 @@ function VideoPlayer({ src, title }: { src: string; title: string | null }) {
         </button>
       </div>
     </div>
+    </LocalizedContent>
   );
 }
 
@@ -312,6 +314,7 @@ export default function RootPage() {
     } transition-colors hover:text-[#E31E24]`;
 
   return (
+    <LocalizedContent>
     <main className="home-page bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
       <link rel="preload" as="image" href={HERO_IMAGE_URL} fetchPriority="high" />
 
@@ -343,6 +346,7 @@ export default function RootPage() {
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
+            <LanguageSwitcher />
             <Link href="/login" className="home-button rounded-xl border-2 border-gray-100 px-6 py-2.5 text-sm font-bold text-gray-700 transition-all hover:border-[#E31E24] hover:text-[#E31E24]">
               Ingresar
             </Link>
@@ -373,6 +377,7 @@ export default function RootPage() {
             <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className={navLinkClass("requerimiento", true)} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className={navLinkClass("contacto", true)} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
             <div className="pt-4 flex flex-col gap-3">
+              <LanguageSwitcher />
               <Link href="/login" className="home-button text-center rounded-xl border-2 border-gray-100 py-3 font-bold text-gray-700">Ingresar</Link>
               <Link href="/registro" className="home-button text-center rounded-xl bg-[#E31E24] py-3 font-bold text-white">Registrarse</Link>
             </div>
@@ -534,47 +539,40 @@ export default function RootPage() {
                 ref={flotaRef}
                 className="flota-carousel flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-4"
               >
-                {vehiculos.map((v, index) => {
-                  const estadoColor = v.estado === "disponible" ? "text-green-600" : v.estado === "en_servicio" ? "text-blue-600" : "text-amber-600";
-                  const estadoLabel = v.estado === "disponible" ? "Disponible" : v.estado === "en_servicio" ? "En Servicio" : v.estado === "mantenimiento" ? "Mantenimiento" : "Inactivo";
-                  return (
-                    <div
-                      key={v.id}
-                      data-flota-card
-                      className="home-card flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl hover:shadow-2xl sm:w-[360px]"
-                    >
-                      <Image
-                        src={v.imagen_url || IMAGEN_FALLBACK}
-                        alt={`${v.tipo || "Vehículo"} ${v.placa}`}
-                        width={720}
-                        height={512}
-                        sizes="(max-width: 640px) 85vw, 360px"
-                        priority={index === 0}
-                        unoptimized
-                        onError={handleRemoteImageError}
-                        className="h-56 w-full object-cover sm:h-64"
-                      />
-                      <div className="p-7 flex flex-col flex-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-green-600">
-                          {v.capacidad ? `${v.capacidad} Pasajeros` : "Transporte"}
-                        </span>
-                        <h4 className="mt-2 text-2xl font-black italic text-gray-900">
-                          {v.modelo || v.tipo || "Vehículo"}
-                        </h4>
-                        {v.descripcion && (
-                          <p className="mt-2 text-sm text-gray-500 leading-relaxed flex-1">{v.descripcion}</p>
-                        )}
-                        <div className="mt-6 flex items-center justify-between border-t pt-6">
-                          <span className={`text-xs font-bold uppercase ${estadoColor}`}>Estado: {estadoLabel}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-gray-400 uppercase bg-gray-50 px-2 py-1 rounded-lg">{v.placa}</span>
-                            <Bus size={20} className="text-[#E31E24]" />
-                          </div>
-                        </div>
+                {vehiculos.map((v, index) => (
+                  <div
+                    key={v.id}
+                    data-flota-card
+                    className="home-card flex w-[85%] flex-none snap-center flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl hover:shadow-2xl sm:w-[360px]"
+                  >
+                    <Image
+                      src={v.imagen_url || IMAGEN_FALLBACK}
+                      alt={`${v.tipo || "Vehículo"} ${v.modelo || ""}`.trim()}
+                      data-no-translate
+                      width={720}
+                      height={512}
+                      sizes="(max-width: 640px) 85vw, 360px"
+                      priority={index === 0}
+                      unoptimized
+                      onError={handleRemoteImageError}
+                      className="h-56 w-full object-cover sm:h-64"
+                    />
+                    <div className="p-7 flex flex-col flex-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-green-600">
+                        {v.capacidad ? `${v.capacidad} Pasajeros` : "Transporte"}
+                      </span>
+                      <h4 data-no-translate className="mt-2 text-2xl font-black italic text-gray-900">
+                        {v.modelo || v.tipo || "Vehículo"}
+                      </h4>
+                      {v.descripcion && (
+                        <p data-no-translate className="mt-2 text-sm text-gray-500 leading-relaxed flex-1">{v.descripcion}</p>
+                      )}
+                      <div className="mt-6 flex items-center justify-end border-t pt-6">
+                        <Bus size={20} className="text-[#E31E24]" />
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
 
               {/* Controles móviles + hint */}
@@ -622,6 +620,7 @@ export default function RootPage() {
                     <Image
                       src={foto.imagen_url}
                       alt={foto.titulo || "Viaje realizado por Turesma"}
+                      data-no-translate
                       fill
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                       priority={foto.id === fotosGaleria[0]?.id}
@@ -633,10 +632,10 @@ export default function RootPage() {
                   {(foto.titulo || foto.descripcion) && (
                     <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-6 pt-16 translate-y-2 opacity-0 transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100">
                       {foto.titulo && (
-                        <h3 className="text-lg font-black italic text-white uppercase tracking-tight">{foto.titulo}</h3>
+                        <h3 data-no-translate className="text-lg font-black italic text-white uppercase tracking-tight">{foto.titulo}</h3>
                       )}
                       {foto.descripcion && (
-                        <p className="mt-1 text-sm font-medium text-white/80 leading-snug">{foto.descripcion}</p>
+                        <p data-no-translate className="mt-1 text-sm font-medium text-white/80 leading-snug">{foto.descripcion}</p>
                       )}
                     </figcaption>
                   )}
@@ -1027,5 +1026,6 @@ export default function RootPage() {
         <svg aria-hidden="true" className="h-8 w-8" fill="currentColor" viewBox="0 0 24 24"><path d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.4 0 .01 5.39 0 12.02c0 2.1.55 4.16 1.6 5.98L0 24l6.16-1.58a11.95 11.95 0 0 0 5.85 1.49h.01c6.63 0 12.02-5.39 12.03-12.02 0-3.22-1.25-6.24-3.53-8.41ZM12.02 21.4h-.01a9.4 9.4 0 0 1-4.78-1.3l-.34-.2-3.66.94.98-3.57-.22-.37a9.42 9.42 0 0 1-1.45-5.03c.01-5.21 4.25-9.45 9.47-9.45 2.53 0 4.9.99 6.68 2.77a9.36 9.36 0 0 1 2.77 6.68c-.01 5.22-4.25 9.46-9.44 9.46Zm5.47-7.46c-.3-.15-1.78-.88-2.06-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.95 1.18-.17.2-.35.23-.65.08-.3-.15-1.26-.46-2.4-1.48-.89-.8-1.49-1.78-1.67-2.08-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.03-.53-.08-.15-.68-1.64-.93-2.24-.24-.58-.49-.5-.68-.51h-.58c-.2 0-.53.07-.81.37-.28.3-1.05 1.02-1.05 2.49 0 1.47 1.08 2.89 1.23 3.09.15.2 2.11 3.23 5.11 4.53.71.31 1.26.49 1.69.63.71.23 1.36.19 1.87.11.57-.09 1.76-.72 2.01-1.42.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z" /></svg>
       </a>
     </main>
+    </LocalizedContent>
   );
 }

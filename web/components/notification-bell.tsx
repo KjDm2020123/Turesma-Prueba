@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Bell, CheckCheck, MessageCircle, X } from "lucide-react";
 import { getAuthHeaders } from "../lib/session";
+import { LocalizedContent } from "../lib/i18n";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const NOTIFICATIONS_POLL_MS = 30000;
@@ -257,6 +258,7 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
   }, [open]);
 
   return (
+    <LocalizedContent enabled={portal === "cliente"}>
     <div className="relative" ref={wrapperRef}>
       <button
         ref={buttonRef}
@@ -279,6 +281,7 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
       </button>
 
       {open && popoverPosition && typeof document !== "undefined" && createPortal(
+        <LocalizedContent enabled={portal === "cliente"}>
         <div
           ref={popoverRef}
           role="dialog"
@@ -323,13 +326,13 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
                   }`}
                 >
                   <div className="mb-1 flex items-start justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-900 leading-tight">
+                    <p data-no-translate className="text-xs font-semibold text-slate-900 leading-tight">
                       {item.sender_nombre || "Usuario"}
                       {item.sender_rol ? ` (${item.sender_rol})` : ""}
                     </p>
                     {!item.leido && <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-red-500" />}
                   </div>
-                  <p className="text-xs text-slate-700 line-clamp-2">{item.mensaje}</p>
+                  <p data-no-translate className="text-xs text-slate-700 line-clamp-2">{item.mensaje}</p>
                   <p className="mt-1 text-[10px] text-slate-500 inline-flex items-center gap-1">
                     <MessageCircle size={12} />
                     {getRelativeTime(item.creado_en)}
@@ -338,7 +341,8 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
               ))
             )}
           </div>
-        </div>,
+        </div>
+        </LocalizedContent>,
         document.body,
       )}
 
@@ -356,7 +360,7 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-black uppercase tracking-widest text-[#E31E24]">Nueva notificación</p>
-              <p className="text-sm text-slate-800 leading-snug mt-0.5 line-clamp-3">{toast.mensaje}</p>
+              <p data-no-translate className="text-sm text-slate-800 leading-snug mt-0.5 line-clamp-3">{toast.mensaje}</p>
               <p className="text-[10px] text-slate-400 mt-1">{getRelativeTime(toast.creado_en)}</p>
             </div>
             <button
@@ -371,5 +375,6 @@ export function NotificationBell({ userId, accent = "blue", portal }: Props) {
         </div>
       )}
     </div>
+    </LocalizedContent>
   );
 }

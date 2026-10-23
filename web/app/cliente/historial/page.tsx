@@ -13,6 +13,7 @@ import { useClienteGuard } from "../../../lib/use-cliente-guard";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { descargarArchivo } from "../../../lib/download";
+import { formatLocalizedDate, LocalizedContent, useLocale } from "../../../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const LiveTripMap = dynamic(
@@ -177,6 +178,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
   };
 
   return (
+    <LocalizedContent>
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b0f1a]/80 backdrop-blur-sm p-4 overflow-y-auto">
       <div className="w-full max-w-lg rounded-[2rem] bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 my-4">
         <div className="bg-[#0b0f1a] p-5 text-white flex items-center justify-between">
@@ -241,7 +243,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
               <label className="text-[10px] font-black uppercase text-slate-400">Comprobante (imagen) *</label>
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl py-4 cursor-pointer hover:border-[#E31E24] transition-all">
                 <UploadCloud size={16} className="text-slate-400" />
-                <span className="text-xs font-bold text-slate-500">{file ? file.name : "Selecciona una imagen"}</span>
+                <span className="text-xs font-bold text-slate-500">{file ? <span data-no-translate>{file.name}</span> : "Selecciona una imagen"}</span>
                 <input type="file" accept="image/*" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
               </label>
             </div>}
@@ -267,7 +269,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
                     ) : <ImageIcon size={16} className="text-slate-300 flex-shrink-0" />}
                     <div className="min-w-0">
                       <p className="text-xs font-black text-slate-700">${Number(p.monto).toFixed(2)}</p>
-                      {p.estado === "rechazado" && p.notas_admin && <p className="text-[10px] text-red-500 truncate">{p.notas_admin}</p>}
+                      {p.estado === "rechazado" && p.notas_admin && <p data-no-translate className="text-[10px] text-red-500 truncate">{p.notas_admin}</p>}
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
@@ -293,10 +295,12 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
         </div>
       </div>
     </div>
+    </LocalizedContent>
   );
 }
 
 export default function ClienteHistorialPage() {
+  const { language } = useLocale();
   const { user, checkingSession } = useClienteGuard();
   const userId = user?.id;
   const [reservas, setReservas] = useState<Reserva[]>([]);
@@ -426,6 +430,7 @@ export default function ClienteHistorialPage() {
   if (checkingSession || loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#E31E24]" size={34} /></div>;
 
   return (
+    <LocalizedContent>
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-black italic tracking-tighter uppercase text-slate-900">Historial de Viajes</h1>
@@ -461,18 +466,18 @@ export default function ClienteHistorialPage() {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2 text-sm font-bold text-slate-800 min-w-0">
                     <MapPin size={15} className="text-[#E31E24] flex-shrink-0" />
-                    <span className="truncate">{r.origen || "—"}</span>
+                    <span data-no-translate className="truncate">{r.origen || "—"}</span>
                     <ArrowRight size={13} className="text-slate-400 flex-shrink-0" />
-                    <span className="truncate">{r.destino || "—"}</span>
+                    <span data-no-translate className="truncate">{r.destino || "—"}</span>
                   </div>
                   <span className={`flex-shrink-0 text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${est.cls}`}>{est.label}</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Fecha</p><p className="font-bold text-slate-700">{new Date(r.fecha_reserva).toLocaleDateString("es-EC")}{r.fecha_fin && r.fecha_fin !== r.fecha_reserva ? ` → ${new Date(r.fecha_fin).toLocaleDateString("es-EC")}` : ""}</p></div>
+                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Fecha</p><p className="font-bold text-slate-700">{formatLocalizedDate(r.fecha_reserva, language)}{r.fecha_fin && r.fecha_fin !== r.fecha_reserva ? ` → ${formatLocalizedDate(r.fecha_fin, language)}` : ""}</p></div>
                   <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Personas</p><p className="font-bold text-slate-700">{r.num_personas}</p></div>
-                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vehículo</p><p className="font-bold text-slate-700 truncate">{r.vehiculo_placa || "Por asignar"}</p></div>
-                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Conductor</p><p className="font-bold text-slate-700 truncate">{r.conductor_nombre || "Por asignar"}</p></div>
+                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vehículo</p><p className="font-bold text-slate-700 truncate">{r.vehiculo_placa ? <span data-no-translate>{r.vehiculo_placa}</span> : "Por asignar"}</p></div>
+                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Conductor</p><p className="font-bold text-slate-700 truncate">{r.conductor_nombre ? <span data-no-translate>{r.conductor_nombre}</span> : "Por asignar"}</p></div>
                 </div>
 
                 <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
@@ -537,7 +542,7 @@ export default function ClienteHistorialPage() {
                   <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tu calificación:</span>
                     <StarRating value={r.calificacion} readOnly />
-                    {r.comentario_calificacion && <span className="text-xs text-slate-500 italic">&quot;{r.comentario_calificacion}&quot;</span>}
+                    {r.comentario_calificacion && <span data-no-translate className="text-xs text-slate-500 italic">&quot;{r.comentario_calificacion}&quot;</span>}
                   </div>
                 ) : puedeCalificar ? (
                   rateId === r.id ? (
@@ -613,5 +618,6 @@ export default function ClienteHistorialPage() {
         </div>
       )}
     </div>
+    </LocalizedContent>
   );
 }

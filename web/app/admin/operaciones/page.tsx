@@ -54,6 +54,15 @@ type Operation = {
   vehiculo_placa?: string | null;
   conductor_nombre?: string | null;
   conductor_apellido?: string | null;
+  subcontratacion_estado?: "no_requerida" | "pendiente" | "confirmada";
+  subcontratista_empresa?: string | null;
+  subcontratista_contacto?: string | null;
+  subcontratista_telefono?: string | null;
+  subcontratista_vehiculo?: string | null;
+  subcontratista_placa?: string | null;
+  subcontratista_conductor?: string | null;
+  subcontratista_conductor_telefono?: string | null;
+  subcontratacion_costo?: string | number | null;
 };
 
 type ReservationReady = {
@@ -91,6 +100,12 @@ const stateLabels: Record<string, string> = {
   incidencia: "Incidencia",
 };
 
+const subcontractingLabels: Record<string, string> = {
+  no_requerida: "No subcontratada",
+  pendiente: "Pendiente de proveedor",
+  confirmada: "Subcontratación confirmada",
+};
+
 const formatDate = (value: string) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
@@ -109,6 +124,18 @@ export default function OperacionesPage() {
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [assignment, setAssignment] = useState<Operation | null>(null);
+  const [subcontracting, setSubcontracting] = useState<Operation | null>(null);
+  const [subcontractingForm, setSubcontractingForm] = useState({
+    estado: "pendiente" as "no_requerida" | "pendiente" | "confirmada",
+    empresa: "",
+    contacto: "",
+    telefono: "",
+    vehiculo: "",
+    placa: "",
+    conductor: "",
+    conductor_telefono: "",
+    costo: "",
+  });
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [assignmentRecommendation, setAssignmentRecommendation] = useState<AssignmentRecommendation | null>(null);
@@ -233,6 +260,48 @@ export default function OperacionesPage() {
       await load();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No se pudo asignar la operación");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openSubcontracting = (operation: Operation) => {
+    setSubcontracting(operation);
+    setSubcontractingForm({
+      estado: operation.subcontratacion_estado && operation.subcontratacion_estado !== "no_requerida"
+        ? operation.subcontratacion_estado
+        : "pendiente",
+      empresa: operation.subcontratista_empresa || "",
+      contacto: operation.subcontratista_contacto || "",
+      telefono: operation.subcontratista_telefono || "",
+      vehiculo: operation.subcontratista_vehiculo || "",
+      placa: operation.subcontratista_placa || "",
+      conductor: operation.subcontratista_conductor || "",
+      conductor_telefono: operation.subcontratista_conductor_telefono || "",
+      costo: operation.subcontratacion_costo == null ? "" : String(operation.subcontratacion_costo),
+    });
+    setError("");
+  };
+
+  const saveSubcontracting = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!subcontracting) return;
+    setSaving(true);
+    setError("");
+    try {
+      await request(`/api/admin/operaciones/${subcontracting.id}/subcontratacion`, {
+        method: "PATCH",
+        body: JSON.stringify(subcontractingForm),
+      });
+      setMessage(subcontractingForm.estado === "confirmada"
+        ? "Subcontratación confirmada. La operación quedó lista para iniciar."
+        : subcontractingForm.estado === "no_requerida"
+          ? "Se retiró la subcontratación; la operación volvió a despacho propio."
+          : "Se guardó la subcontratación pendiente.");
+      setSubcontracting(null);
+      await load();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "No se pudo guardar la subcontratación");
     } finally {
       setSaving(false);
     }
@@ -363,7 +432,9 @@ export default function OperacionesPage() {
           <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Servicio</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Ruta</th><th className="px-5 py-3">Recursos</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{operations.map((operation) => {
             const startTime = formatTime(operation.hora_inicio);
             const endTime = formatTime(operation.hora_fin);
-            return <tr key={operation.id} className="align-top"><td className="px-5 py-4"><p className="font-black text-slate-900">#{operation.id} · {operation.reserva_id ? `Reserva #${operation.reserva_id}` : operation.tipo_servicio}</p><p className="mt-1 text-xs text-slate-500">{operation.pasajeros} pasajeros</p></td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{formatDate(operation.fecha_programada)}<br /><span className="text-xs">{startTime || "Sin hora"}{endTime ? ` - ${endTime}` : ""}</span></td><td className="max-w-xs px-5 py-4 text-slate-600">{operation.origen}<br /><span className="font-semibold text-slate-900">{operation.destino}</span></td><td className="px-5 py-4 text-xs text-slate-600">{operation.vehiculo_placa || "Sin vehículo"}<br />{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span></td><td className="space-y-2 px-5 py-4"><div className="flex flex-wrap gap-2">{["programada", "asignada"].includes(operation.estado) && <button onClick={() => openAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}{operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}{operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}</div></td></tr>;
+            const subcontractState = operation.subcontratacion_estado || "no_requerida";
+            const canEditSubcontracting = ["programada", "asignada", "incidencia"].includes(operation.estado);
+            return <tr key={operation.id} className="align-top"><td className="px-5 py-4"><p className="font-black text-slate-900">#{operation.id} · {operation.reserva_id ? `Reserva #${operation.reserva_id}` : operation.tipo_servicio}</p><p className="mt-1 text-xs text-slate-500">{operation.pasajeros} pasajeros</p></td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{formatDate(operation.fecha_programada)}<br /><span className="text-xs">{startTime || "Sin hora"}{endTime ? ` - ${endTime}` : ""}</span></td><td className="max-w-xs px-5 py-4 text-slate-600">{operation.origen}<br /><span className="font-semibold text-slate-900">{operation.destino}</span></td><td className="px-5 py-4 text-xs text-slate-600">{subcontractState !== "no_requerida" ? <><span className="font-bold text-amber-700">{operation.subcontratista_placa || "Proveedor pendiente"}</span><br />{operation.subcontratista_empresa || "Sin proveedor registrado"}<br />{operation.subcontratista_conductor || "Sin conductor registrado"}</> : <>{operation.vehiculo_placa || "Sin vehículo"}<br />{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</>}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span>{subcontractState !== "no_requerida" && <p className={`mt-2 text-xs font-bold ${subcontractState === "confirmada" ? "text-emerald-700" : "text-amber-700"}`}>{subcontractingLabels[subcontractState]}</p>}</td><td className="space-y-2 px-5 py-4"><div className="flex flex-wrap gap-2">{["programada", "asignada"].includes(operation.estado) && subcontractState === "no_requerida" && <button onClick={() => openAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}{canEditSubcontracting && <button onClick={() => openSubcontracting(operation)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">{subcontractState === "no_requerida" ? "Subcontratar" : "Editar proveedor"}</button>}{operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}{operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}</div></td></tr>;
           })}</tbody></table></div>
         )}
       </section>
@@ -449,6 +520,90 @@ export default function OperacionesPage() {
             </p>
             <button disabled={saving} className="w-full rounded-xl bg-cyan-500 py-3 font-black text-slate-950 disabled:opacity-50">
               {saving ? "Validando..." : "Confirmar asignación"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {subcontracting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4">
+          <form
+            onSubmit={saveSubcontracting}
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-2xl space-y-4 overflow-y-auto overscroll-contain rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-700">
+                  Operación #{subcontracting.id}{subcontracting.reserva_id ? ` · Reserva #${subcontracting.reserva_id}` : ""}
+                </p>
+                <h2 className="text-xl font-black text-slate-950">Gestionar subcontratación</h2>
+              </div>
+              <button type="button" onClick={() => setSubcontracting(null)} aria-label="Cerrar subcontratación"><X /></button>
+            </div>
+            <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+              Registra aquí los datos que el administrador acuerde directamente con el proveedor. No se creará una cuenta externa ni se añadirá su vehículo a la flota.
+            </p>
+            <label className="block text-sm font-bold text-slate-600">
+              Estado del servicio externo
+              <select
+                value={subcontractingForm.estado}
+                onChange={(event) => {
+                  const estado = event.target.value;
+                  if (estado === "no_requerida" || estado === "pendiente" || estado === "confirmada") {
+                    setSubcontractingForm({ ...subcontractingForm, estado });
+                  }
+                }}
+                className="mt-1 w-full rounded-xl border p-3"
+              >
+                <option value="pendiente">Pendiente de proveedor</option>
+                <option value="confirmada">Confirmada</option>
+                {subcontracting.subcontratacion_estado !== "no_requerida" && (
+                  <option value="no_requerida">Retirar subcontratación</option>
+                )}
+              </select>
+            </label>
+            {subcontractingForm.estado !== "no_requerida" && (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-bold text-slate-600">Empresa proveedora
+                    <input maxLength={160} value={subcontractingForm.empresa} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, empresa: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Persona de contacto
+                    <input maxLength={120} value={subcontractingForm.contacto} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, contacto: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Teléfono del proveedor
+                    <input maxLength={40} type="tel" value={subcontractingForm.telefono} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, telefono: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Vehículo / modelo
+                    <input maxLength={120} value={subcontractingForm.vehiculo} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, vehiculo: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Placa
+                    <input maxLength={30} value={subcontractingForm.placa} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, placa: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Nombre del conductor
+                    <input maxLength={120} value={subcontractingForm.conductor} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, conductor: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Teléfono del conductor
+                    <input maxLength={40} type="tel" value={subcontractingForm.conductor_telefono} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, conductor_telefono: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Costo acordado
+                    <input min="0" max="99999999.99" step="0.01" type="number" value={subcontractingForm.costo} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, costo: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
+                  </label>
+                </div>
+                {subcontractingForm.estado === "pendiente" && (
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    Puedes guardar la operación como pendiente mientras buscas proveedor. Para confirmarla, completa todos los datos y el costo acordado.
+                  </p>
+                )}
+              </>
+            )}
+            {subcontractingForm.estado === "no_requerida" && (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                Se quitarán los datos del proveedor y la operación volverá a la asignación con recursos propios.
+              </p>
+            )}
+            <button disabled={saving} className="w-full rounded-xl bg-slate-950 py-3 font-black text-white disabled:opacity-50">
+              {saving ? "Guardando..." : "Guardar subcontratación"}
             </button>
           </form>
         </div>
