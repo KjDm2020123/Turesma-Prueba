@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { ConfirmProvider } from "../components/confirm-dialog";
 
@@ -49,6 +50,9 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body suppressHydrationWarning>
+        <Script id="tab-title" strategy="beforeInteractive">
+          {`document.title = "TURESMA S.A | Transporte turístico y ejecutivo en Manta";`}
+        </Script>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

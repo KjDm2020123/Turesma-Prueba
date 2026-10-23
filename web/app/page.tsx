@@ -831,7 +831,7 @@ export default function RootPage() {
                   <div className="bg-white p-3 rounded-xl text-[#E31E24] shadow-lg"><Mail size={24} /></div>
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Email Oficial</p>
-                    <p className="font-bold">turesmasa@hotmail.com</p>
+                    <p className="text-sm font-bold sm:text-base">turesmasa@hotmail.com</p>
                   </div>
                 </div>
               </div>
