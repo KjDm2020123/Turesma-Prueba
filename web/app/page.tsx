@@ -326,7 +326,7 @@ export default function RootPage() {
 
       {/* NAVBAR */}
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
-        <div className="mx-auto flex h-24 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex h-full items-center bg-white">
             <Link href="/" className="flex items-center" aria-label="Turesma S.A., inicio">
               <Image
@@ -343,7 +343,7 @@ export default function RootPage() {
           </div>
 
           {/* Menú Escritorio */}
-          <div className="hidden items-center gap-8 md:flex">
+          <div className="hidden shrink-0 items-center gap-4 xl:flex">
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className={navLinkClass("nosotros")} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className={navLinkClass("flota")} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
             <a href="#destinos" onClick={(event) => scrollToSection(event, "destinos")} className={navLinkClass("destinos")} aria-current={activeSection === "destinos" ? "location" : undefined}>Destinos</a>
@@ -352,7 +352,7 @@ export default function RootPage() {
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className={navLinkClass("contacto")} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
           </div>
 
-          <div className="hidden items-center gap-3 md:flex">
+          <div className="ml-4 hidden shrink-0 items-center gap-3 xl:flex">
             <LanguageSwitcher />
             <Link href="/login" className="home-button rounded-xl border-2 border-gray-100 px-6 py-2.5 text-sm font-bold text-gray-700 transition-all hover:border-[#E31E24] hover:text-[#E31E24]">
               Ingresar
@@ -365,7 +365,7 @@ export default function RootPage() {
           <button
             ref={mobileMenuTriggerRef}
             type="button"
-            className="flex min-h-11 min-w-11 items-center justify-center text-[#E31E24] md:hidden"
+            className="flex min-h-11 min-w-11 items-center justify-center text-[#E31E24] xl:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={mobileMenuOpen}
@@ -377,7 +377,7 @@ export default function RootPage() {
 
         {/* Menú Móvil */}
         {mobileMenuOpen && (
-          <div id="mobile-navigation" ref={mobileMenuRef} role="region" aria-label="Navegación móvil" className="mobile-menu-panel md:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
+          <div id="mobile-navigation" ref={mobileMenuRef} role="region" aria-label="Navegación móvil" className="mobile-menu-panel xl:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className={navLinkClass("nosotros", true)} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className={navLinkClass("flota", true)} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
             <a href="#destinos" onClick={(event) => scrollToSection(event, "destinos", true)} className={navLinkClass("destinos", true)} aria-current={activeSection === "destinos" ? "location" : undefined}>Destinos</a>
@@ -935,10 +935,10 @@ export default function RootPage() {
                 <a 
                   href={`https://wa.me/${TELEFONO_EMPRESA}`} 
                   target="_blank"
-                  className="flex items-center justify-center gap-3 w-full bg-black text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#E31E24] transition-all shadow-xl shadow-gray-200"
+                  className="flex w-full items-center justify-between gap-4 rounded-2xl bg-black px-7 py-5 text-left font-black uppercase leading-snug tracking-widest text-white shadow-xl shadow-gray-200 transition-all hover:bg-[#E31E24] sm:justify-center sm:px-8 sm:text-center"
                 >
-                  Conocer más servicios
-                  <ChevronRight size={20} className="text-yellow-400" />
+                  <span className="min-w-0">Conocer más servicios</span>
+                  <ChevronRight size={20} className="shrink-0 text-yellow-400" />
                 </a>
               </div>
             </div>
