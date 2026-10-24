@@ -715,9 +715,6 @@ export default function RootPage() {
               ))}
             </div>
 
-            <p className="mx-auto mt-8 max-w-3xl text-center text-sm font-medium leading-relaxed text-gray-500">
-              Las fotografías son ilustrativas y sus créditos aparecen en cada tarjeta. El servicio, la ruta y la disponibilidad se confirman según cada solicitud.
-            </p>
           </div>
         </section>
       )}

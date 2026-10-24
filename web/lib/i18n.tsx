@@ -81,7 +81,6 @@ const translations: Record<string, string> = {
   "Vista panorámica de Cuenca desde Turi": "Panoramic view of Cuenca from Turi",
   "Foto:": "Photo:",
   "Dominio público": "Public domain",
-  "Las fotografías son ilustrativas y sus créditos aparecen en cada tarjeta. El servicio, la ruta y la disponibilidad se confirman según cada solicitud.": "Photos are illustrative, with credits shown on each card. Service, route, and availability are confirmed for each request.",
   "TURESMA en movimiento": "TURESMA in motion",
   "Conoce nuestros vehículos, servicios y experiencias en carretera.": "Discover our vehicles, services, and experiences on the road.",
   "Próximamente en movimiento": "Coming soon",
