@@ -5,6 +5,7 @@ const path = require("path");
 const multer = require("multer");
 const pool = require("../../config/db");
 const { uploadImage, uploadVideo, deleteImage, getStoragePathFromUrl } = require("../../config/storage");
+const { invalidarGaleriaPublica } = require("../galeria.controller");
 
 // ── Almacenamiento en disco de las fotos de la galería de viajes ─────────────
 const galeriaDir = path.join(__dirname, "../../../uploads/galeria");
@@ -83,7 +84,7 @@ const uploadGaleriaVideo = (req: any, res: any) => {
 const listarGaleriaAdmin = async (_req: any, res: any) => {
   try {
     const result = await pool.query(
-      `SELECT id, imagen_url, tipo, titulo, descripcion, orden, activo, creado_en
+      `SELECT id, imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en
        FROM galeria_viajes
        ORDER BY orden ASC, creado_en DESC`
     );
@@ -99,20 +100,42 @@ const crearGaleria = async (req: any, res: any) => {
   try {
     const imagen_url = typeof req.body.imagen_url === "string" ? req.body.imagen_url.trim() : "";
     const tipo = req.body.tipo === "video" ? "video" : "imagen";
+    const categoria = req.body.categoria === undefined ? "viajes" : req.body.categoria;
     const titulo = typeof req.body.titulo === "string" ? req.body.titulo.trim().slice(0, 120) : null;
     const descripcion = typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 500) : null;
+    const credito = typeof req.body.credito === "string" ? req.body.credito.trim().slice(0, 160) : null;
+    const fuenteUrl = typeof req.body.fuente_url === "string" ? req.body.fuente_url.trim().slice(0, 1000) : null;
+    const licencia = typeof req.body.licencia === "string" ? req.body.licencia.trim().slice(0, 80) : null;
+    const licenciaUrl = typeof req.body.licencia_url === "string" ? req.body.licencia_url.trim().slice(0, 1000) : null;
     const orden = Number.isFinite(Number(req.body.orden)) ? Number(req.body.orden) : 0;
 
+    if (categoria !== "viajes" && categoria !== "destinos") {
+      return res.status(400).json({ error: "Categoría de galería inválida" });
+    }
+    if (categoria === "destinos" && tipo !== "imagen") {
+      return res.status(400).json({ error: "La sección de destinos solo admite imágenes" });
+    }
     if (!imagen_url) {
       return res.status(400).json({ error: "Debes subir un archivo primero" });
     }
+    for (const link of [fuenteUrl, licenciaUrl]) {
+      if (!link) continue;
+      try {
+        if (new URL(link).protocol !== "https:") throw new Error("invalid protocol");
+      } catch {
+        return res.status(400).json({ error: "Los enlaces de crédito deben usar HTTPS" });
+      }
+    }
 
     const result = await pool.query(
-      `INSERT INTO galeria_viajes (imagen_url, tipo, titulo, descripcion, orden, activo)
-       VALUES ($1, $2, $3, $4, $5, TRUE)
-       RETURNING id, imagen_url, tipo, titulo, descripcion, orden, activo, creado_en`,
-      [imagen_url, tipo, titulo || null, descripcion || null, orden]
+      `INSERT INTO galeria_viajes (
+         imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+       RETURNING id, imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
+      [imagen_url, tipo, categoria, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, licenciaUrl || null, orden]
     );
+    invalidarGaleriaPublica();
     return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error creando foto de galería:", error);
@@ -132,16 +155,33 @@ const actualizarGaleria = async (req: any, res: any) => {
     const activo = typeof req.body.activo === "boolean" ? req.body.activo : null;
     const titulo = typeof req.body.titulo === "string" ? req.body.titulo.trim().slice(0, 120) : undefined;
     const descripcion = typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 500) : undefined;
+    const credito = typeof req.body.credito === "string" ? req.body.credito.trim().slice(0, 160) : undefined;
+    const fuenteUrl = typeof req.body.fuente_url === "string" ? req.body.fuente_url.trim().slice(0, 1000) : undefined;
+    const licencia = typeof req.body.licencia === "string" ? req.body.licencia.trim().slice(0, 80) : undefined;
+    const licenciaUrl = typeof req.body.licencia_url === "string" ? req.body.licencia_url.trim().slice(0, 1000) : undefined;
+    for (const link of [fuenteUrl, licenciaUrl]) {
+      if (!link) continue;
+      try {
+        if (new URL(link).protocol !== "https:") throw new Error("invalid protocol");
+      } catch {
+        return res.status(400).json({ error: "Los enlaces de crédito deben usar HTTPS" });
+      }
+    }
 
     const result = await pool.query(
       `UPDATE galeria_viajes
        SET activo = COALESCE($1, activo),
            titulo = COALESCE($2, titulo),
-           descripcion = COALESCE($3, descripcion)
-       WHERE id = $4
-      RETURNING id, imagen_url, tipo, titulo, descripcion, orden, activo, creado_en`,
-      [activo, titulo ?? null, descripcion ?? null, id]
+           descripcion = COALESCE($3, descripcion),
+           credito = COALESCE($4, credito),
+           fuente_url = COALESCE($5, fuente_url),
+           licencia = COALESCE($6, licencia),
+           licencia_url = COALESCE($7, licencia_url)
+       WHERE id = $8
+      RETURNING id, imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
+      [activo, titulo ?? null, descripcion ?? null, credito ?? null, fuenteUrl ?? null, licencia ?? null, licenciaUrl ?? null, id]
     );
+    invalidarGaleriaPublica();
     return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error("Error actualizando foto de galería:", error);
@@ -159,6 +199,7 @@ const eliminarGaleria = async (req: any, res: any) => {
     if (found.rowCount === 0) return res.status(404).json({ error: "Foto no encontrada" });
 
     await pool.query("DELETE FROM galeria_viajes WHERE id = $1", [id]);
+    invalidarGaleriaPublica();
 
     const url = String(found.rows[0].imagen_url || "");
     const storagePath = getStoragePathFromUrl(url);

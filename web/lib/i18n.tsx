@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   cloneElement,
   createContext,
   isValidElement,
@@ -19,6 +20,7 @@ const LANGUAGE_KEY = "turesma-language";
 const translations: Record<string, string> = {
   "Nosotros": "About us",
   "Flota": "Fleet",
+  "Destinos": "Destinations",
   "Servicios": "Services",
   "Soluciones": "Solutions",
   "Contacto": "Contact",
@@ -58,6 +60,28 @@ const translations: Record<string, string> = {
   "Nuestros Viajes": "Our Journeys",
   "Momentos reales de nuestros recorridos por Manabí y todo el Ecuador": "Real moments from our trips across Manabí and Ecuador",
   "Viaje realizado por Turesma": "Trip by Turesma",
+  "Desde Manta hacia Ecuador": "From Manta across Ecuador",
+  "Destinos para tu próximo viaje": "Destinations for your next trip",
+  "Algunos lugares emblemáticos que puedes considerar para tu próximo traslado.": "A few iconic places to consider for your next trip.",
+  "Costa manabita y entorno del Parque Nacional Machalilla.": "The Manabí coast and the surroundings of Machalilla National Park.",
+  "Ciudad Alfaro, historia y tradición artesanal manabita.": "Ciudad Alfaro, history, and Manabí's artisan traditions.",
+  "Malecón y paisajes del estuario del río Chone.": "The waterfront and scenery around the Chone River estuary.",
+  "Recorrido urbano junto al río Guayas y el Malecón.": "City sights along the Guayas River and the Malecón waterfront.",
+  "Centro histórico, arquitectura y paisajes de la capital.": "Historic center, architecture, and views of the capital.",
+  "Cascadas y paisajes andinos, como el Pailón del Diablo.": "Waterfalls and Andean scenery, including Pailón del Diablo.",
+  "Bosque nublado y naturaleza del Chocó Andino.": "Cloud forest and nature in the Chocó Andino.",
+  "Centro histórico y vista panorámica desde Turi.": "Historic center and panoramic views from Turi.",
+  "Panorámica de la playa y el puerto pesquero de Puerto López": "Panoramic view of Puerto López beach and fishing harbor",
+  "Plaza central de Montecristi y mural de Eloy Alfaro": "Montecristi's central plaza and Eloy Alfaro mural",
+  "Malecón de Bahía de Caráquez": "Bahía de Caráquez waterfront",
+  "Vista aérea de Guayaquil al atardecer": "Aerial view of Guayaquil at sunset",
+  "Calle del centro histórico de Quito de noche, con una iglesia al fondo": "A street in Quito's historic center at night, with a church in the background",
+  "Cascada Pailón del Diablo en Baños de Agua Santa": "Pailón del Diablo waterfall in Baños de Agua Santa",
+  "Vista del bosque nublado y el valle de Mindo": "View of Mindo's cloud forest and valley",
+  "Vista panorámica de Cuenca desde Turi": "Panoramic view of Cuenca from Turi",
+  "Foto:": "Photo:",
+  "Dominio público": "Public domain",
+  "Las fotografías son ilustrativas y sus créditos aparecen en cada tarjeta. El servicio, la ruta y la disponibilidad se confirman según cada solicitud.": "Photos are illustrative, with credits shown on each card. Service, route, and availability are confirmed for each request.",
   "TURESMA en movimiento": "TURESMA in motion",
   "Conoce nuestros vehículos, servicios y experiencias en carretera.": "Discover our vehicles, services, and experiences on the road.",
   "Próximamente en movimiento": "Coming soon",
@@ -651,6 +675,9 @@ export function LocalizedContent({ children, enabled = true }: { children: React
 
     const props = node.props;
     if (props["data-no-translate"]) return node;
+    if (node.type === Fragment) {
+      return cloneElement(node, { children: localizeNode(props.children) });
+    }
     return cloneElement(node, {
       ...props,
       title: props.title ? translate(props.title, language) : undefined,

@@ -6,7 +6,7 @@ import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video,
+  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video, MapPin,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -15,8 +15,13 @@ type Foto = {
   id: number;
   imagen_url: string;
   tipo: "imagen" | "video";
+  categoria: "viajes" | "destinos";
   titulo: string | null;
   descripcion: string | null;
+  credito: string | null;
+  fuente_url: string | null;
+  licencia: string | null;
+  licencia_url: string | null;
   orden: number;
   activo: boolean;
   creado_en: string;
@@ -27,6 +32,7 @@ export default function AdminGaleriaPage() {
   const confirmar = useConfirm();
   const [fotos, setFotos] = useState<Foto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categoria, setCategoria] = useState<"viajes" | "destinos">("viajes");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -41,19 +47,32 @@ export default function AdminGaleriaPage() {
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const imagenes = fotos.filter((foto) => foto.tipo === "imagen");
-  const videos = fotos.filter((foto) => foto.tipo === "video");
+  const fotosCategoria = fotos.filter((foto) => foto.categoria === categoria);
+  const imagenes = fotosCategoria.filter((foto) => foto.tipo === "imagen");
+  const videos = fotosCategoria.filter((foto) => foto.tipo === "video");
 
   const flash = (setter: (v: string) => void, value: string) => {
     setter(value);
     setTimeout(() => setter(""), 4000);
   };
 
+  const cambiarCategoria = (next: "viajes" | "destinos") => {
+    setCategoria(next);
+    setImagenUrl("");
+    setVideoPreview(null);
+    if (next === "destinos") setTipoContenido("imagen");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const load = async () => {
     try {
       const res = await fetch(`${API}/api/admin/galeria`, { headers: getAuthHeaders() });
-      if (res.ok) setFotos(await res.json());
-    } catch { /* silencio */ }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo cargar la galería");
+      setFotos(json);
+    } catch (error) {
+      flash(setErr, error instanceof Error ? error.message : "No se pudo cargar la galería");
+    }
     finally { setLoading(false); }
   };
 
@@ -105,14 +124,20 @@ export default function AdminGaleriaPage() {
       const res = await fetch(`${API}/api/admin/galeria`, {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ imagen_url: imagenUrl, tipo: tipoContenido, titulo, descripcion }),
+        body: JSON.stringify({
+          imagen_url: imagenUrl,
+          tipo: tipoContenido,
+          categoria,
+          titulo,
+          descripcion,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al guardar");
       setFotos((p) => [json, ...p]);
       setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null);
       if (fileRef.current) fileRef.current.value = "";
-      flash(setMsg, `${tipoContenido === "video" ? "Video" : "Foto"} publicado en la página principal`);
+      flash(setMsg, `${tipoContenido === "video" ? "Video" : "Foto"} publicado en ${categoria === "destinos" ? "Destinos" : "Viajes"}`);
     } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo guardar"); }
     finally { setGuardando(false); }
   };
@@ -126,8 +151,11 @@ export default function AdminGaleriaPage() {
         body: JSON.stringify({ activo: !foto.activo }),
       });
       const json = await res.json();
-      if (res.ok) setFotos((p) => p.map((f) => (f.id === foto.id ? json : f)));
-    } catch { /* silencio */ }
+      if (!res.ok) throw new Error(json.error || "No se pudo actualizar la visibilidad");
+      setFotos((p) => p.map((f) => (f.id === foto.id ? json : f)));
+    } catch (error) {
+      flash(setErr, error instanceof Error ? error.message : "No se pudo actualizar la visibilidad");
+    }
     finally { setActingId(null); }
   };
 
@@ -139,11 +167,13 @@ export default function AdminGaleriaPage() {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
-      if (res.ok) {
-        setFotos((p) => p.filter((f) => f.id !== id));
-        flash(setMsg, "Foto eliminada");
-      }
-    } catch { /* silencio */ }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo eliminar la foto");
+      setFotos((p) => p.filter((f) => f.id !== id));
+      flash(setMsg, "Foto eliminada");
+    } catch (error) {
+      flash(setErr, error instanceof Error ? error.message : "No se pudo eliminar la foto");
+    }
     finally { setActingId(null); }
   };
 
@@ -162,6 +192,7 @@ export default function AdminGaleriaPage() {
           <p className="text-sm font-bold text-slate-300 italic">Sin título</p>
         )}
         {contenido.descripcion && <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">{contenido.descripcion}</p>}
+        {contenido.credito && <p className="mt-2 text-[10px] text-slate-400">Crédito: {contenido.credito}</p>}
         <div className="flex items-center gap-2 mt-3">
           <button
             onClick={() => toggleActivo(contenido)}
@@ -194,22 +225,51 @@ export default function AdminGaleriaPage() {
       {msg && <div className="p-4 bg-emerald-50 border-l-4 border-emerald-500 text-emerald-700 text-sm font-bold rounded-r-xl flex items-center gap-2"><CheckCircle2 size={16} />{msg}</div>}
       {err && <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl">{err}</div>}
 
+      <div className="flex flex-wrap gap-2 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => cambiarCategoria("viajes")}
+          disabled={subiendo || guardando}
+          aria-pressed={categoria === "viajes"}
+          className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-black uppercase tracking-widest transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${categoria === "viajes" ? "border-[#E31E24] text-[#E31E24]" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <Images size={16} /> Fotos y videos de viajes
+        </button>
+        <button
+          type="button"
+          onClick={() => cambiarCategoria("destinos")}
+          disabled={subiendo || guardando}
+          aria-pressed={categoria === "destinos"}
+          className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-black uppercase tracking-widest transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${categoria === "destinos" ? "border-[#E31E24] text-[#E31E24]" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <MapPin size={16} /> Destinos
+        </button>
+      </div>
+
       {/* AYUDA */}
       <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3">
-        <div className="bg-[#E31E24]/10 p-2 rounded-xl shrink-0"><Images size={20} className="text-[#E31E24]" /></div>
-        <p className="text-sm text-slate-600 font-medium leading-relaxed">
-          Las fotos y videos que subas aquí aparecen en la página principal, justo debajo de <span className="font-black italic">&ldquo;Nuestra Flota&rdquo;</span>. Puedes ocultarlos sin borrarlos con el botón de visibilidad.
-        </p>
+        <div className="bg-[#E31E24]/10 p-2 rounded-xl shrink-0">{categoria === "destinos" ? <MapPin size={20} className="text-[#E31E24]" /> : <Images size={20} className="text-[#E31E24]" />}</div>
+        {categoria === "destinos" ? (
+          <p className="text-sm text-slate-600 font-medium leading-relaxed">
+            Las fotos de esta sección se muestran en <span className="font-black italic">&ldquo;Destinos&rdquo;</span> en la página principal. Agrega el nombre y, si corresponde, los datos del crédito de la imagen. Puedes ocultarlas o eliminarlas.
+          </p>
+        ) : (
+          <p className="text-sm text-slate-600 font-medium leading-relaxed">
+            Las fotos y videos que subas aquí aparecen en la sección de viajes de la página principal. Puedes ocultarlos sin borrarlos con el botón de visibilidad.
+          </p>
+        )}
       </div>
 
       {/* SUBIR NUEVO CONTENIDO */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Agregar contenido de viaje</p>
-          <div className="flex rounded-xl border border-slate-200 p-1 bg-slate-50">
-            <button type="button" onClick={() => { setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
-            <button type="button" onClick={() => { setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
-          </div>
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Agregar {categoria === "destinos" ? "foto de destino" : "contenido de viaje"}</p>
+          {categoria === "viajes" && (
+            <div className="flex rounded-xl border border-slate-200 p-1 bg-slate-50">
+              <button type="button" onClick={() => { setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
+              <button type="button" onClick={() => { setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
+            </div>
+          )}
         </div>
         <div className="grid md:grid-cols-[240px_1fr] gap-5">
           {/* Zona de subida */}

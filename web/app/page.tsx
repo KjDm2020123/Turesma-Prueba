@@ -44,8 +44,13 @@ type GaleriaFoto = {
   id: number;
   imagen_url: string;
   tipo?: "imagen" | "video";
+  categoria?: "viajes" | "destinos";
   titulo: string | null;
   descripcion: string | null;
+  credito?: string | null;
+  fuente_url?: string | null;
+  licencia?: string | null;
+  licencia_url?: string | null;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -153,8 +158,9 @@ export default function RootPage() {
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileMenuWasOpen = useRef(false);
-  const fotosGaleria = galeria.filter((contenido) => contenido.tipo !== "video");
-  const videosGaleria = galeria.filter((contenido) => contenido.tipo === "video");
+  const fotosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo !== "video");
+  const videosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo === "video");
+  const fotosDestinos = galeria.filter((contenido) => contenido.categoria === "destinos" && contenido.tipo !== "video");
 
   useEffect(() => {
     const elements = document.querySelectorAll<HTMLElement>('.home-page [data-reveal]');
@@ -246,7 +252,7 @@ export default function RootPage() {
     // de que el backend termine de despertar.
     Promise.all([
       fetch(`${API_URL}/api/usuarios/vehiculos`).then((r) => r.json()),
-      fetch(`${API_URL}/api/usuarios/galeria`).then((r) => r.json()),
+      fetch(`${API_URL}/api/usuarios/galeria`, { cache: "no-store" }).then((r) => r.json()),
     ])
       .then(([vehiclesData, galleryData]) => {
         let nextVehicles = cachedVehicles;
@@ -273,7 +279,7 @@ export default function RootPage() {
       const shouldShow = window.scrollY > 300;
       setShowScrollTop((current) => (current === shouldShow ? current : shouldShow));
       const activationLine = window.innerHeight * 0.35;
-      const sectionIds = ["nosotros", "flota", "servicios", "requerimiento", "contacto"];
+      const sectionIds = ["nosotros", "flota", "destinos", "servicios", "requerimiento", "contacto"];
       const currentSection = sectionIds.reduce<string | null>((active, id) => {
         const section = document.getElementById(id);
         return section && section.getBoundingClientRect().top <= activationLine ? id : active;
@@ -340,6 +346,7 @@ export default function RootPage() {
           <div className="hidden items-center gap-8 md:flex">
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className={navLinkClass("nosotros")} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className={navLinkClass("flota")} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
+            <a href="#destinos" onClick={(event) => scrollToSection(event, "destinos")} className={navLinkClass("destinos")} aria-current={activeSection === "destinos" ? "location" : undefined}>Destinos</a>
             <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className={navLinkClass("servicios")} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
             <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className={navLinkClass("requerimiento")} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className={navLinkClass("contacto")} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
@@ -373,6 +380,7 @@ export default function RootPage() {
           <div id="mobile-navigation" ref={mobileMenuRef} role="region" aria-label="Navegación móvil" className="mobile-menu-panel md:hidden space-y-4 border-b border-gray-100 bg-white p-6 shadow-xl">
             <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros", true)} className={navLinkClass("nosotros", true)} aria-current={activeSection === "nosotros" ? "location" : undefined}>Nosotros</a>
             <a href="#flota" onClick={(event) => scrollToSection(event, "flota", true)} className={navLinkClass("flota", true)} aria-current={activeSection === "flota" ? "location" : undefined}>Flota</a>
+            <a href="#destinos" onClick={(event) => scrollToSection(event, "destinos", true)} className={navLinkClass("destinos", true)} aria-current={activeSection === "destinos" ? "location" : undefined}>Destinos</a>
             <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios", true)} className={navLinkClass("servicios", true)} aria-current={activeSection === "servicios" ? "location" : undefined}>Servicios</a>
             <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento", true)} className={navLinkClass("requerimiento", true)} aria-current={activeSection === "requerimiento" ? "location" : undefined}>Soluciones</a>
             <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto", true)} className={navLinkClass("contacto", true)} aria-current={activeSection === "contacto" ? "location" : undefined}>Contacto</a>
@@ -642,6 +650,74 @@ export default function RootPage() {
                 </figure>
               ))}
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* DESTINOS */}
+      {fotosDestinos.length > 0 && (
+        <section id="destinos" className="bg-[#f7f8fa] py-24">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
+            <div className="mx-auto mb-14 max-w-3xl text-center">
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.3em] text-[#E31E24]">Desde Manta hacia Ecuador</p>
+              <h2 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 md:text-6xl">
+                Destinos para tu próximo viaje
+              </h2>
+              <div className="mx-auto mt-3 h-1.5 w-32 rounded-full bg-yellow-400" />
+              <p className="mx-auto mt-6 max-w-2xl text-lg font-medium leading-relaxed text-gray-600">
+                Algunos lugares emblemáticos que puedes considerar para tu próximo traslado.
+              </p>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {fotosDestinos.map((destino) => (
+                <article key={destino.id} className="home-card group overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg transition-shadow hover:shadow-2xl">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
+                    <Image
+                      src={destino.imagen_url}
+                      alt={destino.titulo || "Destino en Ecuador"}
+                      data-no-translate
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent" />
+                  </div>
+                  <div className="p-5">
+                    {destino.titulo && <h3 data-no-translate className="text-xl font-black italic tracking-tight text-gray-900">{destino.titulo}</h3>}
+                    {destino.descripcion && <p data-no-translate className="mt-2 min-h-12 text-sm font-medium leading-relaxed text-gray-600">{destino.descripcion}</p>}
+                    {(destino.credito || destino.licencia) && (
+                      <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-gray-100 pt-3 text-xs font-medium text-gray-500">
+                        {destino.credito && (
+                          <>
+                            <span>Foto:</span>
+                            {destino.fuente_url ? (
+                              <a href={destino.fuente_url} target="_blank" rel="noreferrer" className="underline decoration-gray-300 underline-offset-2 hover:text-[#E31E24]">
+                                <span data-no-translate>{destino.credito}</span>
+                              </a>
+                            ) : (
+                              <span data-no-translate>{destino.credito}</span>
+                            )}
+                          </>
+                        )}
+                        {destino.credito && destino.licencia && <span aria-hidden="true">·</span>}
+                        {destino.licencia && (destino.licencia_url ? (
+                          <a href={destino.licencia_url} target="_blank" rel="noreferrer" className="underline decoration-gray-300 underline-offset-2 hover:text-[#E31E24]">
+                            <span data-no-translate>{destino.licencia}</span>
+                          </a>
+                        ) : (
+                          <span data-no-translate>{destino.licencia}</span>
+                        ))}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <p className="mx-auto mt-8 max-w-3xl text-center text-sm font-medium leading-relaxed text-gray-500">
+              Las fotografías son ilustrativas y sus créditos aparecen en cada tarjeta. El servicio, la ruta y la disponibilidad se confirman según cada solicitud.
+            </p>
           </div>
         </section>
       )}
@@ -994,6 +1070,7 @@ export default function RootPage() {
             <div className="flex flex-col gap-2 text-sm font-medium uppercase md:text-[1.1rem]">
               <a href="#nosotros" onClick={(event) => scrollToSection(event, "nosotros")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Nosotros</a>
               <a href="#flota" onClick={(event) => scrollToSection(event, "flota")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Flota</a>
+              <a href="#destinos" onClick={(event) => scrollToSection(event, "destinos")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Destinos</a>
               <a href="#servicios" onClick={(event) => scrollToSection(event, "servicios")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Servicios</a>
               <a href="#requerimiento" onClick={(event) => scrollToSection(event, "requerimiento")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Soluciones</a>
               <a href="#contacto" onClick={(event) => scrollToSection(event, "contacto")} className="text-white/95 transition-colors hover:text-[#ff2f35]">Contacto</a>

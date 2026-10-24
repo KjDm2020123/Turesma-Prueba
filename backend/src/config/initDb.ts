@@ -996,8 +996,13 @@ const initDatabase = async () => {
       id SERIAL PRIMARY KEY,
       imagen_url TEXT NOT NULL,
       tipo VARCHAR(10) NOT NULL DEFAULT 'imagen' CHECK (tipo IN ('imagen', 'video')),
+      categoria VARCHAR(12) NOT NULL DEFAULT 'viajes',
       titulo VARCHAR(120),
       descripcion TEXT,
+      credito VARCHAR(160),
+      fuente_url TEXT,
+      licencia VARCHAR(80),
+      licencia_url TEXT,
       orden INT DEFAULT 0,
       activo BOOLEAN DEFAULT TRUE,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1006,12 +1011,53 @@ const initDatabase = async () => {
 
   await pool.query(`
     ALTER TABLE galeria_viajes
-    ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'imagen';
+    ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) NOT NULL DEFAULT 'imagen',
+    ADD COLUMN IF NOT EXISTS categoria VARCHAR(12) NOT NULL DEFAULT 'viajes',
+    ADD COLUMN IF NOT EXISTS credito VARCHAR(160),
+    ADD COLUMN IF NOT EXISTS fuente_url TEXT,
+    ADD COLUMN IF NOT EXISTS licencia VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS licencia_url TEXT;
+  `);
+
+  await pool.query(`
+    ALTER TABLE galeria_viajes
+    DROP CONSTRAINT IF EXISTS galeria_viajes_categoria_check;
+  `);
+
+  await pool.query(`
+    ALTER TABLE galeria_viajes
+    ADD CONSTRAINT galeria_viajes_categoria_check
+    CHECK (categoria IN ('viajes', 'destinos'));
   `);
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS galeria_viajes_orden_idx
     ON galeria_viajes (activo, orden, creado_en DESC);
+  `);
+
+  await pool.query(`
+    WITH migration_applied AS (
+      INSERT INTO app_data_migrations (name)
+      VALUES ('seed_initial_public_destinations')
+      ON CONFLICT (name) DO NOTHING
+      RETURNING name
+    )
+    INSERT INTO galeria_viajes (
+      imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo
+    )
+    SELECT seed.imagen_url, 'imagen', 'destinos', seed.titulo, seed.descripcion,
+           seed.credito, seed.fuente_url, seed.licencia, seed.licencia_url, seed.orden, TRUE
+    FROM (VALUES
+      ('/destinos/puerto-lopez.jpg', 'Puerto López', 'Costa manabita y entorno del Parque Nacional Machalilla.', 'Annom', 'https://commons.wikimedia.org/wiki/File:Panorama_puerto_lopez_beach.jpg', 'Dominio público', NULL, 1),
+      ('/destinos/montecristi.jpg', 'Montecristi', 'Ciudad Alfaro, historia y tradición artesanal manabita.', 'Jerrye & Roy Klotz, MD', 'https://commons.wikimedia.org/wiki/File:MONTECRISTI,_CENTRAL_PLAZA,_ECUADOR.jpg', 'CC BY-SA 3.0', 'https://creativecommons.org/licenses/by-sa/3.0/', 2),
+      ('/destinos/bahia-de-caraquez.jpg', 'Bahía de Caráquez', 'Malecón y paisajes del estuario del río Chone.', 'Jmorenov007', 'https://commons.wikimedia.org/wiki/File:Malec%C3%B3n_de_Bah%C3%ADa_de_Car%C3%A1quez.jpg', 'CC BY-SA 3.0', 'https://creativecommons.org/licenses/by-sa/3.0/', 3),
+      ('/destinos/guayaquil.jpg', 'Guayaquil', 'Recorrido urbano junto al río Guayas y el Malecón.', 'JorgeAlejanDroo', 'https://commons.wikimedia.org/wiki/File:Aerial_Guayaquil.jpg', 'CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/', 4),
+      ('/destinos/quito.jpg', 'Quito', 'Centro histórico, arquitectura y paisajes de la capital.', 'szeke', 'https://commons.wikimedia.org/wiki/File:Quito_At_Night_-_49384831736.jpg', 'CC BY-SA 2.0', 'https://creativecommons.org/licenses/by-sa/2.0/', 5),
+      ('/destinos/banos-de-agua-santa.jpg', 'Baños de Agua Santa', 'Cascadas y paisajes andinos, como el Pailón del Diablo.', 'Pedro M. Martínez Corada', 'https://commons.wikimedia.org/wiki/File:Pailon-diablo.jpg', 'CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/', 6),
+      ('/destinos/mindo.jpg', 'Mindo', 'Bosque nublado y naturaleza del Chocó Andino.', 'Arabsalam', 'https://commons.wikimedia.org/wiki/File:Mindo_Terra_Bambu_Hotel_Ecuador_1085.jpg', 'CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/', 7),
+      ('/destinos/cuenca.jpg', 'Cuenca', 'Centro histórico y vista panorámica desde Turi.', 'Marc Figueras (Oersted)', 'https://commons.wikimedia.org/wiki/File:Cuenca_%28Ecuador%29_from_Turi.jpg', 'Dominio público', NULL, 8)
+    ) AS seed(imagen_url, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden)
+    WHERE EXISTS (SELECT 1 FROM migration_applied);
   `);
 
   // ============ MATRICULACIÓN VEHICULAR (calendario ANT por último dígito) ====
