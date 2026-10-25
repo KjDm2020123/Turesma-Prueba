@@ -250,26 +250,38 @@ export default function RootPage() {
 
     // Flota y galería se actualizan en paralelo; la caché permite pintar antes
     // de que el backend termine de despertar.
-    Promise.all([
-      fetch(`${API_URL}/api/usuarios/vehiculos`).then((r) => r.json()),
-      fetch(`${API_URL}/api/usuarios/galeria`, { cache: "no-store" }).then((r) => r.json()),
-    ])
-      .then(([vehiclesData, galleryData]) => {
-        let nextVehicles = cachedVehicles;
-        let nextGallery = cachedGallery;
-
-        if (Array.isArray(vehiclesData)) {
-          const conFoto = vehiclesData.filter((v: VehiculoPublico) => v.imagen_url);
-          nextVehicles = conFoto.length >= 3 ? conFoto : vehiclesData;
-          setVehiculos(nextVehicles);
-        }
-        if (Array.isArray(galleryData)) {
-          nextGallery = galleryData.filter((g: GaleriaFoto) => g.imagen_url);
-          setGaleria(nextGallery);
-        }
-        localStorage.setItem(PUBLIC_DATA_CACHE_KEY, JSON.stringify({ vehiculos: nextVehicles, galeria: nextGallery }));
+    const vehiclesRequest = fetch(`${API_URL}/api/usuarios/vehiculos`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`No se pudo cargar la flota (${response.status})`);
+        return response.json();
       })
-      .catch(() => {})
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) throw new Error("La respuesta de la flota no tiene un formato válido");
+        cachedVehicles = data as VehiculoPublico[];
+        setVehiculos(cachedVehicles);
+      })
+      .catch((error: unknown) => {
+        console.error("Error cargando los vehículos públicos:", error);
+      });
+
+    const galleryRequest = fetch(`${API_URL}/api/usuarios/galeria`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`No se pudo cargar la galería (${response.status})`);
+        return response.json();
+      })
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) throw new Error("La respuesta de la galería no tiene un formato válido");
+        cachedGallery = (data as GaleriaFoto[]).filter((foto) => foto.imagen_url);
+        setGaleria(cachedGallery);
+      })
+      .catch((error: unknown) => {
+        console.error("Error cargando la galería pública:", error);
+      });
+
+    Promise.all([vehiclesRequest, galleryRequest])
+      .then(() => {
+        localStorage.setItem(PUBLIC_DATA_CACHE_KEY, JSON.stringify({ vehiculos: cachedVehicles, galeria: cachedGallery }));
+      })
       .finally(() => setLoadingVehiculos(false));
   }, []);
 

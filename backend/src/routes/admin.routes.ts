@@ -8,8 +8,6 @@ const {
   crearReserva,
   editarReserva,
   eliminarReserva,
-  asignarVehiculo,
-  asignarConductor,
   verEstadoViaje,
   actualizarEstadoViaje,
   listarRutasConductorDesdeReservas,
@@ -186,8 +184,6 @@ router.get("/reservas/rutas-conductor", listarRutasConductorDesdeReservas);
 router.post("/reservas", crearReserva);
 router.put("/reservas/:id", editarReserva);
 router.delete("/reservas/:id", eliminarReserva);
-router.patch("/reservas/:id/asignar-vehiculo", asignarVehiculo);
-router.patch("/reservas/:id/asignar-conductor", asignarConductor);
 router.get("/reservas/:id/estado-viaje", verEstadoViaje);
 router.patch("/reservas/:id/estado-viaje", actualizarEstadoViaje);
 

@@ -392,7 +392,7 @@ export default function OperacionesPage() {
         {loading ? <p className="p-6 text-center text-sm font-semibold text-slate-400">Buscando reservas confirmadas...</p> : reservations.length === 0 ? (
           <div className="p-7 text-center">
             <p className="text-sm font-black text-slate-600">No hay reservas pendientes de despacho</p>
-            <p className="mt-1 text-xs text-slate-400">Cuando una reserva se confirme y necesite vehículo o conductor, aparecerá aquí.</p>
+            <p className="mt-1 text-xs text-slate-400">Toda reserva confirmada sin un despacho activo aparecerá aquí para asignar o verificar sus recursos.</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">

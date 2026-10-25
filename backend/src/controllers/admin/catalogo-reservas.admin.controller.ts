@@ -292,62 +292,6 @@ const validateConductorDisponible = async ({ conductorId, fechaReserva, reservaI
   }
 };
 
-const resolveConductorIdForInsert = async (conductorId) => {
-  if (!conductorId) return null;
-
-  const targetTable = await getReservasConductorForeignTarget();
-
-  if (targetTable === "conductores") {
-    const hasUsuarioId = await hasTableColumn("conductores", "usuario_id");
-    if (hasUsuarioId) {
-      const byUsuarioId = await pool.query(
-        `SELECT id
-         FROM conductores
-         WHERE usuario_id = $1
-         LIMIT 1`,
-        [conductorId]
-      );
-
-      if (byUsuarioId.rowCount) return Number(byUsuarioId.rows[0].id);
-    }
-
-    const hasUserId = await hasTableColumn("conductores", "user_id");
-    if (hasUserId) {
-      const byUserId = await pool.query(
-        `SELECT id
-         FROM conductores
-         WHERE user_id = $1
-         LIMIT 1`,
-        [conductorId]
-      );
-
-      if (byUserId.rowCount) return Number(byUserId.rows[0].id);
-    }
-
-    const byDirectId = await pool.query(
-      `SELECT id
-       FROM conductores
-       WHERE id = $1
-       LIMIT 1`,
-      [conductorId]
-    );
-
-    if (byDirectId.rowCount) return Number(byDirectId.rows[0].id);
-
-    return null;
-  }
-
-  const existsResult = await pool.query(
-    `SELECT id
-     FROM usuarios
-     WHERE id = $1
-     LIMIT 1`,
-    [conductorId]
-  );
-
-  return existsResult.rowCount ? Number(existsResult.rows[0].id) : null;
-};
-
 const getCatalogo = async (_req, res) => {
   try {
     const [usuarios, tours, vehiculos, conductores] = await Promise.all([
@@ -454,12 +398,10 @@ const listarReservas = async (req, res) => {
 };
 
 const crearReserva = async (req, res) => {
-  const { usuario_id, tour_id, conductor_id, vehiculo_id, fecha_reserva, num_personas, estado } = req.body;
+  const { usuario_id, tour_id, fecha_reserva, num_personas, estado } = req.body;
 
   const usuarioId = parsePositiveInt(usuario_id);
   const tourId = parsePositiveInt(tour_id);
-  const conductorId = conductor_id ? parsePositiveInt(conductor_id) : null;
-  const vehiculoId = vehiculo_id ? parsePositiveInt(vehiculo_id) : null;
   const numPersonas = parsePositiveInt(num_personas);
 
   if (!usuarioId || !fecha_reserva || !numPersonas) {
@@ -502,41 +444,6 @@ const crearReserva = async (req, res) => {
           error: "No hay capacidad suficiente para ese tour en la fecha indicada",
         });
       }
-    }
-
-    await validateVehiculoDisponible({
-      vehiculoId,
-      fechaReserva: fecha_reserva,
-      reservaId: null,
-    });
-
-    let conductorIdFinal = conductorId;
-
-    if (!conductorIdFinal && vehiculoId) {
-      const vehiculoOwnerResult = await pool.query(
-        `SELECT usuario_id
-         FROM vehiculos
-         WHERE id = $1
-           AND activo = true
-         LIMIT 1`,
-        [vehiculoId]
-      );
-
-      const ownerId = parsePositiveInt(vehiculoOwnerResult.rows[0]?.usuario_id);
-
-      if (ownerId) {
-        conductorIdFinal = ownerId;
-      }
-    }
-
-    conductorIdFinal = await resolveConductorIdForInsert(conductorIdFinal);
-
-    if (conductorIdFinal) {
-      await validateConductorDisponible({
-        conductorId: conductorIdFinal,
-        fechaReserva: fecha_reserva,
-        reservaId: null,
-      });
     }
 
     const total = tour ? Number(tour.precio) * numPersonas : 0;
@@ -582,7 +489,7 @@ const crearReserva = async (req, res) => {
         total,
         estado`;
 
-    const insertValues = [usuarioId, tourId || null, conductorIdFinal, vehiculoId, fecha_reserva, numPersonas, total, estadoFinal];
+    const insertValues = [usuarioId, tourId || null, null, null, fecha_reserva, numPersonas, total, estadoFinal];
 
     const optionalColumns = [
       { name: "hotel_id", value: hotelIdFinal, requiredFallback: hotelIdFinal || await getFallbackHotelId() },
@@ -668,16 +575,8 @@ const editarReserva = async (req, res) => {
 
     const usuarioId = parsePositiveInt(req.body.usuario_id) || current.usuario_id;
     const tourId = parsePositiveInt(req.body.tour_id) || current.tour_id;
-    const conductorId = req.body.conductor_id
-      ? parsePositiveInt(req.body.conductor_id)
-      : req.body.conductor_id === null
-        ? null
-        : current.conductor_id;
-    const vehiculoId = req.body.vehiculo_id
-      ? parsePositiveInt(req.body.vehiculo_id)
-      : req.body.vehiculo_id === null
-        ? null
-        : current.vehiculo_id;
+    const conductorId = current.conductor_id;
+    const vehiculoId = current.vehiculo_id;
     const fechaReserva = req.body.fecha_reserva || current.fecha_reserva;
     const numPersonas = parsePositiveInt(req.body.num_personas) || current.num_personas;
     const estado = req.body.estado || current.estado;
@@ -835,94 +734,6 @@ const eliminarReserva = async (req, res) => {
   }
 };
 
-const asignarVehiculo = async (req, res) => {
-  const reservaId = parsePositiveInt(req.params.id);
-  const vehiculoId = parsePositiveInt(req.body.vehiculo_id);
-
-  if (!reservaId || !vehiculoId) {
-    return res.status(400).json({ error: "Debes enviar reserva y vehículo válidos" });
-  }
-
-  try {
-    const reservaResult = await pool.query(
-      "SELECT id, fecha_reserva, estado FROM reservas WHERE id = $1 LIMIT 1",
-      [reservaId]
-    );
-
-    if (reservaResult.rowCount === 0) {
-      return res.status(404).json({ error: "Reserva no encontrada" });
-    }
-
-    const reserva = reservaResult.rows[0];
-
-    await validateVehiculoDisponible({
-      vehiculoId,
-      fechaReserva: reserva.fecha_reserva,
-      reservaId,
-    });
-
-    const estadoFinal = reserva.estado === "pendiente" ? "confirmada" : reserva.estado;
-
-    const updateResult = await pool.query(
-      `UPDATE reservas
-       SET vehiculo_id = $1,
-           estado = $2
-       WHERE id = $3
-       RETURNING *`,
-      [vehiculoId, estadoFinal, reservaId]
-    );
-
-    return res.status(200).json({
-      message: "Vehículo asignado correctamente",
-      reserva: updateResult.rows[0],
-    });
-  } catch (error) {
-    console.error("Error asignando vehículo:", error);
-    return res.status(500).json({ error: error.message || "Error interno del servidor" });
-  }
-};
-
-const asignarConductor = async (req, res) => {
-  const reservaId = parsePositiveInt(req.params.id);
-  const conductorId = parsePositiveInt(req.body.conductor_id);
-
-  if (!reservaId || !conductorId) {
-    return res.status(400).json({ error: "Debes enviar reserva y conductor válidos" });
-  }
-
-  try {
-    const reservaResult = await pool.query(
-      "SELECT id, fecha_reserva FROM reservas WHERE id = $1 LIMIT 1",
-      [reservaId]
-    );
-
-    if (reservaResult.rowCount === 0) {
-      return res.status(404).json({ error: "Reserva no encontrada" });
-    }
-
-    const reserva = reservaResult.rows[0];
-
-    await validateConductorDisponible({
-      conductorId,
-      fechaReserva: reserva.fecha_reserva,
-      reservaId,
-    });
-
-    const updateResult = await pool.query(
-      "UPDATE reservas SET conductor_id = $1 WHERE id = $2 RETURNING *",
-      [conductorId, reservaId]
-    );
-
-    return res.status(200).json({
-      message: "Conductor asignado correctamente",
-      reserva: updateResult.rows[0],
-    });
-  } catch (error) {
-    console.error("Error asignando conductor:", error);
-    return res.status(500).json({ error: error.message || "Error interno del servidor" });
-  }
-};
-
 const verEstadoViaje = async (req, res) => {
   const reservaId = parsePositiveInt(req.params.id);
 
@@ -1061,8 +872,6 @@ module.exports = {
   crearReserva,
   editarReserva,
   eliminarReserva,
-  asignarVehiculo,
-  asignarConductor,
   verEstadoViaje,
   actualizarEstadoViaje,
   listarRutasConductorDesdeReservas,

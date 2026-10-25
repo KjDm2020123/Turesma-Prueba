@@ -41,8 +41,6 @@ type Reserva = {
   tour_titulo: string | null;
 };
 
-type Vehiculo = { id: number; placa: string; modelo: string; estado: string };
-type Conductor = { id: number; nombre: string; email: string };
 type Cliente = { id: number; nombre: string; email: string };
 
 const ESTADOS = ["pendiente", "pendiente_pago", "confirmada", "en_curso", "finalizada", "cancelada"];
@@ -85,8 +83,6 @@ export default function AdminReservasPage() {
   const { checkingSession } = useAdminGuard();
   const confirmar = useConfirm();
   const [reservas, setReservas] = useState<Reserva[]>([]);
-  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
-  const [conductores, setConductores] = useState<Conductor[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportandoExcel, setExportandoExcel] = useState(false);
@@ -102,8 +98,6 @@ export default function AdminReservasPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const emptyForm = {
     usuario_id: "",
-    vehiculo_id: "",
-    conductor_id: "",
     fecha_reserva: new Date().toISOString().slice(0, 10),
     fecha_salida: "",
     fecha_llegada: "",
@@ -121,26 +115,16 @@ export default function AdminReservasPage() {
   const [nuevoEstado, setNuevoEstado] = useState("");
   const [estadoLoading, setEstadoLoading] = useState(false);
 
-  // Modal asignar vehículo/conductor
-  const [asignModal, setAsignModal] = useState<Reserva | null>(null);
-  const [asignVehiculo, setAsignVehiculo] = useState("");
-  const [asignConductor, setAsignConductor] = useState("");
-  const [asignLoading, setAsignLoading] = useState(false);
-
   const h = getAuthHeaders();
 
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     try {
-      const [rRes, vRes, cRes, uRes] = await Promise.all([
+      const [rRes, uRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/reservas`, { headers: h }),
-        fetch(`${API_URL}/api/admin/vehiculos`, { headers: h }),
-        fetch(`${API_URL}/api/admin/conductores`, { headers: h }),
         fetch(`${API_URL}/api/admin/usuarios`, { headers: h }),
       ]);
       if (rRes.ok) setReservas(await rRes.json());
-      if (vRes.ok) setVehiculos(await vRes.json());
-      if (cRes.ok) setConductores(await cRes.json());
       if (uRes.ok) {
         const usuarios = await uRes.json();
         setClientes(usuarios.filter((u: any) => u.rol === "cliente"));
@@ -190,8 +174,6 @@ export default function AdminReservasPage() {
     setEditingId(r.id);
     setForm({
       usuario_id: String(r.usuario_id || ""),
-      vehiculo_id: String(r.vehiculo_id || ""),
-      conductor_id: String(r.conductor_id || ""),
       fecha_reserva: r.fecha_reserva?.slice(0, 10) || "",
       fecha_salida: r.fecha_salida?.slice(0, 16) || "",
       fecha_llegada: r.fecha_llegada?.slice(0, 16) || "",
@@ -211,8 +193,6 @@ export default function AdminReservasPage() {
     setErr(""); setMsg("");
     const payload: Record<string, any> = {
       usuario_id: Number(form.usuario_id),
-      vehiculo_id: form.vehiculo_id ? Number(form.vehiculo_id) : null,
-      conductor_id: form.conductor_id ? Number(form.conductor_id) : null,
       fecha_reserva: form.fecha_reserva,
       fecha_salida: form.fecha_salida || null,
       fecha_llegada: form.fecha_llegada || null,
@@ -261,42 +241,6 @@ export default function AdminReservasPage() {
     }
   };
 
-  const handleAsignar = async () => {
-    if (!asignModal) return;
-    setAsignLoading(true);
-    try {
-      const promises = [];
-      if (asignVehiculo) {
-        promises.push(
-          fetch(`${API_URL}/api/admin/reservas/${asignModal.id}/asignar-vehiculo`, {
-            method: "PATCH",
-            headers: h,
-            body: JSON.stringify({ vehiculo_id: Number(asignVehiculo) }),
-          })
-        );
-      }
-      if (asignConductor) {
-        promises.push(
-          fetch(`${API_URL}/api/admin/reservas/${asignModal.id}/asignar-conductor`, {
-            method: "PATCH",
-            headers: h,
-            body: JSON.stringify({ conductor_id: Number(asignConductor) }),
-          })
-        );
-      }
-      await Promise.all(promises);
-      setMsg("Asignación realizada correctamente");
-      setAsignModal(null);
-      setAsignVehiculo("");
-      setAsignConductor("");
-      load();
-    } catch {
-      setErr("Error al asignar");
-    } finally {
-      setAsignLoading(false);
-    }
-  };
-
   const formatFecha = (v?: string | null) => {
     if (!v) return "—";
     const d = new Date(v);
@@ -311,6 +255,7 @@ export default function AdminReservasPage() {
     en_curso: reservas.filter(r => r.estado === "en_curso").length,
     finalizadas: reservas.filter(r => r.estado === "finalizada").length,
   };
+  const editingReservation = reservas.find((reserva) => reserva.id === editingId);
 
   if (checkingSession) return (
     <div className="flex h-64 items-center justify-center">
@@ -356,6 +301,9 @@ export default function AdminReservasPage() {
       {/* MENSAJES */}
       {msg && <div className="p-4 bg-emerald-50 border-l-4 border-emerald-500 text-emerald-700 text-sm font-bold rounded-r-xl">{msg}</div>}
       {err && <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl">{err}</div>}
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800">
+        Aquí se gestionan las solicitudes y sus datos. La asignación o cambio de vehículo y conductor se realiza desde Despacho.
+      </div>
 
       {/* FILTROS */}
       <div className="flex flex-wrap gap-3 items-center bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
@@ -413,17 +361,17 @@ export default function AdminReservasPage() {
                 )}
                 <div className="flex items-center justify-between text-[11px] text-slate-500">
                   <span>{formatFecha(r.fecha_reserva)}{r.num_personas ? ` · ${r.num_personas} pers.` : ""}</span>
-                  <span className="text-right font-semibold text-slate-700">{r.vehiculo_placa || "Sin asignar"}<br /><span className="text-[10px] text-slate-400">Preferencia: {r.tipo_vehiculo || "Sin preferencia"}</span></span>
+                  <span className="text-right font-semibold text-slate-700">
+                    {r.vehiculo_placa || "Vehículo pendiente"}
+                    <br /><span className="text-[10px] text-slate-400">Chofer: {r.conductor_nombre || "pendiente"}</span>
+                    <br /><span className="text-[10px] text-slate-400">Preferencia: {r.tipo_vehiculo || "Sin preferencia"}</span>
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button
                     onClick={() => { setEstadoModal(r); setNuevoEstado(TRANSICIONES_VALIDAS[r.estado]?.[0] || ""); }}
                     className="flex-1 px-3 py-2 text-[11px] font-black uppercase bg-slate-100 text-slate-600 rounded-lg"
                   >Estado</button>
-                  <button
-                    onClick={() => { setAsignModal(r); setAsignVehiculo(String(r.vehiculo_id || "")); setAsignConductor(String(r.conductor_id || "")); }}
-                    className="flex-1 px-3 py-2 text-[11px] font-black uppercase bg-blue-50 text-blue-600 rounded-lg"
-                  >Asignar</button>
                   <button onClick={() => openEdit(r)} className="p-2 text-blue-500 bg-blue-50 rounded-lg" aria-label="Editar"><Edit3 size={16} /></button>
                   <button onClick={() => handleDelete(r)} className="p-2 text-red-500 bg-red-50 rounded-lg" aria-label="Eliminar"><Trash2 size={16} /></button>
                 </div>
@@ -435,7 +383,7 @@ export default function AdminReservasPage() {
             <table className="min-w-[1100px] w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/60 border-b border-slate-100">
-                  {["#ID", "Cliente", "Vehículo / Conductor", "Origen → Destino", "Fecha Reserva", "Estado", "Acciones"].map(h => (
+                  {["#ID", "Cliente", "Vehículo / Conductor (solo lectura)", "Origen → Destino", "Fecha Reserva", "Estado", "Acciones"].map(h => (
                     <th key={h} className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>
                   ))}
                 </tr>
@@ -516,17 +464,6 @@ export default function AdminReservasPage() {
                         >
                           Estado
                         </button>
-                        <button
-                          onClick={() => {
-                            setAsignModal(r);
-                            setAsignVehiculo(String(r.vehiculo_id || ""));
-                            setAsignConductor(String(r.conductor_id || ""));
-                          }}
-                          className="px-2 py-1.5 text-[10px] font-black uppercase bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-all"
-                          title="Asignar vehículo/conductor"
-                        >
-                          Asignar
-                        </button>
                         <button onClick={() => openEdit(r)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Editar">
                           <Edit3 size={14} />
                         </button>
@@ -587,51 +524,6 @@ export default function AdminReservasPage() {
         </div>
       )}
 
-      {/* MODAL ASIGNAR VEHÍCULO / CONDUCTOR */}
-      {asignModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-lg text-slate-900 uppercase italic">Asignar Vehículo / Conductor</h3>
-              <button onClick={() => setAsignModal(null)} className="p-2 hover:bg-slate-100 rounded-xl"><X size={18} /></button>
-            </div>
-            <p className="text-sm text-slate-600 mb-4">Reserva <strong>#{asignModal.id}</strong></p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Vehículo</label>
-                <select value={asignVehiculo} onChange={e => setAsignVehiculo(e.target.value)} className={INPUT_CLS}>
-                  <option value="">Sin vehículo</option>
-                  {vehiculos.filter(v => v.estado !== "inactivo").map(v => (
-                    <option key={v.id} value={v.id}>{v.placa} — {v.modelo} ({v.estado})</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Conductor</label>
-                <select value={asignConductor} onChange={e => setAsignConductor(e.target.value)} className={INPUT_CLS}>
-                  <option value="">Sin conductor</option>
-                  {conductores.map(c => (
-                    <option key={c.id} value={c.id}>{c.nombre} — {c.email}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-5">
-              <button onClick={() => setAsignModal(null)} className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-600 font-black text-xs uppercase">Cancelar</button>
-              <button
-                onClick={handleAsignar}
-                disabled={asignLoading}
-                className="flex-1 py-3 rounded-xl bg-[#E31E24] text-white font-black text-xs uppercase disabled:opacity-60"
-              >
-                {asignLoading ? "Asignando..." : "Guardar asignación"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL CREAR / EDITAR RESERVA */}
       {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
@@ -645,6 +537,14 @@ export default function AdminReservasPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 grid gap-4 max-h-[75vh] overflow-y-auto">
+              <div className="md:col-span-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-800">
+                El vehículo y el conductor se asignan o cambian únicamente desde Despacho, después de confirmar la reserva.
+                {editingReservation && (
+                  <span className="mt-1 block text-blue-700">
+                    Asignación actual: {editingReservation.vehiculo_placa || "sin vehículo"} · {editingReservation.conductor_nombre || "sin conductor"}.
+                  </span>
+                )}
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Cliente *</label>
@@ -660,22 +560,8 @@ export default function AdminReservasPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Vehículo</label>
-                  <select value={form.vehiculo_id} onChange={e => setForm(p => ({ ...p, vehiculo_id: e.target.value }))} className={INPUT_CLS}>
-                    <option value="">Sin asignar</option>
-                    {vehiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Conductor</label>
-                  <select value={form.conductor_id} onChange={e => setForm(p => ({ ...p, conductor_id: e.target.value }))} className={INPUT_CLS}>
-                    <option value="">Sin asignar</option>
-                    {conductores.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Fecha reserva * {form.fecha_reserva && <span className="text-[#E31E24]">({form.fecha_reserva})</span>}</label>
-                  <VehiculoCalendario vehiculoId={form.vehiculo_id ? Number(form.vehiculo_id) : null} value={form.fecha_reserva} onSelect={(f) => setForm(p => ({ ...p, fecha_reserva: f }))} />
+                  <VehiculoCalendario vehiculoId={null} value={form.fecha_reserva} onSelect={(f) => setForm(p => ({ ...p, fecha_reserva: f }))} />
                 </div>
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1 block mb-1">Num. personas</label>

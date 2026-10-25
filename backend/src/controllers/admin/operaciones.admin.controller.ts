@@ -166,11 +166,11 @@ const listarReservasPorDespachar = async (_req: any, res: any) => {
        LEFT JOIN usuarios u ON u.id = r.usuario_id
        LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
        WHERE r.estado = 'confirmada'
-         AND (
-           r.vehiculo_id IS NULL OR r.conductor_id IS NULL
-           OR EXISTS (SELECT 1 FROM operaciones o WHERE o.reserva_id = r.id AND o.estado = 'cancelada')
-         )
-         AND NOT EXISTS (
+          AND (
+            EXISTS (SELECT 1 FROM operaciones o WHERE o.reserva_id = r.id AND o.estado = 'cancelada')
+            OR NOT EXISTS (SELECT 1 FROM operaciones o WHERE o.reserva_id = r.id)
+          )
+          AND NOT EXISTS (
            SELECT 1 FROM operaciones o
            WHERE o.reserva_id = r.id AND o.estado <> 'cancelada'
          )
@@ -205,7 +205,7 @@ const crearOperacionDesdeReserva = async (req: any, res: any) => {
     }
 
     const current = reservation.rows[0];
-    if (current.estado !== "confirmada" || (current.vehiculo_id && current.conductor_id)) {
+    if (current.estado !== "confirmada") {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, error: "La reserva ya no está pendiente de despacho" });
     }
@@ -216,16 +216,30 @@ const crearOperacionDesdeReserva = async (req: any, res: any) => {
       return res.status(409).json({ success: false, error: "La reserva ya tiene una operación de despacho" });
     }
 
+    const assignedDriver = current.conductor_id
+      ? await client.query(
+        `SELECT id
+         FROM conductores
+         WHERE id = $1 OR usuario_id = $1
+         ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END
+         LIMIT 1`,
+        [current.conductor_id]
+      )
+      : null;
+    const vehicleId = current.vehiculo_id || null;
+    const driverId = assignedDriver?.rows[0]?.id || null;
+    const initialState = vehicleId && driverId ? "asignada" : "programada";
     const created = await client.query(
       `INSERT INTO operaciones
-       (reserva_id, tipo_servicio, fecha_programada, hora_inicio, hora_fin, origen, destino, pasajeros, creado_por)
+       (reserva_id, tipo_servicio, fecha_programada, hora_inicio, hora_fin, origen, destino, pasajeros,
+        vehiculo_id, conductor_id, estado, creado_por)
        VALUES (
          $1, 'reserva',
          COALESCE($2::timestamp::date, $3::timestamp::date, $4::date),
          $2::timestamp::time,
          CASE WHEN $5::timestamp::date = COALESCE($2::timestamp::date, $3::timestamp::date, $4::date)
               THEN $5::timestamp::time ELSE NULL END,
-         $6, $7, $8, $9
+         $6, $7, $8, $9, $10, $11, $12
        )
        RETURNING id`,
       [
@@ -237,12 +251,18 @@ const crearOperacionDesdeReserva = async (req: any, res: any) => {
         String(current.origen || "Origen pendiente").trim(),
         String(current.destino || "Destino pendiente").trim(),
         Number(current.num_personas) || 1,
+        vehicleId,
+        driverId,
+        initialState,
         req.user?.id || null,
       ]
     );
 
     const operationId = Number(created.rows[0].id);
-    await recordHistory(client, operationId, req.user?.id || null, "creacion_desde_reserva", null, "programada", { reserva_id: reservationId });
+    if (current.conductor_id && !driverId) {
+      await client.query("UPDATE reservas SET conductor_id = NULL WHERE id = $1", [reservationId]);
+    }
+    await recordHistory(client, operationId, req.user?.id || null, "creacion_desde_reserva", null, initialState, { reserva_id: reservationId });
     const operation = await getOperation(client, operationId);
     await client.query("COMMIT");
     return res.status(201).json({ success: true, data: operation });
