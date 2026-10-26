@@ -153,7 +153,58 @@ export default function AdminCumplimientoPage() {
             <p className="text-xs text-slate-400 max-w-sm">Registra vehículos para ver aquí sus datos de cumplimiento.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto border-t border-slate-100">
+          <>
+            <div className="divide-y divide-slate-100 border-t border-slate-100 lg:hidden">
+              {matriculas.map((m) => {
+                const e = MAT_ESTADO[m.estado] || MAT_ESTADO.al_dia;
+                const situacion = m.estado === "sin_placa" ? "Falta registrar la placa" : m.estado === "vencido" ? "Debía matricularse ya" : m.estado === "en_mes" ? "Le toca este mes" : m.estado === "proximo" ? `Faltan ${m.dias_para_mes} días` : "Al día";
+                return (
+                  <article key={m.vehiculo_id} className="space-y-3 p-4">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-2.5">
+                        <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${e.dot}`} />
+                        <div className="min-w-0">
+                          <h3 className="break-words text-base font-black text-slate-800">{m.placa}</h3>
+                          {m.modelo && <p className="break-words text-xs text-slate-500">{m.modelo}</p>}
+                        </div>
+                      </div>
+                      <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${e.cls}`}>{e.label}</span>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl bg-slate-50 p-3">
+                      <div>
+                        <dt className="text-[9px] font-black uppercase tracking-wide text-slate-400">Tipo</dt>
+                        <dd className="mt-0.5 break-words text-xs font-bold uppercase text-slate-700">{m.tipo || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[9px] font-black uppercase tracking-wide text-slate-400">Último dígito</dt>
+                        <dd className="mt-0.5 text-xs font-bold text-slate-700">{m.digito ?? "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[9px] font-black uppercase tracking-wide text-slate-400">Mes de matrícula</dt>
+                        <dd className="mt-0.5 break-words text-xs font-bold text-slate-700">{m.mes_nombre || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[9px] font-black uppercase tracking-wide text-slate-400">Última matrícula</dt>
+                        <dd className="mt-0.5 text-xs font-bold text-slate-600">{m.ultima_matricula ? new Date(m.ultima_matricula).toLocaleDateString("es-EC") : <span className="italic text-slate-400">Nunca</span>}</dd>
+                      </div>
+                      <div className="col-span-2">
+                        <dt className="text-[9px] font-black uppercase tracking-wide text-slate-400">Situación</dt>
+                        <dd className="mt-0.5 break-words text-xs text-slate-600">{situacion}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      onClick={() => marcarMatriculado(m.vehiculo_id)}
+                      disabled={m.digito === null || matActingId === m.vehiculo_id}
+                      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-700 transition-all hover:bg-emerald-500 hover:text-white disabled:opacity-60"
+                    >
+                      {matActingId === m.vehiculo_id ? <Loader2 size={15} className="animate-spin" /> : <CheckCheck size={15} />}
+                      {m.digito === null ? "Sin placa" : "Registrar matrícula"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto border-t border-slate-100 lg:block">
             <table className="min-w-[850px] w-full table-fixed text-left border-collapse">
               <thead><tr className="bg-slate-50/60 border-b border-slate-100">
                 <th className="w-[130px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vehículo</th>
@@ -198,7 +249,8 @@ export default function AdminCumplimientoPage() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
