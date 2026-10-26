@@ -7,11 +7,13 @@ export type SessionClaims = {
 };
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const SESSION_CHECK_TIMEOUT_MS = 10_000;
 
 export const getVerifiedSession = async (token: string): Promise<SessionClaims | null> => {
   const response = await fetch(`${API_URL}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS),
   });
   if (response.status === 401 || response.status === 403 || response.status === 404) return null;
   if (!response.ok) throw new Error(`Session validation failed with status ${response.status}`);

@@ -36,22 +36,40 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+  const sessionRedirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const checkSession = () => {
-      const storedUser = getStoredUser();
-      const storedToken = getStoredToken();
-      if (storedUser && storedToken && !isTokenExpired()) {
-        router.replace(getRolePath(storedUser.rol));
-        return;
+      if (sessionRedirectTimeoutRef.current) {
+        clearTimeout(sessionRedirectTimeoutRef.current);
+        sessionRedirectTimeoutRef.current = null;
       }
-      if (storedUser || storedToken) clearStoredUser();
-      setCheckingSession(false);
+
+      try {
+        const storedUser = getStoredUser();
+        const storedToken = getStoredToken();
+        if (storedUser && storedToken && !isTokenExpired()) {
+          router.replace(getRolePath(storedUser.rol));
+          sessionRedirectTimeoutRef.current = setTimeout(() => {
+            setError("No se pudo abrir tu sesión. Puedes volver a ingresar con tu correo y contraseña.");
+            setCheckingSession(false);
+          }, 12_000);
+          return;
+        }
+        if (storedUser || storedToken) clearStoredUser();
+        setCheckingSession(false);
+      } catch {
+        setError("El navegador no permitió comprobar la sesión. Ingresa tus credenciales para continuar.");
+        setCheckingSession(false);
+      }
     };
 
     checkSession();
     window.addEventListener("pageshow", checkSession);
-    return () => window.removeEventListener("pageshow", checkSession);
+    return () => {
+      window.removeEventListener("pageshow", checkSession);
+      if (sessionRedirectTimeoutRef.current) clearTimeout(sessionRedirectTimeoutRef.current);
+    };
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,6 +98,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
+        signal: AbortSignal.timeout(25_000),
       });
 
       const data = await response.json();
@@ -93,7 +112,18 @@ export default function LoginPage() {
       if (token) setStoredToken(token);
       router.replace(getRolePath(String(user.rol || "")));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Ocurrio un error inesperado");
+      const storageBlocked =
+        submitError instanceof DOMException &&
+        ["SecurityError", "QuotaExceededError"].includes(submitError.name);
+      setError(
+        storageBlocked
+          ? "El navegador bloqueó el almacenamiento de sesión. Permite el almacenamiento del sitio e inténtalo de nuevo."
+          : submitError instanceof Error && submitError.name === "TimeoutError"
+          ? "El inicio de sesión está tardando demasiado. Revisa tu conexión e inténtalo de nuevo."
+          : submitError instanceof Error
+            ? submitError.message
+            : "Ocurrio un error inesperado",
+      );
     } finally {
       setLoading(false);
     }

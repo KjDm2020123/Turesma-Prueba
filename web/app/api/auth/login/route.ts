@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getVerifiedSession, SESSION_COOKIE } from "../../../../lib/server-session";
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const LOGIN_TIMEOUT_MS = 10_000;
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -18,8 +19,12 @@ export async function POST(request: Request) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
+      signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return NextResponse.json({ error: "El servicio de autenticación tardó demasiado. Inténtalo de nuevo." }, { status: 504 });
+    }
     return NextResponse.json({ error: "No se pudo conectar con el servicio de autenticación" }, { status: 502 });
   }
 
@@ -40,9 +45,14 @@ export async function POST(request: Request) {
     session = token ? await getVerifiedSession(token) : null;
   } catch (error) {
     console.error("No se pudo verificar el token con el backend:", error);
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
     return NextResponse.json(
-      { error: "El servicio de autenticación no está disponible para confirmar la sesión." },
-      { status: 502 },
+      {
+        error: timedOut
+          ? "La confirmación de la sesión tardó demasiado. Inténtalo de nuevo."
+          : "El servicio de autenticación no está disponible para confirmar la sesión.",
+      },
+      { status: timedOut ? 504 : 502 },
     );
   }
   if (!session) {
