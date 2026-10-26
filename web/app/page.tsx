@@ -164,10 +164,12 @@ export default function RootPage() {
 
   useEffect(() => {
     const elements = document.querySelectorAll<HTMLElement>('.home-page [data-reveal]');
+    const iconCards = document.querySelectorAll<HTMLElement>('.home-page [data-icon-card]');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (reduceMotion) {
       elements.forEach((element) => element.classList.add('is-visible'));
+      iconCards.forEach((element) => element.classList.add('is-visible'));
       return;
     }
 
@@ -184,6 +186,7 @@ export default function RootPage() {
     );
 
     elements.forEach((element) => observer.observe(element));
+    iconCards.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [fotosGaleria.length]);
 
@@ -459,9 +462,9 @@ export default function RootPage() {
               { label: "Puntualidad", icon: Clock3, color: "text-orange-500", bg: "bg-orange-50" },
               { label: "Logística", icon: Activity, color: "text-blue-600", bg: "bg-blue-50" },
             ].map((f, i) => (
-              <div key={i} className="home-card group text-center">
+              <div key={i} data-icon-card className="home-card group text-center">
                 <div className={`mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[2rem] ${f.bg} transition-all group-hover:rotate-6 group-hover:scale-110`}>
-                  <f.icon className={f.color} size={32} />
+                  <f.icon data-icon-reveal className={f.color} size={32} />
                 </div>
                 <h3 className="text-lg font-black uppercase tracking-tighter text-gray-800">{f.label}</h3>
               </div>
@@ -821,9 +824,9 @@ export default function RootPage() {
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <article key={item.title} className="home-card group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm hover:shadow-xl">
+                <article key={item.title} data-icon-card className="home-card group rounded-3xl border border-gray-100 bg-white p-6 shadow-sm hover:shadow-xl">
                   <div className={`mb-5 flex h-12 w-12 items-center justify-center rounded-2xl ${item.bg} transition-transform group-hover:rotate-6`}>
-                    <Icon size={23} className={item.color} />
+                    <Icon data-icon-reveal size={23} className={item.color} />
                   </div>
                   <h3 className="text-lg font-black uppercase leading-tight tracking-tight text-gray-900">{item.title}</h3>
                   <p className="mt-3 text-sm font-medium leading-relaxed text-gray-500">{item.text}</p>
