@@ -415,14 +415,14 @@ export default function AdminVehiculosPage() {
       {err && <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl">{err}</div>}
 
       {/* FILTROS */}
-      <div className="flex flex-wrap gap-3 items-center bg-white p-3 sm:p-4 rounded-2xl border border-gray-100 shadow-sm">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="flex flex-col xl:flex-row xl:items-center gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-gray-100 shadow-sm">
+        <div className="relative min-w-0 flex-1 xl:max-w-md">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por placa, modelo o conductor..." className="w-full pl-9 pr-4 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-50 text-sm font-bold outline-none focus:border-[#E31E24] transition-all" />
+          <input aria-label="Buscar vehículos" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar placa, modelo o conductor..." className="w-full pl-9 pr-4 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-50 text-sm font-bold outline-none focus:border-[#E31E24] transition-all" />
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 xl:pb-0" role="group" aria-label="Filtrar por estado">
           {["todos", ...ESTADO_OPTIONS].map(e => (
-            <button key={e} onClick={() => setFiltroEstado(e)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filtroEstado === e ? "bg-[#E31E24] text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+            <button key={e} type="button" aria-pressed={filtroEstado === e} onClick={() => setFiltroEstado(e)} className={`shrink-0 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${filtroEstado === e ? "bg-[#E31E24] text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
               {e === "todos" ? "Todos" : e.replace("_", " ")}
             </button>
           ))}
@@ -488,13 +488,15 @@ export default function AdminVehiculosPage() {
           </div>
           {/* ESCRITORIO: tabla */}
           <div className="hidden lg:block overflow-x-auto">
-            <table className="min-w-[920px] w-full text-left border-collapse">
+            <table className="min-w-[840px] w-full table-fixed text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/60 border-b border-slate-100">
-                  <th className="w-10 px-2 py-4" aria-label="Orden" />
-                  {["Vehículo", "Tipo / Capacidad", "Conductor", "Días servicio", "Estado", "Acciones"].map(h => (
-                    <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>
-                  ))}
+                  <th className="w-8 px-1 py-2" aria-label="Orden" />
+                  <th className="w-[185px] px-1.5 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vehículo</th>
+                  <th className="w-[175px] px-1.5 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Conductor</th>
+                  <th className="w-[200px] px-1.5 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Días servicio</th>
+                  <th className="w-[150px] px-1.5 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
+                  <th className="w-[90px] px-1.5 py-2 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -508,67 +510,64 @@ export default function AdminVehiculosPage() {
                     onDragEnd={() => setArrastrandoId(null)}
                     className={`hover:bg-slate-50/80 transition-colors group ${arrastrandoId === v.id ? "opacity-40" : ""}`}
                   >
-                    <td className="w-10 px-2 py-4">
+                    <td className="w-8 px-1 py-2.5">
                       <GripVertical size={16} className={canReorder ? "cursor-grab text-slate-300 active:cursor-grabbing" : "text-transparent"} />
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
+                    <td className="px-1.5 py-2.5">
+                      <div className="flex items-center gap-2">
                         {v.imagen_url ? (
-                          <Image src={v.imagen_url} alt={v.placa} width={40} height={40} unoptimized className="w-10 h-10 rounded-xl object-cover border border-slate-100" />
+                          <Image src={v.imagen_url} alt={v.placa} width={48} height={48} unoptimized className="h-12 w-12 shrink-0 rounded-lg object-cover border border-slate-100" />
                         ) : (
-                          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-                            <Car size={20} className="text-slate-400" />
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                            <Car size={24} className="text-slate-400" />
                           </div>
                         )}
-                        <div>
-                          <p className="font-black text-slate-900 italic tracking-tighter uppercase text-sm">{v.placa}</p>
-                          <p className="text-[10px] text-slate-400 font-bold">{v.modelo}</p>
+                        <div className="min-w-0">
+                          <p className="text-base font-black italic uppercase tracking-tighter text-slate-900">{v.placa}</p>
+                          <p className="max-w-[155px] truncate text-xs font-bold text-slate-600">{v.modelo || "Modelo sin especificar"}</p>
+                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{v.tipo} <span className="font-bold normal-case text-slate-400">· {v.capacidad} pax</span></p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-black text-slate-600 uppercase">{v.tipo}</span>
-                      <span className="ml-2 bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-black">{v.capacidad} pax</span>
-                    </td>
-                    <td className="px-6 py-4">
+                    <td className="px-1.5 py-2.5">
                       {v.conductor_nombre ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           {v.conductor_imagen_url ? (
-                            <Image src={v.conductor_imagen_url} alt={v.conductor_nombre} width={28} height={28} unoptimized className="w-7 h-7 rounded-lg object-cover border border-slate-200" />
+                            <Image src={v.conductor_imagen_url} alt={v.conductor_nombre} width={34} height={34} unoptimized className="h-[34px] w-[34px] shrink-0 rounded-md object-cover border border-slate-200" />
                           ) : (
-                            <div className="w-7 h-7 rounded-lg bg-[#E31E24]/10 flex items-center justify-center">
-                              <Users size={12} className="text-[#E31E24]" />
+                            <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-[#E31E24]/10">
+                              <Users size={14} className="text-[#E31E24]" />
                             </div>
                           )}
-                          <div>
-                            <p className="text-xs font-black text-slate-700">{v.conductor_nombre}</p>
-                            <p className="text-[10px] text-slate-400">{v.conductor_email}</p>
+                          <div className="min-w-0">
+                            <p className="max-w-[140px] truncate text-sm font-black text-slate-700">{v.conductor_nombre}</p>
+                            <p className="max-w-[140px] truncate text-[11px] text-slate-400">{v.conductor_email}</p>
                           </div>
                         </div>
                       ) : (
-                        <span className="text-[10px] font-bold text-slate-300 italic">Sin asignar</span>
+                        <span className="text-[11px] font-bold italic text-slate-400">Sin asignar</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-1 flex-wrap">
+                    <td className="px-1.5 py-2.5">
+                      <div className="flex flex-nowrap gap-1 whitespace-nowrap">
                         {(v.dias_servicio || []).map(d => (
-                          <span key={d} className="text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{DIAS_LABEL[d]}</span>
+                          <span key={d} className="rounded bg-blue-50 px-1.5 py-1 text-center text-[11px] font-black text-blue-700">{DIAS_LABEL[d]}</span>
                         ))}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase border ${ESTADO_BADGE[v.estado] || ESTADO_BADGE.inactivo}`}>
+                    <td className="px-1.5 py-2.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-black uppercase border ${ESTADO_BADGE[v.estado] || ESTADO_BADGE.inactivo}`}>
                         {ESTADO_ICON[v.estado]}
                         {v.estado.replace("_", " ")}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        <button onClick={() => openEdit(v)} className="p-2.5 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="Editar">
-                          <Edit3 size={16} />
+                    <td className="px-1.5 py-2.5">
+                      <div className="flex justify-center gap-0.5">
+                        <button onClick={() => openEdit(v)} className="rounded-lg p-2 text-blue-500 transition-all hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" title="Editar" aria-label={`Editar vehículo ${v.placa}`}>
+                          <Edit3 size={17} />
                         </button>
-                        <button onClick={() => handleDelete(v)} className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Eliminar">
-                          <Trash2 size={16} />
+                        <button onClick={() => handleDelete(v)} className="rounded-lg p-2 text-red-500 transition-all hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500" title="Eliminar" aria-label={`Eliminar vehículo ${v.placa}`}>
+                          <Trash2 size={17} />
                         </button>
                       </div>
                     </td>
