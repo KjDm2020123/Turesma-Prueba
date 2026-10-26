@@ -81,6 +81,28 @@ function VideoPlayer({ src, title }: { src: string; title: string | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [loadPreview, setLoadPreview] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!("IntersectionObserver" in window)) {
+      setLoadPreview(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setLoadPreview(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "400px 0px" }
+    );
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
 
   const togglePlayback = async () => {
     const video = videoRef.current;
@@ -110,7 +132,7 @@ function VideoPlayer({ src, title }: { src: string; title: string | null }) {
       <video
         ref={videoRef}
         src={src}
-        preload="none"
+        preload={loadPreview ? "metadata" : "none"}
         playsInline
         disablePictureInPicture
         controlsList="nodownload noplaybackrate noremoteplayback"
