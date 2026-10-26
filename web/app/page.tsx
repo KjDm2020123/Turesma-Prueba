@@ -110,7 +110,7 @@ function VideoPlayer({ src, title }: { src: string; title: string | null }) {
       <video
         ref={videoRef}
         src={src}
-        preload="metadata"
+        preload="none"
         playsInline
         disablePictureInPicture
         controlsList="nodownload noplaybackrate noremoteplayback"
@@ -154,10 +154,13 @@ export default function RootPage() {
   const [vehiculos, setVehiculos] = useState<VehiculoPublico[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
+  const [shouldLoadGallery, setShouldLoadGallery] = useState(false);
   const flotaRef = useRef<HTMLDivElement | null>(null);
+  const galleryTriggerRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mobileMenuWasOpen = useRef(false);
+  const publicDataCacheRef = useRef<PublicDataCache>({ vehiculos: [], galeria: [] });
   const fotosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo !== "video");
   const videosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo === "video");
   const fotosDestinos = galeria.filter((contenido) => contenido.categoria === "destinos" && contenido.tipo !== "video");
@@ -243,17 +246,16 @@ export default function RootPage() {
         }
         if (Array.isArray(data.galeria)) {
           cachedGallery = data.galeria;
-          setGaleria(cachedGallery);
         }
-        if (Array.isArray(data.vehiculos) || Array.isArray(data.galeria)) setLoadingVehiculos(false);
+        if (Array.isArray(data.vehiculos)) setLoadingVehiculos(false);
       }
     } catch {
       localStorage.removeItem(PUBLIC_DATA_CACHE_KEY);
     }
 
-    // Flota y galería se actualizan en paralelo; la caché permite pintar antes
-    // de que el backend termine de despertar.
-    const vehiclesRequest = fetch(`${API_URL}/api/usuarios/vehiculos`, { cache: "no-store" })
+    publicDataCacheRef.current = { vehiculos: cachedVehicles, galeria: cachedGallery };
+
+    fetch(`${API_URL}/api/usuarios/vehiculos`, { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`No se pudo cargar la flota (${response.status})`);
         return response.json();
@@ -261,32 +263,63 @@ export default function RootPage() {
       .then((data: unknown) => {
         if (!Array.isArray(data)) throw new Error("La respuesta de la flota no tiene un formato válido");
         cachedVehicles = data as VehiculoPublico[];
+        publicDataCacheRef.current.vehiculos = cachedVehicles;
         setVehiculos(cachedVehicles);
+        localStorage.setItem(PUBLIC_DATA_CACHE_KEY, JSON.stringify(publicDataCacheRef.current));
       })
       .catch((error: unknown) => {
         console.error("Error cargando los vehículos públicos:", error);
-      });
+      })
+      .finally(() => setLoadingVehiculos(false));
+  }, []);
 
-    const galleryRequest = fetch(`${API_URL}/api/usuarios/galeria`, { cache: "no-store" })
+  useEffect(() => {
+    const trigger = galleryTriggerRef.current;
+    if (!trigger) return;
+    if (!("IntersectionObserver" in window)) {
+      setShouldLoadGallery(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoadGallery(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "700px 0px" }
+    );
+    observer.observe(trigger);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldLoadGallery) return;
+    let isCurrent = true;
+    setGaleria(publicDataCacheRef.current.galeria);
+
+    fetch(`${API_URL}/api/usuarios/galeria`, { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`No se pudo cargar la galería (${response.status})`);
         return response.json();
       })
       .then((data: unknown) => {
         if (!Array.isArray(data)) throw new Error("La respuesta de la galería no tiene un formato válido");
-        cachedGallery = (data as GaleriaFoto[]).filter((foto) => foto.imagen_url);
-        setGaleria(cachedGallery);
+        if (!isCurrent) return;
+        const updatedGallery = (data as GaleriaFoto[]).filter((foto) => foto.imagen_url);
+        publicDataCacheRef.current.galeria = updatedGallery;
+        setGaleria(updatedGallery);
+        localStorage.setItem(PUBLIC_DATA_CACHE_KEY, JSON.stringify(publicDataCacheRef.current));
       })
       .catch((error: unknown) => {
         console.error("Error cargando la galería pública:", error);
       });
 
-    Promise.all([vehiclesRequest, galleryRequest])
-      .then(() => {
-        localStorage.setItem(PUBLIC_DATA_CACHE_KEY, JSON.stringify({ vehiculos: cachedVehicles, galeria: cachedGallery }));
-      })
-      .finally(() => setLoadingVehiculos(false));
-  }, []);
+    return () => {
+      isCurrent = false;
+    };
+  }, [shouldLoadGallery]);
 
   useEffect(() => {
     let ticking = false;
@@ -337,8 +370,6 @@ export default function RootPage() {
   return (
     <LocalizedContent>
     <main className="home-page bg-white text-[#1a1a1a] antialiased selection:bg-[#E31E24] selection:text-white font-sans scroll-smooth">
-      <link rel="preload" as="image" href={HERO_IMAGE_URL} fetchPriority="high" />
-
       {/* NAVBAR */}
       <nav className="fixed z-50 w-full border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-24 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
@@ -412,11 +443,10 @@ export default function RootPage() {
       <section className="relative flex min-h-screen items-center justify-center overflow-hidden pt-20">
         <div className="absolute inset-0 z-0 bg-[#0a0a0a]">
           <Image
-            src="https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2069&auto=format&fit=crop"
+            src={HERO_IMAGE_URL}
             alt="Bus de turismo"
             fill
             sizes="100vw"
-            unoptimized
             priority
             placeholder="blur"
             blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/AP/EABQQAQAAAAAAAAAAAAAAAAAAACD/2gAIAQEAAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAACD/2gAIAQIBAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAACD/2gAIAQMBAT8Af//Z"
@@ -562,7 +592,7 @@ export default function RootPage() {
                 ref={flotaRef}
                 className="flota-carousel flex snap-x snap-mandatory gap-6 overflow-x-auto scroll-smooth pb-4"
               >
-                {vehiculos.map((v, index) => (
+                {vehiculos.map((v) => (
                   <div
                     key={v.id}
                     data-flota-card
@@ -575,8 +605,7 @@ export default function RootPage() {
                       width={720}
                       height={512}
                       sizes="(max-width: 640px) 85vw, 360px"
-                      priority={index === 0}
-                      unoptimized
+                      quality={75}
                       onError={handleRemoteImageError}
                       className="h-56 w-full object-cover sm:h-64"
                     />
@@ -621,6 +650,8 @@ export default function RootPage() {
         </div>
       </section>
 
+      <div id="destinos" ref={galleryTriggerRef} className="h-px" aria-hidden="true" />
+
       {/* SECCIÓN GALERÍA DE VIAJES (fotos publicadas por el admin) */}
       {fotosGaleria.length > 0 && (
         <section id="galeria" className="py-24 bg-white border-t border-gray-50">
@@ -637,21 +668,16 @@ export default function RootPage() {
                   key={foto.id}
                   className="home-card group relative overflow-hidden rounded-3xl shadow-xl aspect-[4/3] bg-gray-100"
                 >
-                  {foto.tipo === "video" ? (
-                    <video src={foto.imagen_url} controls preload="metadata" playsInline className="w-full h-full object-cover" />
-                  ) : (
-                    <Image
-                      src={foto.imagen_url}
-                      alt={foto.titulo || "Viaje realizado por Turesma"}
-                      data-no-translate
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      priority={foto.id === fotosGaleria[0]?.id}
-                      unoptimized
-                      onError={handleRemoteImageError}
-                      className="object-cover transition-transform duration-700 group-hover:scale-110"
-                    />
-                  )}
+                  <Image
+                    src={foto.imagen_url}
+                    alt={foto.titulo || "Viaje realizado por Turesma"}
+                    data-no-translate
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    quality={75}
+                    onError={handleRemoteImageError}
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                  />
                   {(foto.titulo || foto.descripcion) && (
                     <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-6 pt-16 translate-y-2 opacity-0 transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100">
                       {foto.titulo && (
@@ -671,7 +697,7 @@ export default function RootPage() {
 
       {/* DESTINOS */}
       {fotosDestinos.length > 0 && (
-        <section id="destinos" className="bg-[#f7f8fa] py-24">
+        <section className="bg-[#f7f8fa] py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
             <div className="mx-auto mb-14 max-w-3xl text-center">
               <p className="mb-3 text-xs font-black uppercase tracking-[0.3em] text-[#E31E24]">Desde Manta hacia Ecuador</p>
@@ -694,6 +720,7 @@ export default function RootPage() {
                       data-no-translate
                       fill
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      quality={75}
                       className="object-cover transition-transform duration-700 group-hover:scale-105"
                     />
                     <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent" />
