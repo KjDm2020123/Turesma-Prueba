@@ -16,6 +16,9 @@ type Foto = {
   imagen_url: string;
   tipo: "imagen" | "video";
   categoria: "viajes" | "destinos";
+  video_offset_x?: number | null;
+  video_offset_y?: number | null;
+  video_zoom?: number | null;
   titulo: string | null;
   descripcion: string | null;
   credito: string | null;
@@ -46,6 +49,10 @@ export default function AdminGaleriaPage() {
   const [actingId, setActingId] = useState<number | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
+  const [videoOffsetX, setVideoOffsetX] = useState(0);
+  const [videoOffsetY, setVideoOffsetY] = useState(0);
+  const [videoZoom, setVideoZoom] = useState(100);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const fotosCategoria = fotos.filter((foto) => foto.categoria === categoria);
   const imagenes = fotosCategoria.filter((foto) => foto.tipo === "imagen");
@@ -60,9 +67,15 @@ export default function AdminGaleriaPage() {
     setCategoria(next);
     setImagenUrl("");
     setVideoPreview(null);
+    setSelectedVideo(null);
     if (next === "destinos") setTipoContenido("imagen");
     if (fileRef.current) fileRef.current.value = "";
   };
+
+  useEffect(() => {
+    if (!videoPreview?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(videoPreview);
+  }, [videoPreview]);
 
   const load = async () => {
     try {
@@ -97,12 +110,24 @@ export default function AdminGaleriaPage() {
     finally { setSubiendo(false); }
   };
 
-  const handleVideo = async (file: File | null) => {
+  const selectVideo = (file: File | null) => {
     if (!file) return;
+    setErr("");
+    setImagenUrl("");
+    setSelectedVideo(file);
+    setVideoPreview(URL.createObjectURL(file));
+    setVideoOffsetX(0);
+    setVideoOffsetY(0);
+    setVideoZoom(100);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const handleUploadVideo = async () => {
+    if (!selectedVideo) return;
     setErr(""); setSubiendo(true);
     try {
       const fd = new FormData();
-      fd.append("video", file);
+      fd.append("video", selectedVideo);
       const authToken = getAuthHeaders()["Authorization"];
       const res = await fetch(`${API}/api/admin/uploads/galeria-video`, {
         method: "POST",
@@ -112,7 +137,6 @@ export default function AdminGaleriaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al subir el video");
       setImagenUrl(json.videoUrl || "");
-      setVideoPreview(URL.createObjectURL(file));
     } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo subir el video"); }
     finally { setSubiendo(false); }
   };
@@ -128,6 +152,9 @@ export default function AdminGaleriaPage() {
           imagen_url: imagenUrl,
           tipo: tipoContenido,
           categoria,
+          video_offset_x: videoOffsetX,
+          video_offset_y: videoOffsetY,
+          video_zoom: videoZoom,
           titulo,
           descripcion,
         }),
@@ -135,7 +162,7 @@ export default function AdminGaleriaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al guardar");
       setFotos((p) => [json, ...p]);
-      setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null);
+      setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null); setSelectedVideo(null);
       if (fileRef.current) fileRef.current.value = "";
       flash(setMsg, `${tipoContenido === "video" ? "Video" : "Foto"} publicado en ${categoria === "destinos" ? "Destinos" : "Viajes"}`);
     } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo guardar"); }
@@ -180,7 +207,7 @@ export default function AdminGaleriaPage() {
   const renderContenido = (contenido: Foto) => (
     <div key={contenido.id} className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${contenido.activo ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
       <div className={`relative aspect-[4/3] bg-slate-100 ${contenido.tipo === "imagen" ? "cursor-zoom-in" : ""}`} onClick={() => contenido.tipo === "imagen" && setZoomImg(contenido.imagen_url)}>
-        {contenido.tipo === "video" ? <video src={contenido.imagen_url} controls className="w-full h-full object-cover" /> : <Image src={contenido.imagen_url} alt={contenido.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />}
+        {contenido.tipo === "video" ? <video src={contenido.imagen_url} controls style={{ transform: `translate(${contenido.video_offset_x || 0}%, ${contenido.video_offset_y || 0}%) scale(${(contenido.video_zoom || 100) / 100})` }} className="w-full h-full object-cover" /> : <Image src={contenido.imagen_url} alt={contenido.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />}
         {!contenido.activo && (
           <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Oculta</span>
         )}
@@ -266,23 +293,26 @@ export default function AdminGaleriaPage() {
           <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Agregar {categoria === "destinos" ? "foto de destino" : "contenido de viaje"}</p>
           {categoria === "viajes" && (
             <div className="flex rounded-xl border border-slate-200 p-1 bg-slate-50">
-              <button type="button" onClick={() => { setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
-              <button type="button" onClick={() => { setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
+              <button type="button" onClick={() => { setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
+              <button type="button" onClick={() => { setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
             </div>
           )}
         </div>
         <div className="grid md:grid-cols-[240px_1fr] gap-5">
           {/* Zona de subida */}
           <div>
-            <input ref={fileRef} type="file" accept={tipoContenido === "video" ? "video/mp4,video/webm,video/quicktime" : "image/jpeg,image/png,image/webp"} className="hidden" onChange={(e) => tipoContenido === "video" ? handleVideo(e.target.files?.[0] || null) : handleFile(e.target.files?.[0] || null)} />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-[#E31E24] hover:bg-red-50/40 transition-all flex flex-col items-center justify-center gap-2 overflow-hidden relative"
-            >
-              {tipoContenido === "video" && videoPreview ? (
-                <video src={videoPreview} controls className="absolute inset-0 w-full h-full object-cover" />
-              ) : imagenUrl ? (
+            <input ref={fileRef} type="file" accept={tipoContenido === "video" ? "video/mp4,video/webm,video/quicktime" : "image/jpeg,image/png,image/webp"} className="hidden" onChange={(e) => tipoContenido === "video" ? selectVideo(e.target.files?.[0] || null) : handleFile(e.target.files?.[0] || null)} />
+            {tipoContenido === "video" && videoPreview ? (
+              <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950">
+                <video src={videoPreview} controls style={{ transform: `translate(${videoOffsetX}%, ${videoOffsetY}%) scale(${videoZoom / 100})` }} className="h-full w-full object-cover" />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 transition-all hover:border-[#E31E24] hover:bg-red-50/40"
+              >
+              {imagenUrl ? (
                 <Image src={imagenUrl} alt="Vista previa" fill sizes="240px" unoptimized className="object-cover" />
               ) : subiendo ? (
                 <Loader2 className="animate-spin text-[#E31E24]" size={26} />
@@ -293,7 +323,34 @@ export default function AdminGaleriaPage() {
                   <span className="text-[10px] text-slate-300">{tipoContenido === "video" ? "MP4, WEBM o MOV · máx 100MB" : "JPG, PNG o WEBP · máx 5MB"}</span>
                 </>
               )}
-            </button>
+              </button>
+            )}
+            {tipoContenido === "video" && videoPreview && (
+              <div className="mt-4 space-y-3">
+                <button type="button" onClick={() => fileRef.current?.click()} disabled={subiendo || guardando} className="text-[11px] font-bold text-slate-500 hover:text-[#E31E24] disabled:opacity-50">
+                  Elegir otro video
+                </button>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Mover horizontal · {videoOffsetX}%
+                  <input type="range" min="-25" max="25" value={videoOffsetX} onChange={(event) => setVideoOffsetX(Number(event.target.value))} className="mt-1 w-full accent-[#E31E24]" />
+                </label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Mover vertical · {videoOffsetY}%
+                  <input type="range" min="-25" max="25" value={videoOffsetY} onChange={(event) => setVideoOffsetY(Number(event.target.value))} className="mt-1 w-full accent-[#E31E24]" />
+                </label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Zoom · {videoZoom}%
+                  <input type="range" min="100" max="160" value={videoZoom} onChange={(event) => setVideoZoom(Number(event.target.value))} className="mt-1 w-full accent-[#E31E24]" />
+                </label>
+                <p className="text-[10px] leading-relaxed text-slate-400">El encuadre se guarda para mostrar el video en la web; el archivo original no se modifica.</p>
+                {!imagenUrl && (
+                  <button type="button" onClick={handleUploadVideo} disabled={subiendo || !selectedVideo} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    {subiendo ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}
+                    Subir video
+                  </button>
+                )}
+              </div>
+            )}
             {imagenUrl && (
               <button type="button" onClick={() => { setImagenUrl(""); if (fileRef.current) fileRef.current.value = ""; }} className="mt-2 text-[11px] font-bold text-slate-400 hover:text-[#E31E24] transition-colors">
                 Quitar archivo

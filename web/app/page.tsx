@@ -45,6 +45,9 @@ type GaleriaFoto = {
   imagen_url: string;
   tipo?: "imagen" | "video";
   categoria?: "viajes" | "destinos";
+  video_offset_x?: number | null;
+  video_offset_y?: number | null;
+  video_zoom?: number | null;
   titulo: string | null;
   descripcion: string | null;
   credito?: string | null;
@@ -77,7 +80,7 @@ type PublicDataCache = {
   galeria: GaleriaFoto[];
 };
 
-function VideoPlayer({ src, title }: { src: string; title: string | null }) {
+function VideoPlayer({ src, title, offsetX, offsetY, zoom }: { src: string; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -137,6 +140,7 @@ function VideoPlayer({ src, title }: { src: string; title: string | null }) {
         disablePictureInPicture
         controlsList="nodownload noplaybackrate noremoteplayback"
         aria-label={title || "Video de Turesma"}
+        style={{ transform: `translate(${offsetX || 0}%, ${offsetY || 0}%) scale(${(zoom || 100) / 100})` }}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
@@ -800,7 +804,7 @@ export default function RootPage() {
             <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
               {videosGaleria.map((video) => (
                 <figure key={video.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl">
-                  <VideoPlayer src={video.imagen_url} title={video.titulo} />
+                  <VideoPlayer src={video.imagen_url} title={video.titulo} offsetX={video.video_offset_x} offsetY={video.video_offset_y} zoom={video.video_zoom} />
                   {(video.titulo || video.descripcion) && (
                     <figcaption className="p-5">
                       {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}

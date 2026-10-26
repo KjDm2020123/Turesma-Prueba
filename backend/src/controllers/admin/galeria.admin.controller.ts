@@ -84,7 +84,7 @@ const uploadGaleriaVideo = (req: any, res: any) => {
 const listarGaleriaAdmin = async (_req: any, res: any) => {
   try {
     const result = await pool.query(
-      `SELECT id, imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en
+      `SELECT id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en
        FROM galeria_viajes
        ORDER BY orden ASC, creado_en DESC`
     );
@@ -101,6 +101,15 @@ const crearGaleria = async (req: any, res: any) => {
     const imagen_url = typeof req.body.imagen_url === "string" ? req.body.imagen_url.trim() : "";
     const tipo = req.body.tipo === "video" ? "video" : "imagen";
     const categoria = req.body.categoria === undefined ? "viajes" : req.body.categoria;
+    const videoOffsetX = Number.isFinite(Number(req.body.video_offset_x))
+      ? Math.max(-25, Math.min(25, Math.round(Number(req.body.video_offset_x))))
+      : 0;
+    const videoOffsetY = Number.isFinite(Number(req.body.video_offset_y))
+      ? Math.max(-25, Math.min(25, Math.round(Number(req.body.video_offset_y))))
+      : 0;
+    const videoZoom = Number.isFinite(Number(req.body.video_zoom))
+      ? Math.max(100, Math.min(160, Math.round(Number(req.body.video_zoom))))
+      : 100;
     const titulo = typeof req.body.titulo === "string" ? req.body.titulo.trim().slice(0, 120) : null;
     const descripcion = typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 500) : null;
     const credito = typeof req.body.credito === "string" ? req.body.credito.trim().slice(0, 160) : null;
@@ -129,11 +138,11 @@ const crearGaleria = async (req: any, res: any) => {
 
     const result = await pool.query(
       `INSERT INTO galeria_viajes (
-         imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo
+         imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
-       RETURNING id, imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
-      [imagen_url, tipo, categoria, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, licenciaUrl || null, orden]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE)
+       RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
+      [imagen_url, tipo, categoria, videoOffsetX, videoOffsetY, videoZoom, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, licenciaUrl || null, orden]
     );
     invalidarGaleriaPublica();
     return res.status(201).json(result.rows[0]);
@@ -178,7 +187,7 @@ const actualizarGaleria = async (req: any, res: any) => {
            licencia = COALESCE($6, licencia),
            licencia_url = COALESCE($7, licencia_url)
        WHERE id = $8
-      RETURNING id, imagen_url, tipo, categoria, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
+      RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
       [activo, titulo ?? null, descripcion ?? null, credito ?? null, fuenteUrl ?? null, licencia ?? null, licenciaUrl ?? null, id]
     );
     invalidarGaleriaPublica();

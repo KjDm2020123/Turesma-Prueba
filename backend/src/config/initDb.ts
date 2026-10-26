@@ -997,6 +997,9 @@ const initDatabase = async () => {
       imagen_url TEXT NOT NULL,
       tipo VARCHAR(10) NOT NULL DEFAULT 'imagen' CHECK (tipo IN ('imagen', 'video')),
       categoria VARCHAR(12) NOT NULL DEFAULT 'viajes',
+      video_offset_x INT NOT NULL DEFAULT 0,
+      video_offset_y INT NOT NULL DEFAULT 0,
+      video_zoom INT NOT NULL DEFAULT 100,
       titulo VARCHAR(120),
       descripcion TEXT,
       credito VARCHAR(160),
@@ -1016,7 +1019,10 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS credito VARCHAR(160),
     ADD COLUMN IF NOT EXISTS fuente_url TEXT,
     ADD COLUMN IF NOT EXISTS licencia VARCHAR(80),
-    ADD COLUMN IF NOT EXISTS licencia_url TEXT;
+    ADD COLUMN IF NOT EXISTS licencia_url TEXT,
+    ADD COLUMN IF NOT EXISTS video_offset_x INT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS video_offset_y INT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS video_zoom INT NOT NULL DEFAULT 100;
   `);
 
   await pool.query(`
