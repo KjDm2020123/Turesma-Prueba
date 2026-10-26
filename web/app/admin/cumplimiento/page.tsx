@@ -154,11 +154,15 @@ export default function AdminCumplimientoPage() {
           </div>
         ) : (
           <div className="overflow-x-auto border-t border-slate-100">
-            <table className="min-w-[720px] w-full text-left border-collapse">
+            <table className="min-w-[850px] w-full table-fixed text-left border-collapse">
               <thead><tr className="bg-slate-50/60 border-b border-slate-100">
-                {["Vehículo", "Tipo", "Últ. dígito", "Mes que le toca", "Situación", "Última matrícula", "Acción"].map(h => (
-                  <th key={h} className="px-5 py-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
-                ))}
+                <th className="w-[130px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vehículo</th>
+                <th className="w-[90px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo</th>
+                <th className="w-[82px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Últ. dígito</th>
+                <th className="w-[130px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Mes que le toca</th>
+                <th className="w-[165px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Situación</th>
+                <th className="w-[130px] px-2.5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Última matrícula</th>
+                <th className="w-[123px] px-2.5 py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Acción</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {matriculas.map(m => {
@@ -166,27 +170,27 @@ export default function AdminCumplimientoPage() {
                   const situacion = m.estado === "sin_placa" ? "Falta registrar la placa" : m.estado === "vencido" ? "Debía matricularse ya" : m.estado === "en_mes" ? "Le toca este mes" : m.estado === "proximo" ? `Faltan ${m.dias_para_mes} días` : "Al día";
                   return (
                     <tr key={m.vehiculo_id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
+                      <td className="px-2.5 py-3">
+                        <div className="flex min-w-0 items-center gap-2">
                           <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${e.dot}`} />
-                          <div>
-                            <p className="font-black text-slate-800 text-sm">{m.placa}</p>
-                            {m.modelo && <p className="text-[10px] text-slate-400">{m.modelo}</p>}
+                          <div className="min-w-0">
+                            <p className="truncate font-black text-slate-800 text-sm">{m.placa}</p>
+                            {m.modelo && <p className="truncate text-[10px] text-slate-500">{m.modelo}</p>}
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-xs font-bold text-slate-600 uppercase">{m.tipo || "—"}</td>
-                      <td className="px-5 py-3.5"><span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 text-slate-700 text-xs font-black">{m.digito ?? "—"}</span></td>
-                      <td className="px-5 py-3.5 text-sm font-bold text-slate-700 whitespace-nowrap">{m.mes_nombre || "—"}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-[9px] font-black uppercase border ${e.cls}`}>{e.label}</span>
-                        <span className="block text-[10px] text-slate-400 mt-1">{situacion}</span>
+                      <td className="px-2.5 py-3 text-xs font-bold text-slate-700 uppercase">{m.tipo || "—"}</td>
+                      <td className="px-2.5 py-3"><span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-sm font-black text-slate-700">{m.digito ?? "—"}</span></td>
+                      <td className="px-2.5 py-3 text-sm font-bold text-slate-700">{m.mes_nombre || "—"}</td>
+                      <td className="px-2.5 py-3">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black uppercase border ${e.cls}`}>{e.label}</span>
+                        <span className="mt-1 block text-[10px] leading-tight text-slate-500">{situacion}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-xs font-bold text-slate-500 whitespace-nowrap">{m.ultima_matricula ? new Date(m.ultima_matricula).toLocaleDateString("es-EC") : <span className="text-slate-300 italic">Nunca</span>}</td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-2.5 py-3 text-xs font-bold text-slate-600">{m.ultima_matricula ? new Date(m.ultima_matricula).toLocaleDateString("es-EC") : <span className="text-slate-400 italic">Nunca</span>}</td>
+                      <td className="px-2.5 py-3">
                         <button onClick={() => marcarMatriculado(m.vehiculo_id)} disabled={m.digito === null || matActingId === m.vehiculo_id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-60">
-                          {matActingId === m.vehiculo_id ? <Loader2 size={12} className="animate-spin" /> : <CheckCheck size={12} />} {m.digito === null ? "Sin placa" : "Matriculado"}
+                          className="mx-auto flex items-center justify-center gap-1 rounded-xl bg-emerald-50 px-2 py-2 text-emerald-700 transition-all hover:bg-emerald-500 hover:text-white text-[9px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-60">
+                          {matActingId === m.vehiculo_id ? <Loader2 size={13} className="animate-spin" /> : <CheckCheck size={13} />} {m.digito === null ? "Sin placa" : "Matriculado"}
                         </button>
                       </td>
                     </tr>
