@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const pool = require("../../config/db");
+const { ensureGaleriaVideoColumns } = require("../../config/galeriaSchema");
 const { uploadImage, uploadVideo, deleteImage, getStoragePathFromUrl } = require("../../config/storage");
 const { invalidarGaleriaPublica } = require("../galeria.controller");
 
@@ -75,7 +76,10 @@ const uploadGaleriaVideo = (req: any, res: any) => {
       return res.status(201).json({ message: "Video subido correctamente", videoUrl });
     } catch (uploadError) {
       console.error("Error subiendo video de galería a Supabase:", uploadError);
-      return res.status(502).json({ error: "No se pudo guardar el video" });
+      const detail = process.env.NODE_ENV === "production"
+        ? ""
+        : `: ${uploadError?.message || "error de Storage"}`;
+      return res.status(502).json({ error: `No se pudo guardar el video${detail}` });
     }
   });
 };
@@ -83,6 +87,7 @@ const uploadGaleriaVideo = (req: any, res: any) => {
 // ── Admin: lista TODAS las fotos de la galería (activas e inactivas) ──────────
 const listarGaleriaAdmin = async (_req: any, res: any) => {
   try {
+    await ensureGaleriaVideoColumns();
     const result = await pool.query(
       `SELECT id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en
        FROM galeria_viajes
@@ -91,13 +96,17 @@ const listarGaleriaAdmin = async (_req: any, res: any) => {
     return res.status(200).json(result.rows);
   } catch (error) {
     console.error("Error listando galería:", error);
-    return res.status(500).json({ error: "Error interno del servidor" });
+    const detail = process.env.NODE_ENV === "production"
+      ? ""
+      : `: ${error?.message || "error de base de datos"}`;
+    return res.status(500).json({ error: `Error interno del servidor${detail}` });
   }
 };
 
 // ── Admin: agrega una foto a la galería ──────────────────────────────────────
 const crearGaleria = async (req: any, res: any) => {
   try {
+    await ensureGaleriaVideoColumns();
     const imagen_url = typeof req.body.imagen_url === "string" ? req.body.imagen_url.trim() : "";
     const tipo = req.body.tipo === "video" ? "video" : "imagen";
     const categoria = req.body.categoria === undefined ? "viajes" : req.body.categoria;
@@ -154,7 +163,7 @@ const crearGaleria = async (req: any, res: any) => {
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE)
        RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
-      [imagen_url, tipo, categoria, videoOffsetX, videoOffsetY, videoZoom, videoFormat, videoAspectRatio, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, orden]
+      [imagen_url, tipo, categoria, videoOffsetX, videoOffsetY, videoZoom, videoFormat, videoAspectRatio, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, licenciaUrl || null, orden]
     );
     invalidarGaleriaPublica();
     return res.status(201).json(result.rows[0]);
@@ -170,6 +179,7 @@ const actualizarGaleria = async (req: any, res: any) => {
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "ID inválido" });
 
   try {
+    await ensureGaleriaVideoColumns();
     const existe = await pool.query("SELECT id FROM galeria_viajes WHERE id = $1 LIMIT 1", [id]);
     if (existe.rowCount === 0) return res.status(404).json({ error: "Foto no encontrada" });
 

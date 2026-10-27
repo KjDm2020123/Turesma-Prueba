@@ -1,6 +1,7 @@
 export {};
 
 const pool = require("./db");
+const { ensureGaleriaVideoColumns } = require("./galeriaSchema");
 
 const initDatabase = async () => {
   await pool.query(`
@@ -1021,13 +1022,9 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS credito VARCHAR(160),
     ADD COLUMN IF NOT EXISTS fuente_url TEXT,
     ADD COLUMN IF NOT EXISTS licencia VARCHAR(80),
-    ADD COLUMN IF NOT EXISTS licencia_url TEXT,
-    ADD COLUMN IF NOT EXISTS video_offset_x INT NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS video_offset_y INT NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS video_zoom INT NOT NULL DEFAULT 100,
-    ADD COLUMN IF NOT EXISTS video_format VARCHAR(12) NOT NULL DEFAULT 'horizontal',
-    ADD COLUMN IF NOT EXISTS video_aspect_ratio NUMERIC(6,4) NOT NULL DEFAULT 1.7778;
+    ADD COLUMN IF NOT EXISTS licencia_url TEXT;
   `);
+  await ensureGaleriaVideoColumns();
 
   await pool.query(`
     ALTER TABLE galeria_viajes

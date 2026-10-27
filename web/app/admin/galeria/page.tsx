@@ -91,9 +91,13 @@ export default function AdminGaleriaPage() {
   const load = async () => {
     try {
       const res = await fetch(`${API}/api/admin/galeria`, { headers: getAuthHeaders() });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "No se pudo cargar la galería");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message = json?.error || "No se pudo cargar la galería";
+        throw new Error(`${message} (HTTP ${res.status} en ${new URL(API).host})`);
+      }
       setFotos(json);
+      setErr("");
     } catch (error) {
       flash(setErr, error instanceof Error ? error.message : "No se pudo cargar la galería");
     }
@@ -266,7 +270,18 @@ export default function AdminGaleriaPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {msg && <div className="p-4 bg-emerald-50 border-l-4 border-emerald-500 text-emerald-700 text-sm font-bold rounded-r-xl flex items-center gap-2"><CheckCircle2 size={16} />{msg}</div>}
-      {err && <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl">{err}</div>}
+      {err && (
+        <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl flex items-center justify-between gap-4">
+          <span>{err}</span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="shrink-0 underline underline-offset-2"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 border-b border-slate-200">
         <button
@@ -323,6 +338,17 @@ export default function AdminGaleriaPage() {
                 className="relative mx-auto max-h-[360px] max-w-full overflow-hidden rounded-2xl bg-slate-950"
                 style={{ aspectRatio: videoAspectRatio, width: videoAspectRatio < 1 ? `${Math.min(240, 360 * videoAspectRatio)}px` : "100%" }}
               >
+                {videoAspectRatio < 1 && (
+                  <video
+                    src={videoPreview}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
+                  />
+                )}
                 <video
                   src={videoPreview}
                   controls

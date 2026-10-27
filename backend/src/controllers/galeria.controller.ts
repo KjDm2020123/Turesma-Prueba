@@ -1,6 +1,7 @@
 export {};
 
 const pool = require("../config/db");
+const { ensureGaleriaVideoColumns } = require("../config/galeriaSchema");
 
 const PUBLIC_GALLERY_CACHE_MS = 60_000;
 let publicGalleryCache: { expiresAt: number; rows: unknown[] } | null = null;
@@ -12,6 +13,7 @@ const invalidarGaleriaPublica = () => {
 // ── Público: fotos activas de la galería de viajes, para la landing pública ───
 const listarGaleriaPublica = async (_req: any, res: any) => {
   try {
+    await ensureGaleriaVideoColumns();
     if (publicGalleryCache && publicGalleryCache.expiresAt > Date.now()) {
       res.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
       return res.status(200).json(publicGalleryCache.rows);

@@ -137,6 +137,18 @@ function VideoPlayer({ src, title, offsetX, offsetY, zoom, aspectRatio }: { src:
       className="video-player group/video relative mx-auto max-h-[420px] max-w-full overflow-hidden bg-black"
       style={{ aspectRatio: displayAspectRatio, width: displayAspectRatio < 1 ? `min(100%, ${Math.round(420 * displayAspectRatio)}px)` : "100%" }}
     >
+      {displayAspectRatio < 1 && (
+        <video
+          src={loadPreview ? src : undefined}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="none"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
+        />
+      )}
       <video
         ref={videoRef}
         src={src}
