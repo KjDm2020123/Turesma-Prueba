@@ -84,7 +84,7 @@ const uploadGaleriaVideo = (req: any, res: any) => {
 const listarGaleriaAdmin = async (_req: any, res: any) => {
   try {
     const result = await pool.query(
-      `SELECT id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en
+      `SELECT id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en
        FROM galeria_viajes
        ORDER BY orden ASC, creado_en DESC`
     );
@@ -110,6 +110,18 @@ const crearGaleria = async (req: any, res: any) => {
     const videoZoom = Number.isFinite(Number(req.body.video_zoom))
       ? Math.max(100, Math.min(160, Math.round(Number(req.body.video_zoom))))
       : 100;
+    const videoFormat = ["original", "horizontal", "vertical"].includes(req.body.video_format)
+      ? req.body.video_format
+      : "horizontal";
+    const requestedAspectRatio = Number(req.body.video_aspect_ratio);
+    const originalAspectRatio = Number.isFinite(requestedAspectRatio) && requestedAspectRatio >= 0.25 && requestedAspectRatio <= 4
+      ? Math.round(requestedAspectRatio * 10000) / 10000
+      : 16 / 9;
+    const videoAspectRatio = videoFormat === "vertical"
+      ? 9 / 16
+      : videoFormat === "horizontal"
+        ? 16 / 9
+        : originalAspectRatio;
     const titulo = typeof req.body.titulo === "string" ? req.body.titulo.trim().slice(0, 120) : null;
     const descripcion = typeof req.body.descripcion === "string" ? req.body.descripcion.trim().slice(0, 500) : null;
     const credito = typeof req.body.credito === "string" ? req.body.credito.trim().slice(0, 160) : null;
@@ -138,11 +150,11 @@ const crearGaleria = async (req: any, res: any) => {
 
     const result = await pool.query(
       `INSERT INTO galeria_viajes (
-         imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo
+         imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE)
-       RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
-      [imagen_url, tipo, categoria, videoOffsetX, videoOffsetY, videoZoom, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, licenciaUrl || null, orden]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE)
+       RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
+      [imagen_url, tipo, categoria, videoOffsetX, videoOffsetY, videoZoom, videoFormat, videoAspectRatio, titulo || null, descripcion || null, credito || null, fuenteUrl || null, licencia || null, orden]
     );
     invalidarGaleriaPublica();
     return res.status(201).json(result.rows[0]);
@@ -187,7 +199,7 @@ const actualizarGaleria = async (req: any, res: any) => {
            licencia = COALESCE($6, licencia),
            licencia_url = COALESCE($7, licencia_url)
        WHERE id = $8
-      RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
+      RETURNING id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url, orden, activo, creado_en`,
       [activo, titulo ?? null, descripcion ?? null, credito ?? null, fuenteUrl ?? null, licencia ?? null, licenciaUrl ?? null, id]
     );
     invalidarGaleriaPublica();

@@ -18,7 +18,7 @@ const listarGaleriaPublica = async (_req: any, res: any) => {
     }
 
     const result = await pool.query(
-      `SELECT id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, titulo, descripcion, credito, fuente_url, licencia, licencia_url
+      `SELECT id, imagen_url, tipo, categoria, video_offset_x, video_offset_y, video_zoom, video_format, video_aspect_ratio, titulo, descripcion, credito, fuente_url, licencia, licencia_url
        FROM galeria_viajes
        WHERE activo = TRUE
        ORDER BY categoria ASC, orden ASC, creado_en DESC`

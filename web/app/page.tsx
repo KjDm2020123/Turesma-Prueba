@@ -48,6 +48,7 @@ type GaleriaFoto = {
   video_offset_x?: number | null;
   video_offset_y?: number | null;
   video_zoom?: number | null;
+  video_aspect_ratio?: number | null;
   titulo: string | null;
   descripcion: string | null;
   credito?: string | null;
@@ -80,11 +81,12 @@ type PublicDataCache = {
   galeria: GaleriaFoto[];
 };
 
-function VideoPlayer({ src, title, offsetX, offsetY, zoom }: { src: string; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null }) {
+function VideoPlayer({ src, title, offsetX, offsetY, zoom, aspectRatio }: { src: string; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null; aspectRatio?: number | null }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [loadPreview, setLoadPreview] = useState(false);
+  const displayAspectRatio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -131,7 +133,10 @@ function VideoPlayer({ src, title, offsetX, offsetY, zoom }: { src: string; titl
 
   return (
     <LocalizedContent>
-    <div className="video-player group/video relative aspect-video w-full overflow-hidden bg-black">
+    <div
+      className="video-player group/video relative mx-auto max-h-[420px] max-w-full overflow-hidden bg-black"
+      style={{ aspectRatio: displayAspectRatio, width: displayAspectRatio < 1 ? `min(100%, ${Math.round(420 * displayAspectRatio)}px)` : "100%" }}
+    >
       <video
         ref={videoRef}
         src={src}
@@ -146,7 +151,7 @@ function VideoPlayer({ src, title, offsetX, offsetY, zoom }: { src: string; titl
         onEnded={() => setIsPlaying(false)}
         onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
         onContextMenu={(event) => event.preventDefault()}
-        className="h-full w-full object-cover"
+        className="h-full w-full object-contain"
       />
       <div className="video-player-controls absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
         <button
@@ -804,7 +809,14 @@ export default function RootPage() {
             <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
               {videosGaleria.map((video) => (
                 <figure key={video.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl">
-                  <VideoPlayer src={video.imagen_url} title={video.titulo} offsetX={video.video_offset_x} offsetY={video.video_offset_y} zoom={video.video_zoom} />
+                  <VideoPlayer
+                    src={video.imagen_url}
+                    title={video.titulo}
+                    offsetX={video.video_offset_x}
+                    offsetY={video.video_offset_y}
+                    zoom={video.video_zoom}
+                    aspectRatio={video.video_aspect_ratio}
+                  />
                   {(video.titulo || video.descripcion) && (
                     <figcaption className="p-5">
                       {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}

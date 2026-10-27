@@ -1000,6 +1000,8 @@ const initDatabase = async () => {
       video_offset_x INT NOT NULL DEFAULT 0,
       video_offset_y INT NOT NULL DEFAULT 0,
       video_zoom INT NOT NULL DEFAULT 100,
+      video_format VARCHAR(12) NOT NULL DEFAULT 'horizontal',
+      video_aspect_ratio NUMERIC(6,4) NOT NULL DEFAULT 1.7778,
       titulo VARCHAR(120),
       descripcion TEXT,
       credito VARCHAR(160),
@@ -1022,7 +1024,9 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS licencia_url TEXT,
     ADD COLUMN IF NOT EXISTS video_offset_x INT NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS video_offset_y INT NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS video_zoom INT NOT NULL DEFAULT 100;
+    ADD COLUMN IF NOT EXISTS video_zoom INT NOT NULL DEFAULT 100,
+    ADD COLUMN IF NOT EXISTS video_format VARCHAR(12) NOT NULL DEFAULT 'horizontal',
+    ADD COLUMN IF NOT EXISTS video_aspect_ratio NUMERIC(6,4) NOT NULL DEFAULT 1.7778;
   `);
 
   await pool.query(`
