@@ -1,15 +1,63 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video, MapPin,
+  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video, MapPin, GripVertical,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+const createVideoPoster = (file: File): Promise<Blob | null> => new Promise((resolve) => {
+  const sourceUrl = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  let finished = false;
+
+  const finish = (poster: Blob | null) => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timeout);
+    video.removeEventListener("loadeddata", captureFrame);
+    video.removeEventListener("error", handleError);
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(sourceUrl);
+    resolve(poster);
+  };
+
+  const captureFrame = () => {
+    if (!video.videoWidth || !video.videoHeight) {
+      finish(null);
+      return;
+    }
+
+    const scale = Math.min(1, 960 / video.videoWidth);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      finish(null);
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(finish, "image/jpeg", 0.82);
+  };
+
+  const handleError = () => finish(null);
+  video.muted = true;
+  video.preload = "auto";
+  video.playsInline = true;
+  video.addEventListener("loadeddata", captureFrame, { once: true });
+  video.addEventListener("error", handleError, { once: true });
+  const timeout = setTimeout(() => finish(null), 10_000);
+  video.src = sourceUrl;
+  video.load();
+});
 
 type Foto = {
   id: number;
@@ -21,6 +69,7 @@ type Foto = {
   video_zoom?: number | null;
   video_format?: "original" | "horizontal" | "vertical";
   video_aspect_ratio?: number | null;
+  video_poster_url?: string | null;
   titulo: string | null;
   descripcion: string | null;
   credito: string | null;
@@ -49,23 +98,26 @@ export default function AdminGaleriaPage() {
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [actingId, setActingId] = useState<number | null>(null);
+  const [draggedVideoId, setDraggedVideoId] = useState<number | null>(null);
+  const [reorderingVideos, setReorderingVideos] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
+  const [videoPosterPreview, setVideoPosterPreview] = useState<string | null>(null);
+  const [videoPosterBlob, setVideoPosterBlob] = useState<Blob | null>(null);
+  const [videoPosterUrl, setVideoPosterUrl] = useState("");
   const [videoOffsetX, setVideoOffsetX] = useState(0);
   const [videoOffsetY, setVideoOffsetY] = useState(0);
   const [videoZoom, setVideoZoom] = useState(100);
   const [videoFormat, setVideoFormat] = useState<"original" | "horizontal" | "vertical">("original");
   const [videoOriginalAspectRatio, setVideoOriginalAspectRatio] = useState(16 / 9);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const posterRequestRef = useRef(0);
   const fotosCategoria = fotos.filter((foto) => foto.categoria === categoria);
   const imagenes = fotosCategoria.filter((foto) => foto.tipo === "imagen");
-  const videos = fotosCategoria.filter((foto) => foto.tipo === "video");
-  const videoAspectRatio = videoFormat === "vertical"
-    ? 9 / 16
-    : videoFormat === "horizontal"
-      ? 16 / 9
-      : videoOriginalAspectRatio;
+  const videos = fotosCategoria
+    .filter((foto) => foto.tipo === "video")
+    .sort((a, b) => a.orden - b.orden || new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
 
   const flash = (setter: (v: string) => void, value: string) => {
     setter(value);
@@ -73,10 +125,14 @@ export default function AdminGaleriaPage() {
   };
 
   const cambiarCategoria = (next: "viajes" | "destinos") => {
+    posterRequestRef.current += 1;
     setCategoria(next);
     setImagenUrl("");
     setVideoPreview(null);
     setSelectedVideo(null);
+    setVideoPosterPreview(null);
+    setVideoPosterBlob(null);
+    setVideoPosterUrl("");
     setVideoFormat("original");
     setVideoOriginalAspectRatio(16 / 9);
     if (next === "destinos") setTipoContenido("imagen");
@@ -87,6 +143,11 @@ export default function AdminGaleriaPage() {
     if (!videoPreview?.startsWith("blob:")) return;
     return () => URL.revokeObjectURL(videoPreview);
   }, [videoPreview]);
+
+  useEffect(() => {
+    if (!videoPosterPreview?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(videoPosterPreview);
+  }, [videoPosterPreview]);
 
   const load = async () => {
     try {
@@ -127,24 +188,42 @@ export default function AdminGaleriaPage() {
 
   const selectVideo = (file: File | null) => {
     if (!file) return;
+    const posterRequest = ++posterRequestRef.current;
     setErr("");
     setImagenUrl("");
     setSelectedVideo(file);
     setVideoPreview(URL.createObjectURL(file));
+    setVideoPosterPreview(null);
+    setVideoPosterBlob(null);
+    setVideoPosterUrl("");
     setVideoOffsetX(0);
     setVideoOffsetY(0);
     setVideoZoom(100);
     setVideoFormat("original");
     setVideoOriginalAspectRatio(16 / 9);
     if (fileRef.current) fileRef.current.value = "";
+    void createVideoPoster(file).then((poster) => {
+      if (posterRequestRef.current !== posterRequest || !poster) return;
+      setVideoPosterBlob(poster);
+      setVideoPosterPreview(URL.createObjectURL(poster));
+    });
   };
 
   const handleUploadVideo = async () => {
     if (!selectedVideo) return;
     setErr(""); setSubiendo(true);
     try {
+      let posterBlob = videoPosterBlob;
+      if (!posterBlob) {
+        posterBlob = await createVideoPoster(selectedVideo);
+        if (posterBlob) {
+          setVideoPosterBlob(posterBlob);
+          setVideoPosterPreview(URL.createObjectURL(posterBlob));
+        }
+      }
       const fd = new FormData();
       fd.append("video", selectedVideo);
+      if (posterBlob) fd.append("poster", posterBlob, "video-preview.jpg");
       const authToken = getAuthHeaders()["Authorization"];
       const res = await fetch(`${API}/api/admin/uploads/galeria-video`, {
         method: "POST",
@@ -154,6 +233,10 @@ export default function AdminGaleriaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al subir el video");
       setImagenUrl(json.videoUrl || "");
+      setVideoPosterUrl(json.posterUrl || "");
+      if (!json.posterUrl) {
+        flash(setErr, "No se pudo crear la miniatura; el video se publicará con un fondo alternativo.");
+      }
     } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo subir el video"); }
     finally { setSubiendo(false); }
   };
@@ -174,6 +257,7 @@ export default function AdminGaleriaPage() {
           video_zoom: videoZoom,
           video_format: videoFormat,
           video_aspect_ratio: videoOriginalAspectRatio,
+          video_poster_url: videoPosterUrl,
           titulo,
           descripcion,
         }),
@@ -181,7 +265,9 @@ export default function AdminGaleriaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al guardar");
       setFotos((p) => [json, ...p]);
+      posterRequestRef.current += 1;
       setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null); setSelectedVideo(null);
+      setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl("");
       setVideoFormat("original"); setVideoOriginalAspectRatio(16 / 9);
       if (fileRef.current) fileRef.current.value = "";
       flash(setMsg, `${tipoContenido === "video" ? "Video" : "Foto"} publicado en ${categoria === "destinos" ? "Destinos" : "Viajes"}`);
@@ -224,10 +310,99 @@ export default function AdminGaleriaPage() {
     finally { setActingId(null); }
   };
 
-  const renderContenido = (contenido: Foto) => (
-    <div key={contenido.id} className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${contenido.activo ? "border-slate-200" : "border-slate-200 opacity-60"}`}>
-      <div className={`relative aspect-[4/3] bg-slate-100 ${contenido.tipo === "imagen" ? "cursor-zoom-in" : ""}`} onClick={() => contenido.tipo === "imagen" && setZoomImg(contenido.imagen_url)}>
-        {contenido.tipo === "video" ? <video src={contenido.imagen_url} controls style={{ aspectRatio: contenido.video_aspect_ratio || 16 / 9, objectFit: "contain", transform: `translate(${contenido.video_offset_x || 0}%, ${contenido.video_offset_y || 0}%) scale(${(contenido.video_zoom || 100) / 100})` }} className="w-full h-full bg-black" /> : <Image src={contenido.imagen_url} alt={contenido.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />}
+  const reordenarVideos = async (draggedId: number, targetId: number) => {
+    if (draggedId === targetId || reorderingVideos) return;
+    const previousVideos = [...videos];
+    const reorderedVideos = [...videos];
+    const fromIndex = reorderedVideos.findIndex((video) => video.id === draggedId);
+    const toIndex = reorderedVideos.findIndex((video) => video.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const [draggedVideo] = reorderedVideos.splice(fromIndex, 1);
+    reorderedVideos.splice(toIndex, 0, draggedVideo);
+    const orderById = new Map(reorderedVideos.map((video, index) => [video.id, index]));
+    setFotos((current) => current.map((foto) => (
+      orderById.has(foto.id) ? { ...foto, orden: orderById.get(foto.id)! } : foto
+    )));
+    setReorderingVideos(true);
+
+    try {
+      const res = await fetch(`${API}/api/admin/galeria/orden-videos`, {
+        method: "PATCH",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: reorderedVideos.map((video) => video.id) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo guardar el orden");
+      flash(setMsg, "Orden de videos guardado");
+    } catch (error) {
+      const previousOrderById = new Map(previousVideos.map((video) => [video.id, video.orden]));
+      setFotos((current) => current.map((foto) => {
+        const previousOrder = previousOrderById.get(foto.id);
+        return previousOrder === undefined ? foto : { ...foto, orden: previousOrder };
+      }));
+      flash(setErr, error instanceof Error ? error.message : "No se pudo guardar el orden");
+    } finally {
+      setReorderingVideos(false);
+    }
+  };
+
+  const renderContenido = (contenido: Foto, index: number) => (
+    <div
+      key={contenido.id}
+      onDragOver={(event) => {
+        if (contenido.tipo === "video" && draggedVideoId !== null) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (contenido.tipo !== "video" || draggedVideoId === null) return;
+        event.preventDefault();
+        void reordenarVideos(draggedVideoId, contenido.id);
+        setDraggedVideoId(null);
+      }}
+      className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${draggedVideoId === contenido.id ? "border-[#E31E24] opacity-50" : "border-slate-200"} ${contenido.activo ? "" : "opacity-60"}`}
+    >
+      <div className={`relative ${contenido.tipo === "video" ? "aspect-video bg-slate-950" : "aspect-[4/3] bg-slate-100 cursor-zoom-in"}`} onClick={() => contenido.tipo === "imagen" && setZoomImg(contenido.imagen_url)}>
+        {contenido.tipo === "video" ? (
+          <>
+            <Image
+              src={contenido.video_poster_url || "/video-poster.svg"}
+              alt="Vista previa del video"
+              aria-hidden="true"
+              fill
+              sizes="(max-width: 768px) 50vw, 25vw"
+              unoptimized
+              className="pointer-events-none scale-110 object-cover opacity-60 blur-2xl"
+            />
+            <span className="absolute left-2 top-2 z-20 rounded-lg bg-slate-950/75 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-white">
+              {index === 0 ? "Grande · izquierda" : index % 3 === 1 ? "Pequeño · arriba" : index % 3 === 2 ? "Pequeño · abajo" : `Mosaico ${Math.floor(index / 3) + 1} · grande`}
+            </span>
+            <button
+              type="button"
+              draggable={!reorderingVideos}
+              disabled={reorderingVideos}
+              aria-label={`Arrastrar para cambiar el orden de ${contenido.titulo || "este video"}`}
+              onDragStart={(event: DragEvent<HTMLButtonElement>) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", String(contenido.id));
+                setDraggedVideoId(contenido.id);
+              }}
+              onDragEnd={() => setDraggedVideoId(null)}
+              className="absolute right-2 top-2 z-20 flex cursor-grab items-center gap-1 rounded-lg bg-slate-950/75 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-white active:cursor-grabbing disabled:opacity-50"
+              title="Arrastra este video para cambiar su posición"
+            >
+              <GripVertical size={13} /> Mover
+            </button>
+            <video
+              src={contenido.imagen_url}
+              poster={contenido.video_poster_url || "/video-poster.svg"}
+              controls
+              style={{ transform: `translate(${contenido.video_offset_x || 0}%, ${contenido.video_offset_y || 0}%) scale(${(contenido.video_zoom || 100) / 100})` }}
+              className="relative z-10 h-full w-full bg-transparent object-contain"
+            />
+          </>
+        ) : (
+          <Image src={contenido.imagen_url} alt={contenido.titulo || "Foto de viaje"} fill sizes="(max-width: 768px) 50vw, 25vw" unoptimized className="object-cover" />
+        )}
         {!contenido.activo && (
           <span className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg">Oculta</span>
         )}
@@ -324,8 +499,8 @@ export default function AdminGaleriaPage() {
           <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Agregar {categoria === "destinos" ? "foto de destino" : "contenido de viaje"}</p>
           {categoria === "viajes" && (
             <div className="flex rounded-xl border border-slate-200 p-1 bg-slate-50">
-              <button type="button" onClick={() => { setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
-              <button type="button" onClick={() => { setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
+              <button type="button" onClick={() => { posterRequestRef.current += 1; setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl(""); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
+              <button type="button" onClick={() => { posterRequestRef.current += 1; setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl(""); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
             </div>
           )}
         </div>
@@ -335,29 +510,29 @@ export default function AdminGaleriaPage() {
             <input ref={fileRef} type="file" accept={tipoContenido === "video" ? "video/mp4,video/webm,video/quicktime" : "image/jpeg,image/png,image/webp"} className="hidden" onChange={(e) => tipoContenido === "video" ? selectVideo(e.target.files?.[0] || null) : handleFile(e.target.files?.[0] || null)} />
             {tipoContenido === "video" && videoPreview ? (
               <div
-                className="relative mx-auto max-h-[360px] max-w-full overflow-hidden rounded-2xl bg-slate-950"
-                style={{ aspectRatio: videoAspectRatio, width: videoAspectRatio < 1 ? `${Math.min(240, 360 * videoAspectRatio)}px` : "100%" }}
+                className="relative mx-auto flex aspect-video max-h-[360px] w-full max-w-full items-center justify-center overflow-hidden rounded-2xl bg-slate-950"
               >
-                {videoAspectRatio < 1 && (
-                  <video
-                    src={videoPreview}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
-                  />
-                )}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-2xl"
+                  style={{ backgroundImage: `url("${videoPosterPreview || "/video-poster.svg"}")` }}
+                />
                 <video
                   src={videoPreview}
+                  poster={videoPosterPreview || "/video-poster.svg"}
                   controls
                   onLoadedMetadata={(event) => {
                     const { videoWidth, videoHeight } = event.currentTarget;
                     if (videoWidth > 0 && videoHeight > 0) setVideoOriginalAspectRatio(videoWidth / videoHeight);
                   }}
-                  style={{ objectFit: "contain", transform: `translate(${videoOffsetX}%, ${videoOffsetY}%) scale(${videoZoom / 100})` }}
-                  className="h-full w-full bg-black"
+                  style={{
+                    aspectRatio: videoOriginalAspectRatio,
+                    width: videoOriginalAspectRatio < 1 ? "auto" : "100%",
+                    height: videoOriginalAspectRatio < 1 ? "100%" : "auto",
+                    objectFit: "contain",
+                    transform: `translate(${videoOffsetX}%, ${videoOffsetY}%) scale(${videoZoom / 100})`,
+                  }}
+                  className="relative z-10 max-h-full max-w-full bg-transparent"
                 />
               </div>
             ) : (
@@ -474,9 +649,15 @@ export default function AdminGaleriaPage() {
                   <h2 className="text-[11px] font-black uppercase tracking-widest text-slate-600">{title}</h2>
                   <span className="text-[11px] font-black text-slate-300">· {items.length}</span>
                 </div>
+                {title === "Videos" && items.length > 1 && (
+                  <p className="mb-4 text-xs font-medium text-slate-500">
+                    Arrastra cada video desde <span className="font-bold">Mover</span>: el primero será grande a la izquierda y los dos siguientes irán apilados a la derecha.
+                    {reorderingVideos && <span className="ml-2 text-[#E31E24]">Guardando orden...</span>}
+                  </p>
+                )}
                 {items.length > 0 ? (
                   <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-                    {items.map(renderContenido)}
+                    {items.map((item, index) => renderContenido(item, index))}
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center">

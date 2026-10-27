@@ -49,6 +49,7 @@ type GaleriaFoto = {
   video_offset_y?: number | null;
   video_zoom?: number | null;
   video_aspect_ratio?: number | null;
+  video_poster_url?: string | null;
   titulo: string | null;
   descripcion: string | null;
   credito?: string | null;
@@ -81,12 +82,11 @@ type PublicDataCache = {
   galeria: GaleriaFoto[];
 };
 
-function VideoPlayer({ src, title, offsetX, offsetY, zoom, aspectRatio }: { src: string; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null; aspectRatio?: number | null }) {
+function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, className }: { src: string; posterUrl?: string | null; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null; className?: string }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [loadPreview, setLoadPreview] = useState(false);
-  const displayAspectRatio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -133,25 +133,20 @@ function VideoPlayer({ src, title, offsetX, offsetY, zoom, aspectRatio }: { src:
 
   return (
     <LocalizedContent>
-    <div
-      className="video-player group/video relative mx-auto max-h-[420px] max-w-full overflow-hidden bg-black"
-      style={{ aspectRatio: displayAspectRatio, width: displayAspectRatio < 1 ? `min(100%, ${Math.round(420 * displayAspectRatio)}px)` : "100%" }}
-    >
-      {displayAspectRatio < 1 && (
-        <video
-          src={loadPreview ? src : undefined}
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="none"
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
-        />
-      )}
+    <div className={`video-player group/video relative overflow-hidden bg-slate-950 ${className || "mx-auto aspect-video max-h-[420px] max-w-full"}`}>
+      <Image
+        src={posterUrl || "/video-poster.svg"}
+        alt="Vista previa del video"
+        aria-hidden="true"
+        fill
+        sizes="(max-width: 768px) 100vw, 50vw"
+        unoptimized
+        className="pointer-events-none scale-110 object-cover opacity-60 blur-2xl"
+      />
       <video
         ref={videoRef}
         src={src}
+        poster={posterUrl || "/video-poster.svg"}
         preload={loadPreview ? "metadata" : "none"}
         playsInline
         disablePictureInPicture
@@ -163,9 +158,9 @@ function VideoPlayer({ src, title, offsetX, offsetY, zoom, aspectRatio }: { src:
         onEnded={() => setIsPlaying(false)}
         onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
         onContextMenu={(event) => event.preventDefault()}
-        className="h-full w-full object-contain"
+        className="relative z-10 h-full w-full bg-transparent object-contain"
       />
-      <div className="video-player-controls absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
+      <div className="video-player-controls absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
         <button
           type="button"
           onClick={togglePlayback}
@@ -206,6 +201,10 @@ export default function RootPage() {
   const publicDataCacheRef = useRef<PublicDataCache>({ vehiculos: [], galeria: [] });
   const fotosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo !== "video");
   const videosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo === "video");
+  const mosaicosVideos = Array.from(
+    { length: Math.ceil(videosGaleria.length / 3) },
+    (_, index) => videosGaleria.slice(index * 3, index * 3 + 3)
+  );
   const fotosDestinos = galeria.filter((contenido) => contenido.categoria === "destinos" && contenido.tipo !== "video");
 
   useEffect(() => {
@@ -818,24 +817,45 @@ export default function RootPage() {
           </div>
 
           {videosGaleria.length > 0 ? (
-            <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
-              {videosGaleria.map((video) => (
-                <figure key={video.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl">
-                  <VideoPlayer
-                    src={video.imagen_url}
-                    title={video.titulo}
-                    offsetX={video.video_offset_x}
-                    offsetY={video.video_offset_y}
-                    zoom={video.video_zoom}
-                    aspectRatio={video.video_aspect_ratio}
-                  />
-                  {(video.titulo || video.descripcion) && (
-                    <figcaption className="p-5">
-                      {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
-                      {video.descripcion && <p className="mt-1 text-sm font-medium leading-snug text-gray-400">{video.descripcion}</p>}
-                    </figcaption>
-                  )}
-                </figure>
+            <div className="mx-auto max-w-6xl space-y-6">
+              {mosaicosVideos.map((mosaico) => (
+                <div
+                  key={mosaico[0].id}
+                  className={`grid grid-cols-1 gap-4 ${
+                    mosaico.length === 1
+                      ? "md:grid-cols-1"
+                      : mosaico.length === 2
+                        ? "md:grid-cols-2"
+                        : "md:grid-cols-3 md:grid-rows-2"
+                  }`}
+                >
+                  {mosaico.map((video, index) => (
+                    <figure
+                      key={video.id}
+                      className={`group relative min-w-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl ${
+                        mosaico.length === 3 && index === 0 ? "md:col-span-2 md:row-span-2" : ""
+                      }`}
+                    >
+                      <VideoPlayer
+                        src={video.imagen_url}
+                        posterUrl={video.video_poster_url}
+                        title={video.titulo}
+                        offsetX={video.video_offset_x}
+                        offsetY={video.video_offset_y}
+                        zoom={video.video_zoom}
+                        className={mosaico.length === 3 && index === 0
+                          ? "h-full w-full aspect-video max-h-none"
+                          : undefined}
+                      />
+                      {(video.titulo || video.descripcion) && (
+                        <figcaption className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/75 to-transparent p-4 pt-5">
+                          {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
+                          {video.descripcion && <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-gray-200">{video.descripcion}</p>}
+                        </figcaption>
+                      )}
+                    </figure>
+                  ))}
+                </div>
               ))}
             </div>
           ) : (

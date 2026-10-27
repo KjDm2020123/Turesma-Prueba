@@ -107,6 +107,7 @@ const {
   crearGaleria,
   actualizarGaleria,
   eliminarGaleria,
+  reordenarVideosGaleria,
 } = require("../controllers/admin/galeria.admin.controller");
 const {
   listarMatriculas,
@@ -277,6 +278,7 @@ router.post("/uploads/galeria-imagen", uploadGaleriaImagen);
 router.post("/uploads/galeria-video", uploadGaleriaVideo);
 router.get("/galeria", listarGaleriaAdmin);
 router.post("/galeria", crearGaleria);
+router.patch("/galeria/orden-videos", reordenarVideosGaleria);
 router.patch("/galeria/:id", actualizarGaleria);
 router.delete("/galeria/:id", eliminarGaleria);
 

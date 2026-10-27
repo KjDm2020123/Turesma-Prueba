@@ -1003,6 +1003,7 @@ const initDatabase = async () => {
       video_zoom INT NOT NULL DEFAULT 100,
       video_format VARCHAR(12) NOT NULL DEFAULT 'horizontal',
       video_aspect_ratio NUMERIC(6,4) NOT NULL DEFAULT 1.7778,
+      video_poster_url TEXT,
       titulo VARCHAR(120),
       descripcion TEXT,
       credito VARCHAR(160),

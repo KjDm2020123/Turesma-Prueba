@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" fill="none">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#030712"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="matrix(530 300 -300 530 640 360)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E31E24" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#E31E24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#background)" d="M0 0h1280v720H0z"/>
+  <path fill="url(#glow)" d="M0 0h1280v720H0z"/>
+  <circle cx="640" cy="330" r="76" fill="#fff" fill-opacity=".12"/>
+  <path d="M620 288a12 12 0 0 1 18-10l63 40a12 12 0 0 1 0 20l-63 40a12 12 0 0 1-18-10V288Z" fill="#fff"/>
+  <text x="640" y="470" fill="#fff" fill-opacity=".8" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="6" text-anchor="middle">TURESMA EN MOVIMIENTO</text>
+</svg>
