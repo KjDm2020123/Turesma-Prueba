@@ -1025,6 +1025,41 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS licencia VARCHAR(80),
     ADD COLUMN IF NOT EXISTS licencia_url TEXT;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS homepage_showcase_images (
+      slot VARCHAR(20) PRIMARY KEY CHECK (slot IN ('primary', 'secondary')),
+      image_url TEXT NOT NULL,
+      position_x NUMERIC(5,2) NOT NULL DEFAULT 50,
+      position_y NUMERIC(5,2) NOT NULL DEFAULT 50,
+      zoom NUMERIC(5,2) NOT NULL DEFAULT 100,
+      actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE homepage_showcase_images
+      ADD COLUMN IF NOT EXISTS position_x NUMERIC(5,2) NOT NULL DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS position_y NUMERIC(5,2) NOT NULL DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS zoom NUMERIC(5,2) NOT NULL DEFAULT 100;
+  `);
+
+  await pool.query(`
+    INSERT INTO homepage_showcase_images (slot, image_url)
+    SELECT
+      CASE WHEN ranked.position = 1 THEN 'primary' ELSE 'secondary' END,
+      ranked.imagen_url
+    FROM (
+      SELECT
+        imagen_url,
+        ROW_NUMBER() OVER (ORDER BY capacidad DESC NULLS LAST, orden ASC NULLS LAST, id DESC) AS position
+      FROM vehiculos
+      WHERE activo = true AND imagen_url IS NOT NULL AND BTRIM(imagen_url) <> ''
+    ) ranked
+    WHERE ranked.position <= 2
+    ON CONFLICT (slot) DO NOTHING;
+  `);
+
   await ensureGaleriaVideoColumns();
 
   await pool.query(`

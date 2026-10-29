@@ -32,6 +32,7 @@ import {
   Calculator,
   IdCard,
   Images,
+  ImagePlus,
   Ticket
 } from "lucide-react";
 import { clearStoredUser } from "../../../lib/session";
@@ -101,6 +102,7 @@ const menuGroups: MenuGroup[] = [
   {
     id: "sistema", label: "Sistema", icon: Settings, items: [
       { href: "/admin/galeria", label: "Galería Web", icon: Images },
+      { href: "/admin/imagenes-portada", label: "Imágenes de portada", icon: ImagePlus },
       { href: "/admin/configuracion", label: "Mi perfil", icon: User },
       { href: "/admin/tarifas", label: "Tabla de precios", icon: Calculator },
     ],
@@ -386,7 +388,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         </header>
 
         {/* SECTION CONTENT */}
-        <section className="min-w-0 overflow-x-hidden p-3 md:p-10 flex-1 overflow-y-auto">
+        <section className="min-w-0 min-h-0 overflow-x-hidden p-3 md:p-10 flex-1 overflow-y-auto">
           <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 space-y-8">
             
             {/* TÍTULO SECCIÓN CON INDICADOR ROJO */}

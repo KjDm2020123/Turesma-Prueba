@@ -128,6 +128,10 @@ const {
 } = require("../controllers/admin/operaciones.admin.controller");
 const { consultarChatbotAdmin } = require("../controllers/admin/chatbot.admin.controller");
 const {
+  getAdminHomeShowcaseImages,
+  updateHomeShowcaseImage,
+} = require("../controllers/home-showcase.controller");
+const {
   listarViajesAdmin,
   crearViajeAdmin,
   actualizarViajeAdmin,
@@ -144,6 +148,8 @@ router.use(requireRole("admin", "operativo"));
 router.get("/catalogo", getCatalogo);
 router.get("/tarifas", getTarifas);
 router.put("/tarifas", updateTarifas);
+router.get("/home-showcase-images", getAdminHomeShowcaseImages);
+router.put("/home-showcase-images/:slot", updateHomeShowcaseImage);
 
 // ── DASHBOARD PRINCIPAL ───────────────────────────────────────────────────────
 router.get("/dashboard", getDashboardData);

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   CalendarRange,
   Route,
+  ArrowUpRight,
   UsersRound,
   SlidersHorizontal,
   PlayCircle,
@@ -80,6 +81,18 @@ const handleRemoteImageError = (event: SyntheticEvent<HTMLImageElement>) => {
 type PublicDataCache = {
   vehiculos: VehiculoPublico[];
   galeria: GaleriaFoto[];
+};
+
+type HomeShowcaseImage = {
+  image_url: string | null;
+  position_x: number;
+  position_y: number;
+  zoom: number;
+};
+
+type HomeShowcaseImages = {
+  primary: HomeShowcaseImage | null;
+  secondary: HomeShowcaseImage | null;
 };
 
 function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, className }: { src: string; posterUrl?: string | null; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null; className?: string }) {
@@ -192,6 +205,10 @@ export default function RootPage() {
   const [vehiculos, setVehiculos] = useState<VehiculoPublico[]>([]);
   const [loadingVehiculos, setLoadingVehiculos] = useState(true);
   const [galeria, setGaleria] = useState<GaleriaFoto[]>([]);
+  const [homeShowcaseImages, setHomeShowcaseImages] = useState<HomeShowcaseImages>({
+    primary: null,
+    secondary: null,
+  });
   const [shouldLoadGallery, setShouldLoadGallery] = useState(false);
   const flotaRef = useRef<HTMLDivElement | null>(null);
   const galleryTriggerRef = useRef<HTMLDivElement | null>(null);
@@ -201,6 +218,8 @@ export default function RootPage() {
   const publicDataCacheRef = useRef<PublicDataCache>({ vehiculos: [], galeria: [] });
   const fotosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo !== "video");
   const videosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo === "video");
+  const imagenPrincipal = homeShowcaseImages.primary?.image_url || HERO_IMAGE_URL;
+  const imagenSecundaria = homeShowcaseImages.secondary?.image_url || "/destinos/puerto-lopez.jpg";
   const mosaicosVideos = Array.from(
     { length: Math.ceil(videosGaleria.length / 3) },
     (_, index) => videosGaleria.slice(index * 3, index * 3 + 3)
@@ -313,6 +332,45 @@ export default function RootPage() {
         console.error("Error cargando los vehículos públicos:", error);
       })
       .finally(() => setLoadingVehiculos(false));
+  }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+    fetch(`${API_URL}/api/usuarios/home-showcase-images`, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error(`No se pudieron cargar las imágenes destacadas (${response.status})`);
+        return response.json();
+      })
+      .then((data: unknown) => {
+        if (!data || typeof data !== "object") throw new Error("La respuesta de imágenes destacadas no es válida");
+        const images = data as Partial<HomeShowcaseImages>;
+        if (!isCurrent) return;
+        setHomeShowcaseImages({
+          primary: images.primary && typeof images.primary.image_url === "string"
+            ? {
+                image_url: images.primary.image_url,
+                position_x: Number.isFinite(images.primary.position_x) ? images.primary.position_x : 50,
+                position_y: Number.isFinite(images.primary.position_y) ? images.primary.position_y : 50,
+                zoom: Number.isFinite(images.primary.zoom) ? images.primary.zoom : 100,
+              }
+            : null,
+          secondary: images.secondary && typeof images.secondary.image_url === "string"
+            ? {
+                image_url: images.secondary.image_url,
+                position_x: Number.isFinite(images.secondary.position_x) ? images.secondary.position_x : 50,
+                position_y: Number.isFinite(images.secondary.position_y) ? images.secondary.position_y : 50,
+                zoom: Number.isFinite(images.secondary.zoom) ? images.secondary.zoom : 100,
+              }
+            : null,
+        });
+      })
+      .catch((error: unknown) => {
+        console.error("Error cargando las imágenes destacadas:", error);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -511,6 +569,105 @@ export default function RootPage() {
               </a>
               <a href={`https://wa.me/${TELEFONO_EMPRESA}`} target="_blank" rel="noreferrer" className="home-button rounded-2xl border-2 border-white/20 bg-white/5 px-8 py-4 font-black uppercase tracking-widest text-white backdrop-blur-md transition-all hover:bg-white/10">
                 Contactar Asesor
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECCIÓN DE EXPERIENCIA Y COTIZACIÓN */}
+      <section className="overflow-hidden border-b border-gray-100 bg-[#f7f8fa] py-20 sm:py-24">
+        <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-20 lg:px-8" data-reveal>
+          <div className="relative mx-auto h-[390px] w-full max-w-[520px] sm:h-[480px]">
+            <figure className="absolute left-[3%] top-0 h-[88%] w-[68%] overflow-hidden rounded-[48%_48%_38%_38%] border border-white bg-gray-200 shadow-xl">
+              <Image
+                src={imagenPrincipal}
+                alt="Vehículo de la flota de TURESMA"
+                fill
+                sizes="(max-width: 640px) 68vw, (max-width: 1024px) 38vw, 330px"
+                quality={75}
+                loading="eager"
+                onError={handleRemoteImageError}
+                className="object-cover"
+                style={{
+                  objectPosition: `${homeShowcaseImages.primary?.position_x ?? 50}% ${homeShowcaseImages.primary?.position_y ?? 50}%`,
+                  transform: `scale(${(homeShowcaseImages.primary?.zoom ?? 100) / 100})`,
+                }}
+              />
+            </figure>
+            <figure className="absolute bottom-[2%] right-[2%] h-[48%] w-[55%] overflow-hidden rounded-[46%_46%_30%_30%] border-[6px] border-[#f7f8fa] bg-gray-200 shadow-xl">
+              <Image
+                src={imagenSecundaria}
+                alt="Destino para un recorrido con TURESMA"
+                fill
+                sizes="(max-width: 640px) 55vw, (max-width: 1024px) 31vw, 270px"
+                quality={75}
+                onError={handleRemoteImageError}
+                className="object-cover"
+                style={{
+                  objectPosition: `${homeShowcaseImages.secondary?.position_x ?? 50}% ${homeShowcaseImages.secondary?.position_y ?? 50}%`,
+                  transform: `scale(${(homeShowcaseImages.secondary?.zoom ?? 100) / 100})`,
+                }}
+              />
+            </figure>
+            <div className="absolute right-[5%] top-[25%] flex h-16 w-16 rotate-12 items-center justify-center rounded-full bg-[#E31E24] text-4xl font-black text-white shadow-lg sm:right-[8%] sm:h-20 sm:w-20 sm:text-5xl" aria-hidden="true">
+              *
+            </div>
+            <div className="absolute bottom-[5%] left-[5%] flex items-center gap-2 rounded-2xl border border-white bg-white/95 px-4 py-3 shadow-lg">
+              <Bus size={22} className="text-[#E31E24]" aria-hidden="true" />
+              <span className="text-xs font-black uppercase tracking-wide text-gray-800">Flota TURESMA</span>
+            </div>
+          </div>
+
+          <div className="max-w-xl lg:py-8">
+            <p className="mb-4 text-xs font-black uppercase tracking-[0.24em] text-[#E31E24]">
+              Transporte turístico y ejecutivo
+            </p>
+            <h2 className="text-4xl font-black leading-tight tracking-tight text-gray-950 sm:text-5xl">
+              Tu viaje, a tu medida.
+            </h2>
+            <p className="mt-5 text-base leading-relaxed text-gray-600 sm:text-lg">
+              Cuéntanos tu destino, fecha y tipo de recorrido. Explora las alternativas de TURESMA y solicita una cotización para planificar tu traslado.
+            </p>
+
+            <div className="mt-8 divide-y divide-gray-200">
+              <article className="flex gap-4 py-5">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-[#E31E24]">
+                  <CalendarRange size={24} aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-black text-gray-900">Cotiza tu recorrido</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                    Revisa una propuesta para tu ruta y servicio antes de confirmar la reserva.
+                  </p>
+                </div>
+              </article>
+              <article className="flex gap-4 py-5">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                  <Route size={24} aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-black text-gray-900">Una opción para cada recorrido</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                    Conoce los servicios turísticos, ejecutivos y de transporte para eventos.
+                  </p>
+                </div>
+              </article>
+            </div>
+
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <Link
+                href="/login"
+                className="home-button inline-flex items-center gap-3 rounded-full bg-[#E31E24] px-6 py-3.5 text-sm font-black text-white shadow-lg shadow-red-200 hover:bg-black"
+              >
+                Solicitar cotización <ArrowUpRight size={18} aria-hidden="true" />
+              </Link>
+              <a
+                href="#flota"
+                onClick={(event) => scrollToSection(event, "flota")}
+                className="home-button inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-black text-gray-700 hover:text-[#E31E24]"
+              >
+                Ver la flota <ChevronRight size={18} aria-hidden="true" />
               </a>
             </div>
           </div>

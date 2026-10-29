@@ -21,6 +21,7 @@ const { uploadComprobantePago, serveComprobante } = require("../controllers/uplo
 const { enviarVerificacion, miVerificacion } = require("../controllers/verificacion.controller");
 const { listarGaleriaPublica } = require("../controllers/galeria.controller");
 const { listarViajesPublicos, reservarViajePublicado } = require("../controllers/viajes.controller");
+const { getPublicHomeShowcaseImages } = require("../controllers/home-showcase.controller");
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.get("/tarifas", listarTarifasCliente);
 router.post("/vehiculos/recomendacion", verifyToken, recomendarVehiculo);
 router.get("/vehiculos/:id/disponibilidad", verDisponibilidadVehiculoCliente);
 router.get("/galeria", listarGaleriaPublica);
+router.get("/home-showcase-images", getPublicHomeShowcaseImages);
 router.get("/viajes", listarViajesPublicos);
 
 // Rutas protegidas por token

@@ -43,6 +43,16 @@ CREATE TABLE reservas (
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Imágenes independientes del bloque promocional de la página de inicio
+CREATE TABLE IF NOT EXISTS homepage_showcase_images (
+    slot VARCHAR(20) PRIMARY KEY CHECK (slot IN ('primary', 'secondary')),
+    image_url TEXT NOT NULL,
+    position_x NUMERIC(5,2) NOT NULL DEFAULT 50,
+    position_y NUMERIC(5,2) NOT NULL DEFAULT 50,
+    zoom NUMERIC(5,2) NOT NULL DEFAULT 100,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Usuarios: crear por API para evitar credenciales hardcodeadas
 -- Ejemplo POST http://localhost:4000/api/usuarios
 -- {
