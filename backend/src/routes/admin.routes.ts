@@ -126,6 +126,7 @@ const {
   historialOperacion,
 } = require("../controllers/admin/operaciones.admin.controller");
 const { consultarChatbotAdmin } = require("../controllers/admin/chatbot.admin.controller");
+const { getCalendarioFlota } = require("../controllers/admin/calendario-flota.admin.controller");
 const {
   getAdminHomeShowcaseImages,
   updateHomeShowcaseImage,
@@ -156,6 +157,7 @@ router.get("/control-operativo", getControlOperativo);
 router.get("/historial/mensual", getHistorialMensual);
 
 router.get("/operaciones", listarOperaciones);
+router.get("/calendario-flota", requireRole("admin"), getCalendarioFlota);
 router.get("/operaciones/reservas-pendientes", listarReservasPorDespachar);
 router.post("/operaciones/reservas/:id/despachar", crearOperacionDesdeReserva);
 router.post("/operaciones", crearOperacion);

@@ -24,6 +24,14 @@ export async function proxy(request: NextRequest) {
   const userPortal = getPortalPath(session.rol);
   const allowed = userPortal === requestedPortal;
 
+  if (
+    allowed &&
+    request.nextUrl.pathname.startsWith("/admin/calendario-flota") &&
+    session.rol.toLowerCase() !== "admin"
+  ) {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
   if (!allowed) {
     return NextResponse.redirect(new URL(userPortal || "/login", request.url));
   }

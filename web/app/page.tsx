@@ -644,12 +644,23 @@ export default function RootPage() {
               </article>
               <article className="flex gap-4 py-5">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-                  <Route size={24} aria-hidden="true" />
+                  <Bus size={24} aria-hidden="true" />
                 </span>
                 <div>
-                  <h3 className="text-lg font-black text-gray-900">Una opción para cada recorrido</h3>
+                  <h3 className="text-lg font-black text-gray-900">Vehículos para cada necesidad</h3>
                   <p className="mt-1 text-sm leading-relaxed text-gray-600">
-                    Conoce los servicios turísticos, ejecutivos y de transporte para eventos.
+                    Autos, camionetas, SUV, vans, minibuses y buses para tu recorrido.
+                  </p>
+                </div>
+              </article>
+              <article className="flex gap-4 py-5">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                  <MapPin size={24} aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="text-lg font-black text-gray-900">Guía turístico bajo solicitud</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                    ¿Necesitas un guía? Solicítalo al cotizar tu recorrido y consulta su disponibilidad.
                   </p>
                 </div>
               </article>

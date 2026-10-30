@@ -21,6 +21,7 @@ import {
   UserCircle,
   Car,
   Calendar,
+  CalendarDays,
   Wrench,
   FileText,
   Route,
@@ -40,6 +41,7 @@ import { useAdminBadges } from "./use-admin-badges";
 import { AdminChatbot } from "./admin-chatbot";
 import { useMobileMenuAccessibility } from "../../../lib/use-mobile-menu-accessibility";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
+import { normalizeRole } from "../../../lib/session";
 
 type AdminShellProps = {
   children: React.ReactNode;
@@ -49,6 +51,7 @@ type MenuItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  adminOnly?: boolean;
 };
 
 type MenuGroup = {
@@ -70,6 +73,7 @@ const menuGroups: MenuGroup[] = [
   {
     id: "operaciones", label: "Operaciones", icon: Route, items: [
       { href: "/admin/operaciones", label: "Despacho", icon: ClipboardList },
+      { href: "/admin/calendario-flota", label: "Calendario de flota", icon: CalendarDays, adminOnly: true },
       { href: "/admin/viajes", label: "Viajes publicados", icon: Ticket },
       { href: "/admin/cotizaciones", label: "Cotizaciones", icon: FileText },
       { href: "/admin/reservas", label: "Reservas", icon: Calendar },
@@ -115,6 +119,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
   const mobileMenuRef = useRef<HTMLElement | null>(null);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const { user, checkingSession } = useAdminGuard();
+  const isAdmin = normalizeRole(user?.rol) === "admin";
 
   const badges = useAdminBadges(!checkingSession);
   useMobileMenuAccessibility(isMobileMenuOpen, setIsMobileMenuOpen, mobileMenuRef, mobileMenuTriggerRef);
@@ -178,9 +183,11 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto custom-scrollbar">
           <p className="px-4 text-[10px] font-black text-gray-600 uppercase tracking-widest mb-4">Navegación Sistema</p>
           {menuGroups.map((group) => {
+            const visibleItems = group.items.filter((item) => !item.adminOnly || isAdmin);
+            if (visibleItems.length === 0) return null;
             const GroupIcon = group.icon;
             const isOpen = openGroups.has(group.id);
-            const groupHasActive = group.items.some((i) => isActive(i.href));
+            const groupHasActive = visibleItems.some((i) => isActive(i.href));
             return (
               <div key={group.id}>
                 <button
@@ -200,7 +207,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
                 </button>
                 <div id={`admin-desktop-group-${group.id}`} inert={!isOpen} className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"}`}>
                   <div className="pl-2 pb-1 space-y-1">
-                    {group.items.map((item) => {
+                    {visibleItems.map((item) => {
                       const active = isActive(item.href);
                       const Icon = item.icon;
                       const pendientes = badges[item.href] || 0;
@@ -287,9 +294,11 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         </div>
         <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-6 custom-scrollbar">
           {menuGroups.map((group) => {
+            const visibleItems = group.items.filter((item) => !item.adminOnly || isAdmin);
+            if (visibleItems.length === 0) return null;
             const GroupIcon = group.icon;
             const isOpen = openGroups.has(group.id);
-            const groupHasActive = group.items.some((i) => isActive(i.href));
+            const groupHasActive = visibleItems.some((i) => isActive(i.href));
             return (
               <div key={group.id}>
                 <button
@@ -307,7 +316,7 @@ export const AdminShell = ({ children }: AdminShellProps) => {
                 </button>
                 <div id={`admin-mobile-group-${group.id}`} inert={!isOpen} className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[480px] opacity-100" : "max-h-0 opacity-0"}`}>
                   <div className="pl-2 pb-1 space-y-1">
-                    {group.items.map((item) => {
+                    {visibleItems.map((item) => {
                       const pendientes = badges[item.href] || 0;
                       return (
                         <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)} className={`w-full flex items-center justify-between gap-4 px-5 py-4 rounded-2xl transition-all ${isActive(item.href) ? "bg-[#E31E24] text-white" : "text-gray-300 hover:bg-white/5"}`}>
