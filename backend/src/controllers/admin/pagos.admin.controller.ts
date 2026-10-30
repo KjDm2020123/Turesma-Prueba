@@ -6,10 +6,9 @@ const { notificarClienteReserva } = require("../../config/reservaMailer");
 const { obtenerPagoAprobado, enviarReciboPago } = require("../../config/reciboPago");
 
 // Recalcula monto_pagado y estado_pago de una reserva a partir de sus pagos
-// APROBADOS. estado_pago pasa a 'confirmado' al alcanzar el 50% del total
-// (el mínimo exigido para asegurar la reserva). Cuando eso ocurre y la reserva
-// todavía está 'pendiente_pago', la reserva misma pasa a 'confirmada': recién
-// ahí se vuelve visible para el conductor y se le notifica.
+// APROBADOS. La reserva solo se confirma cuando el total está pagado. Cuando
+// eso ocurre y la reserva todavía está 'pendiente_pago', se vuelve visible
+// para el conductor y se le notifica.
 const recalcularEstadoPago = async (reservaId: number, adminId: number | null | undefined) => {
   const reservaRes = await pool.query("SELECT total, estado, conductor_id, origen, destino FROM reservas WHERE id = $1", [reservaId]);
   const reserva = reservaRes.rows[0];
@@ -24,9 +23,7 @@ const recalcularEstadoPago = async (reservaId: number, adminId: number | null | 
     ? "pendiente"
     : montoPagado >= total - 0.01
       ? "pagado"
-      : montoPagado >= total * 0.5
-        ? "confirmado"
-        : "parcial";
+      : "parcial";
 
   await pool.query(
     "UPDATE reservas SET monto_pagado = LEAST($1::numeric, total), estado_pago = $2 WHERE id = $3",
@@ -34,7 +31,7 @@ const recalcularEstadoPago = async (reservaId: number, adminId: number | null | 
   );
 
   let reservaConfirmada = false;
-  if (["confirmado", "pagado"].includes(estadoPago) && reserva?.estado === "pendiente_pago") {
+  if (estadoPago === "pagado" && reserva?.estado === "pendiente_pago") {
     await pool.query("UPDATE reservas SET estado = 'confirmada' WHERE id = $1 AND estado = 'pendiente_pago'", [reservaId]);
     reservaConfirmada = true;
     const condUserId = await usuarioIdDeConductor(reserva.conductor_id);
@@ -108,9 +105,7 @@ const aprobarPago = async (req: any, res: any) => {
       ? `Tu pago de $${monto} fue APROBADO. ¡Tu reserva #${pago.rows[0].reserva_id} quedó CONFIRMADA!`
       : estadoPago === "pagado"
         ? `Tu pago de $${monto} fue APROBADO. La reserva #${pago.rows[0].reserva_id} está pagada completamente.`
-        : estadoPago === "confirmado"
-          ? `Tu pago de $${monto} fue APROBADO. Tu reserva #${pago.rows[0].reserva_id} ya cubre el mínimo requerido (50%); revisa el saldo pendiente.`
-          : `Tu pago de $${monto} fue APROBADO para la reserva #${pago.rows[0].reserva_id}. Aún falta completar el mínimo del 50%.`;
+        : `Tu pago de $${monto} fue APROBADO para la reserva #${pago.rows[0].reserva_id}. Aún falta completar el pago total.`;
     await crearNotificacion(req.user?.id, pago.rows[0].usuario_id, mensaje, pago.rows[0].reserva_id, "reserva", pago.rows[0].reserva_id);
 
     return res.status(200).json({ message: "Pago aprobado", monto_pagado: montoPagado, estado_pago: estadoPago, reserva_confirmada: reservaConfirmada });

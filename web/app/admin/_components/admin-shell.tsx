@@ -29,7 +29,6 @@ import {
   ClipboardList,
   ClipboardCheck,
   CreditCard,
-  Calculator,
   IdCard,
   Images,
   ImagePlus,
@@ -104,7 +103,6 @@ const menuGroups: MenuGroup[] = [
       { href: "/admin/galeria", label: "Galería Web", icon: Images },
       { href: "/admin/imagenes-portada", label: "Imágenes de portada", icon: ImagePlus },
       { href: "/admin/configuracion", label: "Mi perfil", icon: User },
-      { href: "/admin/tarifas", label: "Tabla de precios", icon: Calculator },
     ],
   },
 ];

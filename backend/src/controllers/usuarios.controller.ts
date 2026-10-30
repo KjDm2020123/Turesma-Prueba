@@ -468,8 +468,8 @@ const calificarMiReserva = async (req: any, res: any) => {
     if (reserva.estado !== "finalizada") {
       return res.status(400).json({ error: "Solo puedes calificar viajes finalizados" });
     }
-    if (Number(reserva.total) > 0 && !["confirmado", "pagado"].includes(reserva.estado_pago)) {
-      return res.status(400).json({ error: "Este viaje no cuenta como realizado porque el pago no está confirmado" });
+    if (Number(reserva.total) > 0 && reserva.estado_pago !== "pagado") {
+      return res.status(400).json({ error: "Este viaje no cuenta como realizado porque el pago total no está confirmado" });
     }
 
     await pool.query(

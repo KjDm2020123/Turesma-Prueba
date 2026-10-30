@@ -34,9 +34,7 @@ type Cotizacion = {
   tipo_vehiculo?: string | null;
   notas?: string | null;
   estado: string;
-  precio_estimado?: number | null;
   precio_final?: number | null;
-  precio_propuesto?: number | null;
   turno?: string | null;
   valor_ofrecido?: number | null;
   duracion_valor?: number | null;
@@ -45,6 +43,9 @@ type Cotizacion = {
   vehiculo_id?: number | null;
   vehiculo_placa?: string | null;
   vehiculo_modelo?: string | null;
+  vehiculo_tipo_real?: string | null;
+  vehiculo_conductor_id?: number | null;
+  vehiculo_conductor_nombre?: string | null;
   respuesta_admin?: string | null;
   reserva_id?: number | null;
   creado_en: string;
@@ -60,19 +61,19 @@ type Resumen = {
 
 const ESTADO_BADGE: Record<string, string> = {
   pendiente:   "bg-amber-100 text-amber-700 border-amber-200",
-  negociacion: "bg-purple-100 text-purple-700 border-purple-200",
   aprobada:    "bg-emerald-100 text-emerald-700 border-emerald-200",
   rechazada:   "bg-red-100 text-red-500 border-red-200",
 };
 
 const ESTADO_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
-  negociacion: "Negociando",
+  negociacion: "Pendiente",
   aprobada:  "Aprobada",
   rechazada: "Rechazada",
 };
 
 type NegoItem = { actor: string; precio: number | null; mensaje: string | null; creado_en: string };
+type VehiculoAsignable = { id: number; placa: string; tipo: string; modelo?: string | null; capacidad?: number | null; activo?: boolean; usuario_id?: number | null; conductor_id?: number | null; conductor_nombre?: string | null };
 
 const INPUT_CLS = "w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white placeholder:font-normal";
 
@@ -87,13 +88,15 @@ function AdminCotizacionesContent() {
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("pendiente");
   const [selected, setSelected] = useState<Cotizacion | null>(null);
-  const [modalMode, setModalMode] = useState<"view" | "aprobar" | "rechazar" | "contraoferta">("view");
+  const [modalMode, setModalMode] = useState<"view" | "aprobar" | "rechazar">("view");
   const [precioFinal, setPrecioFinal] = useState("");
   const [respuesta, setRespuesta] = useState("");
   const [nego, setNego] = useState<NegoItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [vehiculosAsignables, setVehiculosAsignables] = useState<VehiculoAsignable[]>([]);
+  const [vehiculoSeleccionado, setVehiculoSeleccionado] = useState("");
 
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
@@ -260,15 +263,30 @@ function AdminCotizacionesContent() {
 
   // La proforma se puede generar cuando la cotización ya tiene un precio.
   const tieneProforma = (c: Cotizacion) =>
-    c.estado !== "rechazada" && (Number(c.precio_final) > 0 || Number(c.precio_estimado) > 0);
+    c.estado !== "rechazada" && Number(c.precio_final) > 0;
 
-  const openModal = async (cot: Cotizacion, mode: "view" | "aprobar" | "rechazar" | "contraoferta") => {
+  const openModal = async (cot: Cotizacion, mode: "view" | "aprobar" | "rechazar") => {
     setSelected(cot);
     setModalMode(mode);
-    setPrecioFinal(cot.precio_final ? String(cot.precio_final) : cot.precio_propuesto ? String(cot.precio_propuesto) : cot.precio_estimado ? String(cot.precio_estimado) : cot.valor_ofrecido ? String(cot.valor_ofrecido) : "");
+    setPrecioFinal(cot.precio_final ? String(cot.precio_final) : "");
     setRespuesta("");
     setNego([]);
     setMsg(""); setErr("");
+    if (mode === "aprobar") {
+      setVehiculoSeleccionado(cot.vehiculo_id ? String(cot.vehiculo_id) : "");
+      try {
+        const vehiculosRes = await fetch(`${API_URL}/api/admin/vehiculos`, { headers: getAuthHeaders() });
+        if (vehiculosRes.ok) {
+          const data = await vehiculosRes.json();
+          const categoria = String(cot.tipo_vehiculo || "").trim().toLowerCase();
+          setVehiculosAsignables((Array.isArray(data) ? data : data.data || []).filter((v: VehiculoAsignable) =>
+            v.activo !== false && (!categoria || String(v.tipo || "").toLowerCase() === categoria)
+          ));
+        }
+      } catch {
+        setErr("No se pudieron cargar los vehículos disponibles");
+      }
+    }
     try {
       const r = await fetch(`${API_URL}/api/admin/cotizaciones/${cot.id}/negociacion`, { headers: getAuthHeaders() });
       if (r.ok) setNego(await r.json());
@@ -299,23 +317,6 @@ function AdminCotizacionesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cotizaciones]);
 
-  const handleContraoferta = async () => {
-    if (!selected || !precioFinal) { setErr("Ingresa el precio que propones"); return; }
-    setSaving(true); setErr("");
-    try {
-      const res = await fetch(`${API_URL}/api/admin/cotizaciones/${selected.id}/contraoferta`, {
-        method: "PATCH", headers: getAuthHeaders(),
-        body: JSON.stringify({ precio_propuesto: Number(precioFinal), mensaje: respuesta }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setMsg("Contraoferta enviada al cliente. Espera su respuesta.");
-      setSelected(null);
-      load();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
-    finally { setSaving(false); }
-  };
-
   const handleAprobar = async () => {
     if (!selected || !precioFinal) { setErr("Ingresa el precio final"); return; }
     setSaving(true); setErr("");
@@ -323,16 +324,23 @@ function AdminCotizacionesContent() {
       const res = await fetch(`${API_URL}/api/admin/cotizaciones/${selected.id}/aprobar`, {
         method: "PATCH",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ precio_final: Number(precioFinal), respuesta_admin: respuesta }),
+        body: JSON.stringify({
+          precio_final: Number(precioFinal),
+          respuesta_admin: respuesta,
+          vehiculo_id: vehiculoSeleccionado ? Number(vehiculoSeleccionado) : null,
+          conductor_id: vehiculosAsignables.find((vehicle) => String(vehicle.id) === vehiculoSeleccionado)?.conductor_id || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMsg(`✅ Cotización aprobada. Reserva #${data.reserva_id} creada.`);
       setSelected(null);
       load();
-    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo aprobar la cotización. Revisa el vehículo y su conductor asignado."); }
     finally { setSaving(false); }
   };
+
+  const vehiculoActual = vehiculosAsignables.find((vehicle) => String(vehicle.id) === vehiculoSeleccionado);
 
   const handleRechazar = async () => {
     if (!selected) return;
@@ -388,7 +396,7 @@ function AdminCotizacionesContent() {
 
       {/* FILTRO TABS */}
       <div className="flex gap-2 flex-wrap">
-        {["pendiente", "negociacion", "aprobada", "rechazada", "todas"].map(f => (
+        {["pendiente", "aprobada", "rechazada", "todas"].map(f => (
           <button key={f} onClick={() => setFiltro(f)}
             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filtro === f ? "bg-[#E31E24] text-white shadow-sm" : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"}`}>
             {f === "todas" ? "Todas" : ESTADO_LABEL[f]}
@@ -446,13 +454,10 @@ function AdminCotizacionesContent() {
                         </button>
                       </>
                     )}
-                    {["pendiente", "negociacion"].includes(c.estado) && (
+                    {c.estado === "pendiente" && (
                       <>
                         <button onClick={() => openModal(c, "aprobar")} className="flex-1 py-2 text-[10px] font-black uppercase bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all flex items-center justify-center gap-1">
                           <Check size={12} /> Aprobar
-                        </button>
-                        <button onClick={() => openModal(c, "contraoferta")} className="flex-1 py-2 text-[10px] font-black uppercase bg-purple-500 hover:bg-purple-600 text-white rounded-xl transition-all flex items-center justify-center gap-1">
-                          <DollarSign size={12} /> Contraoferta
                         </button>
                       </>
                     )}
@@ -517,13 +522,10 @@ function AdminCotizacionesContent() {
                               </button>
                             </>
                           )}
-                          {["pendiente", "negociacion"].includes(c.estado) && (
+                          {c.estado === "pendiente" && (
                             <>
                               <button onClick={() => openModal(c, "aprobar")} className="p-2 hover:bg-emerald-50 text-emerald-600 rounded-xl transition-all" title="Aprobar">
                                 <Check size={15} />
-                              </button>
-                              <button onClick={() => openModal(c, "contraoferta")} className="p-2 hover:bg-purple-50 text-purple-600 rounded-xl transition-all" title="Contraofertar precio">
-                                <DollarSign size={15} />
                               </button>
                               <button onClick={() => openModal(c, "rechazar")} className="p-2 hover:bg-red-50 text-red-500 rounded-xl transition-all" title="Rechazar">
                                 <X size={15} />
@@ -546,14 +548,14 @@ function AdminCotizacionesContent() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b0f1a]/80 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="w-full max-w-lg rounded-[2rem] bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 my-4">
             {/* Modal Header */}
-            <div className={`p-5 sm:p-6 flex items-center justify-between text-white ${modalMode === "aprobar" ? "bg-emerald-600" : modalMode === "rechazar" ? "bg-red-600" : modalMode === "contraoferta" ? "bg-purple-600" : "bg-[#0b0f1a]"}`}>
+            <div className={`p-5 sm:p-6 flex items-center justify-between text-white ${modalMode === "aprobar" ? "bg-emerald-600" : modalMode === "rechazar" ? "bg-red-600" : "bg-[#0b0f1a]"}`}>
               <div className="flex items-center gap-3">
                 <div className="bg-white/20 p-2 rounded-xl">
-                  {modalMode === "aprobar" ? <Check size={20} /> : modalMode === "rechazar" ? <X size={20} /> : modalMode === "contraoferta" ? <DollarSign size={20} /> : <Eye size={20} />}
+                  {modalMode === "aprobar" ? <Check size={20} /> : modalMode === "rechazar" ? <X size={20} /> : <Eye size={20} />}
                 </div>
                 <div>
                   <h2 className="text-base sm:text-lg font-black italic tracking-tighter uppercase">
-                    {modalMode === "aprobar" ? "Aprobar Cotización" : modalMode === "rechazar" ? "Rechazar Cotización" : modalMode === "contraoferta" ? "Contraofertar Precio" : "Detalle de Cotización"}
+                    {modalMode === "aprobar" ? "Fijar precio y aprobar" : modalMode === "rechazar" ? "Rechazar Cotización" : "Detalle de Cotización"}
                   </h2>
                   <p className="text-[10px] text-white/70 font-bold">Cotización #{selected.id}</p>
                 </div>
@@ -627,14 +629,6 @@ function AdminCotizacionesContent() {
                   </div>
                 </div>
               )}
-              {selected.precio_estimado != null && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between"><p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Estimación automática</p><p className="text-lg font-black text-emerald-700">${Number(selected.precio_estimado).toFixed(2)}</p></div>
-                  <p className="text-xs font-bold text-emerald-800">{selected.distancia_km != null ? `${Number(selected.distancia_km).toFixed(1)} km` : "Distancia no disponible"} · {selected.num_viajes || 1} viaje(s)</p>
-                  {selected.precio_desglose && <p className="text-[11px] text-emerald-700">Días: ${Number(selected.precio_desglose.daily_amount || 0).toFixed(2)} · Km: ${Number(selected.precio_desglose.distance_amount || 0).toFixed(2)} · Viajes: ${Number(selected.precio_desglose.trips_amount || 0).toFixed(2)}</p>}
-                </div>
-              )}
-
               {selected.notas && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
                   <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1 flex items-center gap-1"><MessageSquare size={9} />Mensaje del cliente</p>
@@ -652,7 +646,7 @@ function AdminCotizacionesContent() {
               {/* HISTORIAL DE NEGOCIACIÓN */}
               {nego.length > 0 && (
                 <div className="bg-slate-50 rounded-2xl p-4">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">Negociación</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">Historial de precios</p>
                   <div className="space-y-2">
                     {nego.map((h, i) => (
                       <div key={i} className={`flex ${h.actor === "admin" ? "justify-end" : "justify-start"}`}>
@@ -664,36 +658,43 @@ function AdminCotizacionesContent() {
                       </div>
                     ))}
                   </div>
-                  {selected.estado === "negociacion" && selected.turno === "cliente" && (
-                    <p className="text-[10px] font-bold text-purple-500 mt-3 text-center">⏳ Esperando respuesta del cliente</p>
-                  )}
-                </div>
-              )}
-
-              {/* FORM CONTRAOFERTA */}
-              {modalMode === "contraoferta" && (
-                <div className="space-y-3 pt-2">
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Precio que propones ($) *</label>
-                    <div className="flex items-center gap-2 rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 focus-within:border-purple-500 transition-all">
-                      <DollarSign size={16} className="text-purple-600" />
-                      <input type="number" step="0.01" min="0" value={precioFinal} onChange={e => setPrecioFinal(e.target.value)} placeholder="Ej: 280.00" className="w-full bg-transparent font-bold text-slate-700 outline-none" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Mensaje para el cliente</label>
-                    <textarea value={respuesta} onChange={e => setRespuesta(e.target.value)} rows={2} placeholder="Ej: Por esa ruta y duración, el precio justo sería..." className={INPUT_CLS + " resize-none"} />
-                  </div>
-                  {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
-                  <button onClick={handleContraoferta} disabled={saving} className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : <DollarSign size={16} />} Enviar contraoferta
-                  </button>
                 </div>
               )}
 
               {/* Acciones */}
               {modalMode === "aprobar" && (
                 <div className="space-y-3 pt-2">
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Asignación del servicio</p>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Vehículo ({selected.tipo_vehiculo || "categoría solicitada"}) *</label>
+                      <select
+                        value={vehiculoSeleccionado}
+                        onChange={(event) => {
+                          const id = event.target.value;
+                          setVehiculoSeleccionado(id);
+                        }}
+                        className={INPUT_CLS}
+                      >
+                        <option value="">Selecciona un vehículo</option>
+                        {vehiculosAsignables.map((vehicle) => (
+                          <option key={vehicle.id} value={vehicle.id}>
+                            {vehicle.placa} · {vehicle.modelo || "Sin modelo"} · {vehicle.capacidad || 0} pasajeros
+                          </option>
+                        ))}
+                      </select>
+                      {vehiculosAsignables.length === 0 && <p className="mt-1 text-[11px] font-bold text-amber-700">No hay vehículos disponibles para esta categoría.</p>}
+                    </div>
+                    <div className="rounded-xl border border-blue-200 bg-white px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Conductor asignado</p>
+                      <p className="mt-1 text-sm font-black text-blue-800">
+                        {vehiculoActual?.conductor_nombre || "Este vehículo no tiene conductor asignado"}
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium text-blue-700">
+                        El conductor cambia automáticamente al cambiar de vehículo.
+                      </p>
+                    </div>
+                  </div>
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Precio Final ($) *</label>
                     <div className="flex items-center gap-2 rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 focus-within:border-emerald-500 transition-all">
@@ -718,7 +719,7 @@ function AdminCotizacionesContent() {
                     />
                   </div>
                   {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
-                  <button onClick={handleAprobar} disabled={saving}
+                  <button onClick={handleAprobar} disabled={saving || !vehiculoSeleccionado || !vehiculoActual?.conductor_id}
                     className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-60">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Confirmar Aprobación
@@ -747,13 +748,10 @@ function AdminCotizacionesContent() {
                 </div>
               )}
 
-              {modalMode === "view" && ["pendiente", "negociacion"].includes(selected.estado) && (
-                <div className="grid grid-cols-3 gap-2 pt-2">
+              {modalMode === "view" && selected.estado === "pendiente" && (
+                <div className="grid grid-cols-2 gap-2 pt-2">
                   <button onClick={() => setModalMode("aprobar")} className="py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase rounded-2xl transition-all flex items-center justify-center gap-1">
                     <Check size={14} /> Aprobar
-                  </button>
-                  <button onClick={() => setModalMode("contraoferta")} className="py-3 bg-purple-500 hover:bg-purple-600 text-white font-black text-[10px] uppercase rounded-2xl transition-all flex items-center justify-center gap-1">
-                    <DollarSign size={14} /> Contraoferta
                   </button>
                   <button onClick={() => setModalMode("rechazar")} className="py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-black text-[10px] uppercase rounded-2xl transition-all flex items-center justify-center gap-1">
                     <X size={14} /> Rechazar

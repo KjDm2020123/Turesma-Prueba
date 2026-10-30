@@ -357,6 +357,30 @@ const exportarReporteCSV = async (req, res) => {
         estado_documentos: "Estado de documentos",
       };
       filename = "reporte_conductores";
+    } else if (tipo === "clientes") {
+      const result = await pool.query(
+        `SELECT u.nombre, u.email, u.telefono, u.cedula, u.estado_verificacion,
+                u.activo, COUNT(r.id)::int AS total_reservas,
+                COALESCE(SUM(CASE WHEN r.estado <> 'cancelada' THEN r.total ELSE 0 END), 0) AS total_facturado
+         FROM usuarios u
+         LEFT JOIN reservas r ON r.usuario_id = u.id
+         WHERE LOWER(u.rol) = 'cliente'
+         GROUP BY u.id, u.nombre, u.email, u.telefono, u.cedula, u.estado_verificacion, u.activo
+         ORDER BY u.nombre ASC`
+      );
+      rows = result.rows;
+      headers = ["nombre", "email", "telefono", "cedula", "estado_verificacion", "activo", "total_reservas", "total_facturado"];
+      headerLabels = {
+        nombre: "Nombre",
+        email: "Correo electrónico",
+        telefono: "Teléfono",
+        cedula: "Cédula",
+        estado_verificacion: "Verificación",
+        activo: "Estado",
+        total_reservas: "Total de reservas",
+        total_facturado: "Total facturado (USD)",
+      };
+      filename = "reporte_clientes";
     } else {
       // reservas (default) — admite filtrar por rango de fecha (?desde=&hasta=),
       // el mismo filtro que ya usa el Dashboard de Rendimiento.
@@ -421,6 +445,7 @@ const exportarReporteCSV = async (req, res) => {
       const titles = {
         vehiculos: "Reporte de flota vehicular",
         conductores: "Reporte de conductores",
+        clientes: "Reporte de clientes",
         reservas: "Reporte de reservas",
       };
       const title = titles[tipo] || titles.reservas;

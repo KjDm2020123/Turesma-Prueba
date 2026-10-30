@@ -11,9 +11,9 @@ import {
 } from "recharts";
 import {
   TrendingUp, DollarSign, ShoppingCart, Users, Car,
-  Loader2, UserCircle, AlertTriangle, Download, FileSpreadsheet,
+  Loader2, UserCircle, AlertTriangle, FileSpreadsheet,
 } from "lucide-react";
-import { descargarCSV, descargarExcel } from "../../../lib/download";
+import { descargarExcel } from "../../../lib/download";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -32,7 +32,6 @@ const formatMonth = (value: string) => {
   if (!year || !month) return value;
   return new Intl.DateTimeFormat("es-EC", {
     month: "short",
-    year: "2-digit",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, 1)));
 };
@@ -95,7 +94,6 @@ export const AnalyticsDashboard = () => {
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [exportando, setExportando] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
 
   useEffect(() => {
@@ -140,15 +138,6 @@ export const AnalyticsDashboard = () => {
   }, [checkingSession, load]);
 
   useAutoRefresh(() => load(true), { enabled: !checkingSession, immediate: false });
-
-  const exportarCSV = async () => {
-    setExportando(true);
-    const r = rango();
-    const qs = r ? `&desde=${r.desde}&hasta=${r.hasta}` : "";
-    const result = await descargarCSV(`/api/admin/reportes/exportar-csv?tipo=reservas${qs}`, "reporte_reservas.csv");
-    if (!result.ok) setErr(result.error || "No se pudo exportar");
-    setExportando(false);
-  };
 
   const exportarExcel = async () => {
     setExportandoExcel(true);
@@ -230,11 +219,6 @@ export const AnalyticsDashboard = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={exportarCSV} disabled={exportando}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
-            {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            Exportar CSV
-          </button>
           <button onClick={exportarExcel} disabled={exportandoExcel}
             className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
             {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}

@@ -14,9 +14,10 @@ import {
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
+import { descargarExcel } from "../../../lib/download";
 import {
   Users, Plus, X, Search, Loader2, Trash2,
-  Edit3, Eye, ShoppingCart, DollarSign, Key, Printer, FileText,
+  Edit3, Eye, ShoppingCart, DollarSign, Key, Printer, FileText, FileSpreadsheet,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -26,6 +27,7 @@ type Cliente = {
   nombre: string;
   email: string;
   telefono: string | null;
+  cedula?: string | null;
   imagen_url?: string | null;
   activo: boolean;
   creado_en: string;
@@ -41,7 +43,7 @@ type ReservaCliente = {
 
 const INPUT = "w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white placeholder:font-normal";
 
-const EMPTY: Partial<Cliente> = { nombre: "", email: "", telefono: "" };
+const EMPTY: Partial<Cliente> = { nombre: "", email: "", telefono: "", cedula: "", imagen_url: null };
 
 export default function AdminClientesPage() {
   const { checkingSession } = useAdminGuard();
@@ -57,10 +59,13 @@ export default function AdminClientesPage() {
   const [showPassInput, setShowPassInput] = useState(false);
   const [form, setForm] = useState<Partial<Cliente>>(EMPTY);
   const [formPass, setFormPass] = useState("");
+  const [formConfirmPass, setFormConfirmPass] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
   const openDetalle = async (c: Cliente) => {
     setDetalle(c); setDetalleReservas([]); setShowPassInput(false); setNewPass("");
     setLoadingDetalle(true);
@@ -170,10 +175,11 @@ export default function AdminClientesPage() {
 
   useAutoRefresh(() => load(true), { enabled: !checkingSession, immediate: false });
 
-  const openNew = () => { setForm(EMPTY); setFormPass(""); setEditId(null); setModal(true); };
+  const openNew = () => { setForm(EMPTY); setFormPass(""); setFormConfirmPass(""); setEditId(null); setModal(true); };
   const openEdit = (c: Cliente) => {
-    setForm({ nombre: c.nombre, email: c.email, telefono: c.telefono ?? "" });
+    setForm({ nombre: c.nombre, email: c.email, telefono: c.telefono ?? "", cedula: c.cedula ?? "", imagen_url: c.imagen_url ?? null });
     setFormPass("");
+    setFormConfirmPass("");
     setEditId(c.id);
     setModal(true);
   };
@@ -192,6 +198,10 @@ export default function AdminClientesPage() {
       setErr("La contraseña debe tener al menos 6 caracteres");
       return;
     }
+    if (formPass && formPass !== formConfirmPass) {
+      setErr("Las contraseñas no coinciden");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -199,6 +209,8 @@ export default function AdminClientesPage() {
         nombre: form.nombre || "",
         email: form.email || "",
         telefono: form.telefono || "",
+        cedula: form.cedula || "",
+        imagen_url: form.imagen_url || null,
         rol: "cliente",
         ...(!editId || formPass ? { password: formPass } : {}),
       });
@@ -209,6 +221,35 @@ export default function AdminClientesPage() {
       load();
     } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setSaving(false); }
+  };
+
+  const handleFotoUpload = async (file: File | null) => {
+    if (!file) return;
+    setUploadingFoto(true);
+    setErr("");
+    try {
+      const body = new FormData();
+      body.append("imagen", file);
+      const response = await fetch(`${API}/api/auth/upload-perfil`, { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "No se pudo subir la foto");
+      setForm((current) => ({ ...current, imagen_url: data.imageUrl }));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "No se pudo subir la foto");
+    } finally {
+      setUploadingFoto(false);
+    }
+  };
+
+  const exportarExcel = async () => {
+    setExportandoExcel(true);
+    setErr("");
+    const result = await descargarExcel(
+      "/api/admin/reportes/exportar-csv?tipo=clientes&formato=xlsx",
+      "reporte_clientes.xlsx"
+    );
+    if (!result.ok) setErr(result.error || "No se pudo exportar");
+    setExportandoExcel(false);
   };
 
   const handleDelete = async (id: number) => {
@@ -234,7 +275,11 @@ export default function AdminClientesPage() {
     <div className="space-y-6 animate-in fade-in duration-500">
 
       {/* HEADER */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-3">
+        <button onClick={exportarExcel} disabled={exportandoExcel} className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
+          {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+          Excel con diseño
+        </button>
         <button onClick={openNew} className="flex items-center gap-2 bg-[#E31E24] hover:bg-[#c0181e] text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/30">
           <Plus size={14} /> Nuevo Cliente
         </button>
@@ -391,7 +436,7 @@ export default function AdminClientesPage() {
       {/* MODAL CREAR / EDITAR */}
       {modal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border-b-8 border-[#E31E24]">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border-b-8 border-[#E31E24] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-black uppercase italic tracking-tight">{editId ? "Editar Cliente" : "Nuevo Cliente"}</h3>
               <button onClick={() => setModal(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors"><X size={18} /></button>
@@ -406,8 +451,17 @@ export default function AdminClientesPage() {
                 <input className={INPUT} type="email" required value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="correo@ejemplo.com" />
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Teléfono (opcional)</label>
-                <input className={INPUT} value={form.telefono ?? ""} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="0999999999" />
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Teléfono</label>
+                <input className={INPUT} required value={form.telefono ?? ""} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="0999999999" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Número de cédula</label>
+                <input className={INPUT} required maxLength={10} inputMode="numeric" value={form.cedula ?? ""} onChange={(e) => setForm({ ...form, cedula: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10 dígitos" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Foto de perfil (opcional)</label>
+                <input type="file" accept="image/*" disabled={uploadingFoto} onChange={(e) => handleFotoUpload(e.target.files?.[0] || null)} className="w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-red-50 file:px-3 file:py-2 file:font-bold file:text-[#E31E24]" />
+                {uploadingFoto && <p className="mt-1 text-[10px] font-bold text-slate-400">Subiendo foto…</p>}
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
@@ -426,6 +480,10 @@ export default function AdminClientesPage() {
                     ? "Solo se cambia si escribes una nueva. Recuerda avisarle al cliente."
                     : "El cliente ingresará con su correo y esta contraseña. Compártesela."}
                 </p>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Confirmar contraseña</label>
+                <input className={INPUT} type="password" required={!editId} value={formConfirmPass} onChange={(e) => setFormConfirmPass(e.target.value)} placeholder="Repite la contraseña" />
               </div>
               {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
               <div className="flex gap-3 pt-2">

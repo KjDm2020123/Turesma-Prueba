@@ -56,7 +56,7 @@ const syncReservaEstadosAutomaticos = async () => {
     `UPDATE reservas
      SET estado = 'en_curso'
      WHERE estado = 'confirmada'
-       AND (COALESCE(total, 0) <= 0 OR estado_pago IN ('confirmado', 'pagado'))
+       AND (COALESCE(total, 0) <= 0 OR estado_pago = 'pagado')
        AND NOW() >= ${startAtExpr}
        AND NOW() < ${endAtExpr}`
   );
@@ -65,7 +65,7 @@ const syncReservaEstadosAutomaticos = async () => {
     `UPDATE reservas
      SET estado = 'finalizada'
      WHERE estado IN ('confirmada', 'en_curso')
-       AND (COALESCE(total, 0) <= 0 OR estado_pago IN ('confirmado', 'pagado'))
+       AND (COALESCE(total, 0) <= 0 OR estado_pago = 'pagado')
        AND NOW() >= ${endAtExpr}`
   );
 };

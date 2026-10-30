@@ -535,10 +535,8 @@ const listarReservasConductor = async (req, res) => {
          LEFT JOIN tours t ON t.id = r.tour_id
          LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
          WHERE r.estado IN ('pendiente', 'reprogramacion_pendiente')
-           AND (
-             r.vehiculo_id = $1
-             OR (r.vehiculo_id IS NULL AND r.conductor_id IS NULL)
-           )
+           AND r.vehiculo_id = $1
+           AND (COALESCE(r.total, 0) <= 0 OR r.estado_pago = 'pagado')
          ORDER BY r.fecha_reserva ASC, r.id ASC`,
         [vehiculoId]
       ),
@@ -574,6 +572,7 @@ const listarReservasConductor = async (req, res) => {
          LEFT JOIN cotizaciones co ON co.reserva_id = r.id
          WHERE r.vehiculo_id = $1
            AND r.estado IN ('confirmada', 'en_curso')
+           AND (COALESCE(r.total, 0) <= 0 OR r.estado_pago = 'pagado')
          ORDER BY r.fecha_reserva ASC, r.id ASC`,
         [vehiculoId]
       ),
@@ -852,9 +851,9 @@ const actualizarEstadoReservaConductor = async (req, res) => {
       return res.status(400).json({ error: "Para iniciar el viaje, la reserva debe estar confirmada" });
     }
 
-    // El cliente debe tener aprobado al menos el 50% del total antes de iniciar el viaje.
-    if (estado === "en_curso" && Number(reserva.total) > 0 && !["confirmado", "pagado"].includes(reserva.estado_pago)) {
-      return res.status(400).json({ error: "El cliente aún no ha completado el pago mínimo del 50% para iniciar el viaje" });
+    // El cliente debe tener aprobado el total antes de iniciar el viaje.
+    if (estado === "en_curso" && Number(reserva.total) > 0 && reserva.estado_pago !== "pagado") {
+      return res.status(400).json({ error: "El cliente aún no ha completado el pago total para iniciar el viaje" });
     }
 
     if (estado === "finalizada" && !["en_curso", "confirmada"].includes(reserva.estado)) {

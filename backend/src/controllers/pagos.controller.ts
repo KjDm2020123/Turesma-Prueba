@@ -16,9 +16,8 @@ const getPaymentInfo = async (reservaId: number, userId: number) => {
 };
 
 const validarMonto = (reserva: any, monto: number) => {
-  const minimum = Math.max(0, Number(reserva.total) * 0.5 - Number(reserva.monto_pagado));
   const remaining = Math.max(0, Number(reserva.total) - Number(reserva.monto_pagado));
-  if (monto < minimum - 0.01) throw new Error(`El pago mínimo es $${minimum.toFixed(2)}`);
+  if (monto < remaining - 0.01) throw new Error(`Debes pagar el total pendiente de $${remaining.toFixed(2)}`);
   if (monto > remaining + 0.01) throw new Error(`El pago no puede superar el saldo de $${remaining.toFixed(2)}`);
 };
 
@@ -79,16 +78,12 @@ const confirmarPagoPayphone = async (req: any, res: any) => {
     );
     const suma = await pool.query("SELECT COALESCE(SUM(monto), 0) AS total FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'", [reservaId]);
     const totalPagado = Number(suma.rows[0].total);
-    const estadoPago = totalPagado >= Number(reserva.total) - 0.01
-      ? "pagado"
-      : totalPagado >= Number(reserva.total) * 0.5
-        ? "confirmado"
-        : "parcial";
+    const estadoPago = totalPagado >= Number(reserva.total) - 0.01 ? "pagado" : "parcial";
     await pool.query(
       "UPDATE reservas SET monto_pagado = $1, estado_pago = $2 WHERE id = $3",
       [totalPagado, estadoPago, reservaId]
     );
-    if (["confirmado", "pagado"].includes(estadoPago)) {
+    if (estadoPago === "pagado") {
       await pool.query(
         "UPDATE reservas SET estado = 'confirmada' WHERE id = $1 AND estado = 'pendiente_pago'",
         [reservaId]

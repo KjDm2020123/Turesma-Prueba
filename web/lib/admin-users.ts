@@ -6,6 +6,8 @@ export type AdminUserInput = {
   nombre: string;
   email: string;
   telefono?: string;
+  cedula?: string;
+  imagen_url?: string | null;
   rol: "admin" | "cliente" | "operativo" | "vehiculo";
   password?: string;
 };

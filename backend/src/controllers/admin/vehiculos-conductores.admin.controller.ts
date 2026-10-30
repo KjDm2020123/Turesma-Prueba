@@ -104,7 +104,7 @@ const listarVehiculos = async (_req, res) => {
          v.activo,
          v.orden,
          v.fecha_creacion,
-         u.id       AS conductor_id,
+         c.id       AS conductor_id,
          u.nombre   AS conductor_nombre,
          u.email    AS conductor_email,
          u.activo   AS conductor_activo,
@@ -113,6 +113,8 @@ const listarVehiculos = async (_req, res) => {
        LEFT JOIN usuarios u
          ON u.id = v.usuario_id
         AND LOWER(u.rol) = 'vehiculo'
+       LEFT JOIN conductores c
+         ON c.usuario_id = v.usuario_id
        LEFT JOIN LATERAL (
          SELECT COUNT(*)::int AS viajes_realizados
          FROM reservas r

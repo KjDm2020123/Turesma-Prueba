@@ -690,7 +690,7 @@ const initDatabase = async () => {
   `);
 
   // ============ MÓDULO DE PAGOS DE RESERVA (transferencia / link de pago) ============
-  // El cliente paga (mínimo el 50% del total) por transferencia o por un link que
+  // El cliente paga el total por transferencia o por un link que
   // envía el admin, y sube una imagen de comprobante. El admin revisa y aprueba
   // o rechaza; solo al aprobarse un pago se recalcula reservas.estado_pago.
   await pool.query(`

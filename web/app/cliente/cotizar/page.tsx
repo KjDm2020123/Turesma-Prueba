@@ -23,19 +23,11 @@ type Cotizacion = {
   id: number; origen: string; destino: string; fecha_servicio: string; fecha_fin?: string | null;
   num_personas: number; tipo_vehiculo?: string | null; notas?: string | null;
   estado: string; precio_final?: number | null; valor_ofrecido?: number | null;
-  precio_propuesto?: number | null; turno?: string | null;
+  turno?: string | null;
   duracion_valor?: number | null; duracion_unidad?: string | null; hora_salida?: string | null;
   respuesta_admin?: string | null; reserva_id?: number | null; creado_en: string;
   vehiculo_placa?: string | null; vehiculo_modelo?: string | null;
   num_viajes?: number | null; distancia_km?: number | null; precio_desglose?: any;
-};
-type Tarifas = {
-  tarifa_diaria: number; precio_km: number; tarifa_viaje: number; recargo_peajes: number; minimo_km: number;
-  tarifa_van?: number; tarifa_bus?: number; tarifa_suv?: number; tarifa_minibus?: number; tarifa_sedan?: number;
-  traslado_van?: number; traslado_bus?: number; traslado_suv?: number; traslado_minibus?: number; traslado_sedan?: number;
-  hora_van?: number; hora_bus?: number; hora_suv?: number; hora_minibus?: number; hora_sedan?: number;
-  medio_dia_van?: number; medio_dia_bus?: number; medio_dia_suv?: number; medio_dia_minibus?: number; medio_dia_sedan?: number;
-  oferta_activa?: boolean; oferta_dia?: string; descuento_oferta_pct?: number; oferta_descripcion?: string;
 };
 type VehicleRecommendation = {
   id: number; placa: string; tipo: string; modelo?: string | null; capacidad: number;
@@ -44,7 +36,6 @@ type VehicleRecommendation = {
 
 const ESTADO_INFO: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
   pendiente: { label: "En revisión", color: "text-amber-700", bg: "bg-amber-50 border-amber-200", icon: <Clock size={14} className="text-amber-600" /> },
-  negociacion: { label: "Tienes una propuesta", color: "text-purple-700", bg: "bg-purple-50 border-purple-200", icon: <DollarSign size={14} className="text-purple-600" /> },
   aprobada: { label: "Aprobada ✓", color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200", icon: <CheckCircle2 size={14} className="text-emerald-600" /> },
   rechazada: { label: "No disponible", color: "text-red-600", bg: "bg-red-50 border-red-200", icon: <XCircle size={14} className="text-red-500" /> },
 };
@@ -52,7 +43,7 @@ const ESTADO_INFO: Record<string, { label: string; color: string; bg: string; ic
 const INPUT = "w-full rounded-2xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white placeholder:text-slate-300 placeholder:font-normal";
 
 // Tope de días seguidos que puede reservar el cliente en un solo servicio.
-const MAX_DIAS = 30;
+const MAX_DIAS = 365;
 
 // Cantidad de días que abarca un rango (ambos extremos incluidos).
 const diasEntre = (a: string, b: string) => {
@@ -81,7 +72,6 @@ export default function ClienteCotizarPage() {
   const [alternatives, setAlternatives] = useState<VehicleRecommendation[]>([]);
   const [route, setRoute] = useState<RutaCalculada | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
-  const [tarifas, setTarifas] = useState<Tarifas | null>(null);
   const categorias = Array.from(
     vehiculos.reduce((result, vehiculo) => {
       const tipo = String(vehiculo.tipo || "van").trim().toLowerCase();
@@ -94,31 +84,6 @@ export default function ClienteCotizarPage() {
     }, new Map<string, { tipo: string; capacidad: number }>())
       .values()
   );
-
-  // Negociación
-  const [counterId, setCounterId] = useState<number | null>(null);
-  const [counterVal, setCounterVal] = useState("");
-  const [respMsg, setRespMsg] = useState("");
-
-  const responder = async (cot: Cotizacion, accion: "aceptar" | "contraoferta" | "rechazar") => {
-    setRespMsg("");
-    const body: Record<string, unknown> = { accion };
-    if (accion === "contraoferta") {
-      if (!counterVal) { setRespMsg("Ingresa el valor que propones"); return; }
-      body.valor = Number(counterVal);
-    }
-    try {
-      const res = await fetch(`${API}/api/cotizaciones/${cot.id}/responder`, {
-        method: "PATCH", headers: getAuthHeaders(), body: JSON.stringify(body),
-      });
-      if (handleUnauthorized(res.status)) return;
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setRespMsg(data.message || "Listo");
-      setCounterId(null); setCounterVal("");
-      loadCotizaciones();
-    } catch (e) { setRespMsg(e instanceof Error ? e.message : "Error inesperado"); }
-  };
 
   const [form, setForm] = useState({
     fecha_servicio: "", fecha_fin: "", num_personas: "1",
@@ -191,16 +156,6 @@ export default function ClienteCotizarPage() {
     } catch { /* silencio */ }
   };
 
-  const loadTarifas = async () => {
-    try {
-      const res = await fetch(`${API}/api/usuarios/tarifas`, {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
-      });
-      if (res.ok) setTarifas(await res.json());
-    } catch { /* silencio */ }
-  };
-
   const askVehicleAssistant = async () => {
     setAssistantLoading(true); setAssistantErr(""); setAssistantMsg("");
     try {
@@ -229,7 +184,7 @@ export default function ClienteCotizarPage() {
 
   useEffect(() => {
     if (checkingSession || !userId) return;
-    loadVehiculos(); loadCotizaciones(); loadTarifas();
+    loadVehiculos(); loadCotizaciones();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkingSession, userId]);
 
@@ -244,7 +199,6 @@ export default function ClienteCotizarPage() {
   useAutoRefresh(() => {
     loadVehiculos();
     loadCotizaciones(true);
-    loadTarifas();
   }, { enabled: !checkingSession && !!userId, intervalMs: 5000, immediate: false });
 
   const advanceStep = () => {
@@ -286,7 +240,7 @@ export default function ClienteCotizarPage() {
     }
     setSending(true); setFormErr(""); setFormMsg("");
     try {
-      const res = await fetch(`${API}/api/cotizaciones/reserva-directa`, {
+      const res = await fetch(`${API}/api/cotizaciones`, {
         method: "POST", headers: getAuthHeaders(),
         body: JSON.stringify({
           ...form,
@@ -310,7 +264,7 @@ export default function ClienteCotizarPage() {
         window.location.assign(data.approval_url);
         return;
       }
-      setFormMsg(`Solicitud de reserva creada${data.total != null ? ` por $${Number(data.total).toFixed(2)}` : ""}. Ve a Historial para pagar el anticipo indicado; administración verificará el pago antes de confirmar la reserva y asignar el vehículo.`);
+      setFormMsg("Solicitud de cotización enviada. Administración revisará tu destino y datos, definirá el precio y te avisará cuando puedas aceptarlo y pagar el anticipo desde Historial.");
       setForm({ fecha_servicio: "", fecha_fin: "", num_personas: "1", num_viajes: "1", tipo_vehiculo: categorias[0]?.tipo || "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
       setWizardStep(1);
       setVariosDias(false);
@@ -326,31 +280,6 @@ export default function ClienteCotizarPage() {
   const selectedTrips = Math.max(1, Number(form.num_viajes) || 1);
   const modalidad = variosDias ? "varios_dias" : form.modalidad_servicio;
   const horasServicio = Math.max(1, Number(form.duracion_horas) || 1);
-  const billedKm = Math.max(Number(tarifas?.minimo_km) || 0, route?.distanciaKm || 0);
-  const tipoRate = tipoSeleccionado;
-  const tarifaPorTipo =
-    tipoRate === "bus" ? Number(tarifas?.tarifa_bus ?? tarifas?.tarifa_diaria ?? 0)
-    : tipoRate === "suv" ? Number(tarifas?.tarifa_suv ?? tarifas?.tarifa_diaria ?? 0)
-    : tipoRate === "minibus" ? Number(tarifas?.tarifa_minibus ?? tarifas?.tarifa_diaria ?? 0)
-    : tipoRate === "sedan" ? Number(tarifas?.tarifa_sedan ?? tarifas?.tarifa_diaria ?? 0)
-    : Number(tarifas?.tarifa_van ?? tarifas?.tarifa_diaria ?? 0);
-  const tarifaServicio = modalidad === "traslado"
-    ? Number(tarifas?.[`traslado_${tipoRate}` as keyof Tarifas] ?? tarifaPorTipo)
-    : modalidad === "horas"
-      ? Number(tarifas?.[`hora_${tipoRate}` as keyof Tarifas] ?? tarifaPorTipo) * horasServicio
-      : modalidad === "medio_dia"
-        ? Number(tarifas?.[`medio_dia_${tipoRate}` as keyof Tarifas] ?? tarifaPorTipo)
-        : tarifaPorTipo * selectedDays;
-  const descuentoOferta = Number(tarifas?.descuento_oferta_pct || 0);
-  const subtotalDiario = tarifaServicio;
-  const subtotalKm = billedKm * Number(tarifas?.precio_km || 0);
-  const subtotalViajes = modalidad === "traslado" ? 0 : Number(tarifas?.tarifa_viaje || 0) * selectedTrips;
-  const subtotalPeajes = Number(tarifas?.recargo_peajes || 0);
-  const discountAmount = tarifas?.oferta_activa ? (subtotalDiario * descuentoOferta) / 100 : 0;
-  const estimatedTotal = tarifas
-    ? subtotalDiario + subtotalKm + subtotalViajes + subtotalPeajes - discountAmount
-    : null;
-
   if (checkingSession) return (
     <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#E31E24]" size={34} /></div>
   );
@@ -430,10 +359,6 @@ export default function ClienteCotizarPage() {
                 {categorias.map(({ tipo, capacidad }) => {
                   const selected = tipoSeleccionado === tipo;
                   const exceedsCapacity = Number(form.num_personas) > capacidad;
-                  const rate = tipo === "bus" ? tarifas?.tarifa_bus
-                    : tipo === "suv" ? tarifas?.tarifa_suv
-                      : tipo === "minibus" ? tarifas?.tarifa_minibus
-                        : tipo === "sedan" ? tarifas?.tarifa_sedan : tarifas?.tarifa_van;
                   return (
                     <button key={tipo} type="button" disabled={exceedsCapacity}
                       onClick={() => setForm(p => ({ ...p, tipo_vehiculo: tipo }))}
@@ -444,7 +369,7 @@ export default function ClienteCotizarPage() {
                         {selected && <CheckCircle2 size={17} className="text-[#E31E24]" />}
                       </span>
                       <span className="mt-2 block text-xs font-semibold text-slate-500">Hasta {capacidad} pasajeros</span>
-                      <span className="mt-1 block text-xs font-bold text-slate-700">{rate != null ? `Base $${Number(rate).toFixed(2)} · varía por modalidad` : "Tarifa según servicio"}</span>
+                      <span className="mt-1 block text-xs font-bold text-slate-700">Precio según cotización del administrador</span>
                     </button>
                   );
                 })}
@@ -583,25 +508,9 @@ export default function ClienteCotizarPage() {
             {formErr && <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-600 font-bold">{formErr}</div>}
             {formMsg && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm text-emerald-700 font-bold flex items-center gap-2"><CheckCircle2 size={16} />{formMsg}</div>}
 
-            {wizardStep === 4 && estimatedTotal != null && (
-              <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Estimación referencial</p>
-                    {tarifas?.oferta_activa && (
-                      <p className="text-[10px] font-bold text-emerald-700">Oferta del día: {tarifas.oferta_descripcion || `Descuento ${tarifas.descuento_oferta_pct}%`}</p>
-                    )}
-                  </div>
-                  <p className="text-2xl font-black text-emerald-700">${estimatedTotal.toFixed(2)}</p>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold text-emerald-800 sm:grid-cols-5">
-                  <span>Servicio: ${subtotalDiario.toFixed(2)}</span>
-                  <span>Km: ${subtotalKm.toFixed(2)}</span>
-                  <span>Viajes: ${subtotalViajes.toFixed(2)}</span>
-                  <span>Peajes: ${subtotalPeajes.toFixed(2)}</span>
-                  {discountAmount > 0 && <span>Descuento: -${discountAmount.toFixed(2)}</span>}
-                </div>
-                <p className="mt-3 text-[11px] font-medium text-emerald-800">El total final se calcula al enviar la solicitud y puede variar ligeramente por la distancia de ruta. La fecha y el vehículo quedan sujetos a confirmación.</p>
+            {wizardStep === 4 && (
+              <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+                El administrador revisará tu solicitud y definirá el precio final antes de que realices el pago.
               </div>
             )}
 
@@ -620,7 +529,7 @@ export default function ClienteCotizarPage() {
               ) : (
                 <button type="submit" disabled={sending || categorias.length === 0}
                   className="ml-auto w-full py-4 bg-[#E31E24] hover:bg-black text-white font-black text-sm uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60">
-                  {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}{sending ? "Enviando solicitud..." : "Solicitar servicio"}
+                  {sending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}{sending ? "Enviando cotización..." : "Solicitar cotización"}
                 </button>
               )}
             </div>
@@ -674,45 +583,6 @@ export default function ClienteCotizarPage() {
 
                   {isOpen && (
                     <div className="border-t border-slate-100 px-4 sm:px-5 py-4 space-y-3">
-                      {/* NEGOCIACIÓN: el admin propuso un precio */}
-                      {cot.estado === "negociacion" && cot.precio_propuesto != null && (
-                        <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-4 space-y-3">
-                          <div className="flex items-center gap-3">
-                            <DollarSign size={22} className="text-purple-600" />
-                            <div>
-                              <p className="text-[9px] font-black uppercase tracking-widest text-purple-500">El administrador te propone</p>
-                              <p className="text-2xl font-black text-purple-700">${Number(cot.precio_propuesto).toFixed(2)}</p>
-                            </div>
-                          </div>
-                          {cot.respuesta_admin && <p data-no-translate className="text-sm text-purple-800 bg-white/60 rounded-xl p-2.5">{cot.respuesta_admin}</p>}
-
-                          {counterId === cot.id ? (
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tu nueva propuesta ($)</label>
-                              <div className="flex gap-2">
-                                <input type="number" min="0" step="0.01" value={counterVal} onChange={e => setCounterVal(e.target.value)}
-                                  className="flex-1 rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-[#E31E24]" placeholder="Tu contraoferta" />
-                                <button onClick={() => responder(cot, "contraoferta")} className="px-4 py-2 rounded-xl bg-[#E31E24] text-white text-[10px] font-black uppercase">Enviar</button>
-                                <button onClick={() => setCounterId(null)} className="px-3 py-2 rounded-xl bg-slate-200 text-slate-500 text-[10px] font-black uppercase">X</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-3 gap-2">
-                              <button onClick={() => responder(cot, "aceptar")} className="py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1">
-                                <CheckCircle2 size={13} /> Aceptar
-                              </button>
-                              <button onClick={() => { setCounterId(cot.id); setCounterVal(""); setRespMsg(""); }} className="py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1">
-                                <DollarSign size={13} /> Negociar
-                              </button>
-                              <button onClick={() => responder(cot, "rechazar")} className="py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1">
-                                <XCircle size={13} /> Rechazar
-                              </button>
-                            </div>
-                          )}
-                          {respMsg && <p className="text-xs font-bold text-purple-700">{respMsg}</p>}
-                        </div>
-                      )}
-
                       {cot.valor_ofrecido && (
                         <div className="flex items-center gap-2 text-xs text-slate-500"><DollarSign size={13} className="text-slate-400" />Valor ofrecido: <b className="text-slate-700">${Number(cot.valor_ofrecido).toFixed(2)}</b></div>
                       )}
@@ -724,7 +594,7 @@ export default function ClienteCotizarPage() {
                       {cot.respuesta_admin && <div className={`rounded-xl p-4 border ${info.bg}`}><p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${info.color}`}>Respuesta de Turesma</p><p data-no-translate className="text-sm text-slate-700">{cot.respuesta_admin}</p></div>}
                       {cot.reserva_id && (
                         <div className="bg-orange-50 border border-orange-300 rounded-xl p-4 flex items-center gap-3"><Zap size={18} className="text-orange-600" />
-                          <div><p className="text-xs font-black text-orange-700">Reserva #{cot.reserva_id} creada — pendiente de pago</p><p className="text-[10px] text-orange-600">Paga al menos el 50% en tu Historial para confirmarla.</p></div></div>
+                          <div><p className="text-xs font-black text-orange-700">Reserva #{cot.reserva_id} creada — pendiente de pago</p><p className="text-[10px] text-orange-600">Paga el total en tu Historial para confirmarla.</p></div></div>
                       )}
                     </div>
                   )}

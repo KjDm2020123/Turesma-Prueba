@@ -790,9 +790,9 @@ const actualizarEstadoViaje = async (req, res) => {
       }
 
       const { total, estado_pago: estadoPago } = reservaActual.rows[0];
-      if (Number(total) > 0 && estadoPago !== "confirmado") {
+      if (Number(total) > 0 && estadoPago !== "pagado") {
         return res.status(400).json({
-          error: "No puedes iniciar o finalizar un viaje sin pago confirmado",
+          error: "No puedes iniciar o finalizar un viaje sin el pago completo confirmado",
         });
       }
     }

@@ -5,7 +5,6 @@ const { verifyToken } = require("../middleware/auth.middleware");
 const {
   crearCotizacion,
   listarMisCotizaciones,
-  responderCotizacion,
   obtenerNegociacion,
   crearReservaDirecta,
 } = require("../controllers/admin/cotizaciones.admin.controller");
@@ -19,7 +18,6 @@ router.use(verifyToken);
 router.post("/", crearCotizacion);
 router.post("/reserva-directa", crearReservaDirecta);
 router.get("/mias", listarMisCotizaciones);
-router.patch("/:id/responder", responderCotizacion);
 router.get("/:id/negociacion", obtenerNegociacion);
 
 module.exports = router;

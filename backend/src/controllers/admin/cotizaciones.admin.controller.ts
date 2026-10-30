@@ -4,13 +4,71 @@ const pool = require("../../config/db");
 const { crearNotificacion, notificarAdmins } = require("../../config/notificaciones");
 const { getPricing, roadDistanceKm, calculateQuote } = require("../../config/pricing");
 
+// PostgreSQL puede devolver columnas DATE como Date según la configuración del
+// driver. Nunca se debe enviar Date.toString() a una columna DATE, porque
+// produce valores como "Sun Nov 15" que PostgreSQL no puede interpretar.
+const toDateOnly = (value: any, fallbackToday = false) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  const text = String(value || "").trim();
+  const isoDate = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoDate) return isoDate[1];
+
+  return fallbackToday ? new Date().toISOString().slice(0, 10) : null;
+};
+
+const getReservasConductorTarget = async (client: any) => {
+  const result = await client.query(
+    `SELECT ccu.table_name AS referenced_table
+     FROM information_schema.table_constraints tc
+     INNER JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name
+      AND tc.table_schema = kcu.table_schema
+     INNER JOIN information_schema.constraint_column_usage ccu
+       ON ccu.constraint_name = tc.constraint_name
+      AND ccu.table_schema = tc.table_schema
+     WHERE tc.table_schema = 'public'
+       AND tc.table_name = 'reservas'
+       AND tc.constraint_type = 'FOREIGN KEY'
+       AND kcu.column_name = 'conductor_id'
+     LIMIT 1`
+  );
+
+  return String(result.rows[0]?.referenced_table || "usuarios").toLowerCase();
+};
+
+const resolveReservaConductorId = async (client: any, conductorId: number | null) => {
+  if (!conductorId) return null;
+
+  const targetTable = await getReservasConductorTarget(client);
+  if (targetTable === "conductores") return conductorId;
+
+  const conductor = await client.query(
+    `SELECT usuario_id
+     FROM conductores
+     WHERE id = $1
+     LIMIT 1`,
+    [conductorId]
+  );
+  if (!conductor.rowCount || !conductor.rows[0].usuario_id) {
+    throw new Error("El conductor seleccionado no tiene un usuario válido");
+  }
+
+  return Number(conductor.rows[0].usuario_id);
+};
+
 // Busca un conductor y un vehículo disponibles para completar la reserva sin
 // intervención manual del conductor. Si ya existe una asignación activa válida,
 // la reutiliza; de lo contrario crea una nueva asignación con un par disponible.
 const resolverAsignacionAutomatica = async (client: any, c: any) => {
   const capacidad = Number(c.num_personas || 1);
   const tipoVehiculo = String(c.tipo_vehiculo || "").trim().toLowerCase();
-  const fechaServicio = c.fecha_servicio ? String(c.fecha_servicio).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const fechaServicio = toDateOnly(c.fecha_servicio, true);
 
   const pairRes = await client.query(
     `SELECT v.id AS vehiculo_id, cnd.id AS conductor_id
@@ -67,7 +125,7 @@ const resolverAsignacionAutomatica = async (client: any, c: any) => {
 // Crea una reserva a partir de una cotización, resolviendo el conductor del
 // vehículo (asignacion_vehiculos → conductores.id, o vehiculos.usuario_id).
 // Si hay un precio de por medio, la reserva nace 'pendiente_pago': solo pasa a
-// 'confirmada' cuando el admin aprueba el comprobante del 50% mínimo.
+// 'confirmada' cuando el admin aprueba el pago total.
 const crearReservaDesdeCotizacion = async (
   client: any, c: any, precioFinal: number, vehiculoOverride?: number | null, conductorOverride?: number | null
 ) => {
@@ -103,12 +161,18 @@ const crearReservaDesdeCotizacion = async (
   }
 
   const estadoInicial = Number(precioFinal) > 0 ? "pendiente_pago" : "confirmada";
+  const fechaServicio = toDateOnly(c.fecha_servicio);
+  const fechaFin = toDateOnly(c.fecha_fin);
+  if (!fechaServicio) {
+    throw new Error(`La cotización #${c.id} no tiene una fecha de servicio válida`);
+  }
+  const reservaConductorId = await resolveReservaConductorId(client, conductorFinal);
   const reservaRes = await client.query(
     `INSERT INTO reservas
        (usuario_id, fecha_reserva, fecha_fin, num_personas, total, estado, origen, destino, vehiculo_id, conductor_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id`,
-    [c.usuario_id, c.fecha_servicio, c.fecha_fin || null, c.num_personas, precioFinal, estadoInicial, c.origen, c.destino, vehiculoFinal, conductorFinal]
+    [c.usuario_id, fechaServicio, fechaFin, c.num_personas, precioFinal, estadoInicial, c.origen, c.destino, vehiculoFinal, reservaConductorId]
   );
   return reservaRes.rows[0].id;
 };
@@ -117,20 +181,27 @@ const crearReservaDesdeCotizacion = async (
 const listarCotizaciones = async (req: any, res: any) => {
   try {
     const { estado } = req.query;
-    const cond = estado && estado !== "todas" ? `WHERE c.estado = $1` : "";
-    const params = estado && estado !== "todas" ? [estado] : [];
+    const cond = estado && estado !== "todas"
+      ? estado === "pendiente" ? `WHERE c.estado IN ('pendiente', 'negociacion')` : `WHERE c.estado = $1`
+      : "";
+    const params = estado && estado !== "todas" && estado !== "pendiente" ? [estado] : [];
 
     const result = await pool.query(
       `SELECT c.*,
+              CASE WHEN c.estado = 'negociacion' THEN 'pendiente' ELSE c.estado END AS estado,
               u.nombre AS cliente_nombre,
               u.email  AS cliente_email,
               u.telefono AS cliente_telefono,
               v.placa AS vehiculo_placa,
               v.modelo AS vehiculo_modelo,
-              v.tipo AS vehiculo_tipo_real
+              v.tipo AS vehiculo_tipo_real,
+              vc.id AS vehiculo_conductor_id,
+              vu.nombre AS vehiculo_conductor_nombre
        FROM cotizaciones c
        JOIN usuarios u ON u.id = c.usuario_id
        LEFT JOIN vehiculos v ON v.id = c.vehiculo_id
+       LEFT JOIN usuarios vu ON vu.id = v.usuario_id
+       LEFT JOIN conductores vc ON vc.usuario_id = v.usuario_id
        ${cond}
        ORDER BY c.creado_en DESC`,
       params
@@ -207,8 +278,9 @@ const aprobarCotizacion = async (req: any, res: any) => {
   const { id } = req.params;
   const { precio_final, respuesta_admin, vehiculo_id, conductor_id } = req.body;
 
-  if (!precio_final) {
-    return res.status(400).json({ error: "Se requiere precio_final para aprobar" });
+  const precio = Number(precio_final);
+  if (!Number.isFinite(precio) || precio <= 0) {
+    return res.status(400).json({ error: "Se requiere un precio_final mayor que cero para aprobar" });
   }
 
   const client = await pool.connect();
@@ -226,32 +298,105 @@ const aprobarCotizacion = async (req: any, res: any) => {
     }
 
     const c = cot.rows[0];
-    const reservaId = await crearReservaDesdeCotizacion(client, c, Number(precio_final), vehiculo_id, conductor_id);
+    if ((vehiculo_id && !conductor_id) || (!vehiculo_id && conductor_id)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Selecciona un vehículo con su conductor asignado" });
+    }
+    if (vehiculo_id && conductor_id) {
+      const vehicle = await client.query(
+        `SELECT id, tipo, capacidad
+         FROM vehiculos
+         WHERE id = $1 AND activo = true`,
+        [Number(vehiculo_id)]
+      );
+      if (!vehicle.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "El vehículo seleccionado no existe o está inactivo" });
+      }
+      const requestedType = String(c.tipo_vehiculo || "").trim().toLowerCase();
+      const vehicleType = String(vehicle.rows[0].tipo || "").trim().toLowerCase();
+      if (requestedType && vehicleType !== requestedType) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "El vehículo seleccionado no pertenece a la categoría solicitada" });
+      }
+      if (Number(c.num_personas || 0) > Number(vehicle.rows[0].capacidad || 0)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "El vehículo seleccionado no tiene capacidad suficiente" });
+      }
+      const conductor = await client.query(
+        `SELECT c.usuario_id, c.estado,
+                EXISTS (
+                  SELECT 1 FROM asignacion_vehiculos av
+                  WHERE av.conductor_id = c.id
+                    AND av.vehiculo_id = $2
+                    AND av.estado = 'activa'
+                ) AS ya_asignado_al_vehiculo
+         FROM conductores c
+         JOIN usuarios u ON u.id = c.usuario_id
+         WHERE c.id = $1 AND u.activo = true`,
+        [Number(conductor_id), Number(vehiculo_id)]
+      );
+      if (!conductor.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "El conductor seleccionado no existe o está inactivo" });
+      }
+      const conductorActual = conductor.rows[0];
+      if (conductorActual.estado !== "disponible" && !conductorActual.ya_asignado_al_vehiculo) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "El conductor seleccionado no está disponible para ese vehículo" });
+      }
+      if (!conductorActual.ya_asignado_al_vehiculo) {
+        await client.query(
+          `UPDATE asignacion_vehiculos
+           SET estado = 'finalizada', fecha_fin = CURRENT_DATE, actualizado_en = CURRENT_TIMESTAMP
+           WHERE estado = 'activa'
+             AND (vehiculo_id = $1 OR conductor_id = $2)`,
+          [Number(vehiculo_id), Number(conductor_id)]
+        );
+        await client.query(
+          `INSERT INTO asignacion_vehiculos (conductor_id, vehiculo_id, estado)
+           VALUES ($1, $2, 'activa')`,
+          [Number(conductor_id), Number(vehiculo_id)]
+        );
+      }
+      await client.query(
+        `UPDATE vehiculos
+         SET usuario_id = $1, estado = 'en_servicio'
+         WHERE id = $2 AND activo = true`,
+        [conductorActual.usuario_id, Number(vehiculo_id)]
+      );
+      await client.query(
+        `UPDATE conductores SET estado = 'en_servicio' WHERE id = $1`,
+        [Number(conductor_id)]
+      );
+    }
+    const reservaId = await crearReservaDesdeCotizacion(client, c, precio, vehiculo_id, conductor_id);
 
     await client.query(
       `UPDATE cotizaciones
        SET estado = 'aprobada', precio_final = $1, respuesta_admin = $2,
            reserva_id = $3, turno = 'admin', actualizado_en = NOW()
        WHERE id = $4`,
-      [precio_final, respuesta_admin || "Cotización aprobada", reservaId, id]
+      [precio, respuesta_admin || "Cotización aprobada", reservaId, id]
     );
     await client.query(
       `INSERT INTO cotizacion_negociacion (cotizacion_id, actor, precio, mensaje) VALUES ($1, 'admin', $2, $3)`,
-      [id, precio_final, respuesta_admin || "Cotización aprobada"]
+      [id, precio, respuesta_admin || "Cotización aprobada"]
     );
 
     await client.query("COMMIT");
 
-    // Al cliente: debe pagar el mínimo (50%) para que la reserva quede confirmada.
+    // Al cliente: debe pagar el total para que la reserva quede confirmada.
     // Al conductor NO se le notifica todavía: la reserva es invisible para él hasta
     // que el pago se apruebe (ver admin/pagos.admin.controller.ts → aprobarPago).
-    await crearNotificacion(req.user?.id, c.usuario_id, `Tu cotización fue APROBADA por $${precio_final}. Reserva #${reservaId} creada: paga al menos el 50% para confirmarla.`, reservaId, "reserva", reservaId);
+    await crearNotificacion(req.user?.id, c.usuario_id, `Tu cotización fue APROBADA por $${precio}. Reserva #${reservaId} creada: paga el total para confirmarla.`, reservaId, "reserva", reservaId);
 
     return res.json({ message: "Cotización aprobada y reserva creada, pendiente de pago", reserva_id: reservaId });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error(e);
-    return res.status(500).json({ error: "Error al aprobar cotización" });
+    const message = e instanceof Error ? e.message : "Error al aprobar cotización";
+    return res.status(500).json({ error: message });
   } finally {
     client.release();
   }
@@ -262,8 +407,9 @@ const contraofertarCotizacion = async (req: any, res: any) => {
   const { id } = req.params;
   const { precio_propuesto, mensaje } = req.body;
 
-  if (!precio_propuesto) {
-    return res.status(400).json({ error: "Se requiere precio_propuesto" });
+  const precio = Number(precio_propuesto);
+  if (!Number.isFinite(precio) || precio <= 0) {
+    return res.status(400).json({ error: "Se requiere un precio_propuesto mayor que cero" });
   }
 
   const client = await pool.connect();
@@ -280,14 +426,14 @@ const contraofertarCotizacion = async (req: any, res: any) => {
        SET estado = 'negociacion', precio_propuesto = $1, respuesta_admin = $2,
            turno = 'cliente', actualizado_en = NOW()
        WHERE id = $3`,
-      [precio_propuesto, mensaje || null, id]
+      [precio, mensaje || null, id]
     );
     await client.query(
       `INSERT INTO cotizacion_negociacion (cotizacion_id, actor, precio, mensaje) VALUES ($1, 'admin', $2, $3)`,
-      [id, precio_propuesto, mensaje || null]
+      [id, precio, mensaje || null]
     );
     await client.query("COMMIT");
-    await crearNotificacion(req.user?.id, cot.rows[0].usuario_id, `El administrador te propone $${precio_propuesto} por tu cotización #${id}. Revisa y responde.`, null, "cotizacion", Number(id));
+    await crearNotificacion(req.user?.id, cot.rows[0].usuario_id, `El administrador te propone $${precio} por tu cotización #${id}. Revisa y responde.`, null, "cotizacion", Number(id));
     return res.json({ message: "Contraoferta enviada al cliente" });
   } catch (e) {
     await client.query("ROLLBACK");
@@ -326,9 +472,9 @@ const responderCotizacion = async (req: any, res: any) => {
       );
       await client.query("COMMIT");
       // Al conductor NO se le notifica todavía: la reserva queda invisible para él
-      // hasta que el pago mínimo (50%) sea aprobado por el admin.
+      // hasta que el pago total sea aprobado por el admin.
       await notificarAdmins(userId, `El cliente ACEPTÓ la propuesta de $${precioFinal} (cotización #${id}). Reserva #${reservaId} creada, pendiente de pago.`, "reserva", reservaId);
-      return res.json({ message: "¡Acuerdo alcanzado! Tu reserva fue creada, paga al menos el 50% para confirmarla", reserva_id: reservaId });
+      return res.json({ message: "¡Acuerdo alcanzado! Tu reserva fue creada, paga el total para confirmarla", reserva_id: reservaId });
     }
 
     if (accion === "contraoferta") {
@@ -439,15 +585,6 @@ const crearCotizacion = async (req: any, res: any) => {
   // POSTERIOR a la de inicio; si no, es un servicio de un solo día (null).
   const esFecha = (v: any) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
   const fechaFin = esFecha(fecha_fin) && fecha_fin.trim() > String(fecha_servicio).trim() ? fecha_fin.trim() : null;
-  // Tope de días seguidos por servicio (red de seguridad; el front ya lo limita).
-  const MAX_DIAS = 30;
-  if (fechaFin) {
-    const dias = Math.round((new Date(fechaFin).getTime() - new Date(String(fecha_servicio).slice(0, 10)).getTime()) / 86400000) + 1;
-    if (dias > MAX_DIAS) {
-      return res.status(400).json({ error: `El servicio no puede superar los ${MAX_DIAS} días seguidos.` });
-    }
-  }
-
   try {
     // Candado de identidad: un cliente solo puede solicitar servicios si su
     // cédula fue verificada por el administrador. El staff (admin/operativo)
@@ -463,24 +600,12 @@ const crearCotizacion = async (req: any, res: any) => {
       }
     }
 
-    const days = fechaFin
-      ? Math.max(1, Math.round((new Date(fechaFin).getTime() - new Date(String(fecha_servicio).slice(0, 10)).getTime()) / 86400000) + 1)
-      : 1;
     const trips = Math.max(1, Math.floor(Number(num_viajes) || 1));
-    const hasCoordinates = [origen_lat, origen_lng, destino_lat, destino_lng].every((value) => Number.isFinite(Number(value)));
-    const distanceKm = hasCoordinates
-      ? await roadDistanceKm(Number(origen_lat), Number(origen_lng), Number(destino_lat), Number(destino_lng))
-      : 0;
     let tipoVehiculo = String(tipo_vehiculo || "").trim().toLowerCase() || null;
     if (vehiculo_id) {
       const vehicleResult = await pool.query("SELECT tipo FROM vehiculos WHERE id = $1", [Number(vehiculo_id)]);
       if (vehicleResult.rows[0]?.tipo) tipoVehiculo = String(vehicleResult.rows[0].tipo).trim().toLowerCase();
     }
-    const pricing = await getPricing();
-    const serviceMode = String(modalidad_servicio || (fechaFin ? "varios_dias" : "dia")).trim().toLowerCase();
-    const serviceHours = Math.max(1, Number(duracion_horas) || 1);
-    const priceBreakdown = calculateQuote({ pricing, distanceKm, days, trips, vehicleType: tipoVehiculo, serviceMode, hours: serviceHours });
-
     const result = await pool.query(
       `INSERT INTO cotizaciones
          (usuario_id, origen, destino, fecha_servicio, fecha_fin, num_personas, tipo_vehiculo, notas,
@@ -491,14 +616,7 @@ const crearCotizacion = async (req: any, res: any) => {
        RETURNING *`,
       [
         usuario_id, origen, destino, fecha_servicio, fechaFin, num_personas, tipoVehiculo, notas || null,
-        vehiculo_id ? Number(vehiculo_id) : null, num(valor_ofrecido), priceBreakdown.total, trips, priceBreakdown.distance_km,
-        JSON.stringify({ ...priceBreakdown, pricing: {
-          tarifa_diaria: Number(pricing.tarifa_diaria), precio_km: Number(pricing.precio_km),
-          tarifa_viaje: Number(pricing.tarifa_viaje), recargo_peajes: Number(pricing.recargo_peajes),
-          tarifa_van: Number(pricing.tarifa_van), tarifa_bus: Number(pricing.tarifa_bus),
-          tarifa_suv: Number(pricing.tarifa_suv), tarifa_minibus: Number(pricing.tarifa_minibus),
-          tarifa_sedan: Number(pricing.tarifa_sedan), service_mode: serviceMode, hours: serviceHours,
-        } }),
+        vehiculo_id ? Number(vehiculo_id) : null, num(valor_ofrecido), null, trips, null, null,
         num(duracion_valor), dUnidad, num(origen_lat), num(origen_lng), num(destino_lat), num(destino_lng), horaSalida,
       ]
     );
@@ -550,8 +668,7 @@ const resumenCotizaciones = async (_req: any, res: any) => {
   try {
     const result = await pool.query(
       `SELECT
-         COUNT(*) FILTER (WHERE estado = 'pendiente')   AS pendientes,
-         COUNT(*) FILTER (WHERE estado = 'negociacion') AS negociacion,
+         COUNT(*) FILTER (WHERE estado IN ('pendiente', 'negociacion')) AS pendientes,
          COUNT(*) FILTER (WHERE estado = 'aprobada')    AS aprobadas,
          COUNT(*) FILTER (WHERE estado = 'rechazada')   AS rechazadas,
          COUNT(*) AS total,

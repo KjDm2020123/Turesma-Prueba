@@ -86,7 +86,6 @@ function StarRating({ value, onChange, readOnly }: { value: number; onChange?: (
 // Modal para que el cliente pague por transferencia o PayPhone.
 function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose: () => void; onSuccess: () => void }) {
   const total = Number(reserva.total) || 0;
-  const minimo = total * 0.5;
   const pagado = Number(reserva.monto_pagado) || 0;
   const saldoPendiente = Math.max(0, total - pagado);
 
@@ -186,7 +185,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
             <div className="bg-[#E31E24] p-2 rounded-xl"><CreditCard size={18} /></div>
             <div>
               <h2 className="text-base font-black italic tracking-tighter uppercase">Pagar reserva #{reserva.id}</h2>
-              <p className="text-[10px] text-gray-400">Mínimo 50% para asegurar tu viaje</p>
+              <p className="text-[10px] text-gray-400">Debes pagar el total para confirmar tu viaje</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X size={20} /></button>
@@ -196,7 +195,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
           {/* RESUMEN */}
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="bg-slate-50 rounded-xl p-3"><p className="text-[9px] font-black uppercase text-slate-400">Total</p><p className="font-black text-slate-800">${total.toFixed(2)}</p></div>
-            <div className="bg-slate-50 rounded-xl p-3"><p className="text-[9px] font-black uppercase text-slate-400">Mínimo (50%)</p><p className="font-black text-slate-800">${minimo.toFixed(2)}</p></div>
+            <div className="bg-slate-50 rounded-xl p-3"><p className="text-[9px] font-black uppercase text-slate-400">Saldo pendiente</p><p className="font-black text-slate-800">${saldoPendiente.toFixed(2)}</p></div>
             <div className="bg-emerald-50 rounded-xl p-3"><p className="text-[9px] font-black uppercase text-emerald-500">Pagado</p><p className="font-black text-emerald-700">${pagado.toFixed(2)}</p></div>
           </div>
 
@@ -448,8 +447,8 @@ export default function ClienteHistorialPage() {
         <div className="space-y-3">
           {reservas.map(r => {
             const est = ESTADO[r.estado] || ESTADO.pendiente;
-            const pagoMinimoConfirmado = Number(r.total) <= 0 || ["confirmado", "pagado"].includes(r.estado_pago || "");
-            const viajeRealizado = r.estado === "finalizada" && pagoMinimoConfirmado;
+            const pagoCompletoConfirmado = Number(r.total) <= 0 || r.estado_pago === "pagado";
+            const viajeRealizado = r.estado === "finalizada" && pagoCompletoConfirmado;
             const puedeCalificar = viajeRealizado && !r.calificacion;
             const totalReserva = Number(r.total) || 0;
             const montoPagado = Math.min(totalReserva, Math.max(0, Number(r.monto_pagado) || 0));
@@ -506,9 +505,9 @@ export default function ClienteHistorialPage() {
                   </div>
                 )}
 
-                {r.estado === "finalizada" && !pagoMinimoConfirmado && (
+                {r.estado === "finalizada" && !pagoCompletoConfirmado && (
                   <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
-                    Este viaje no cuenta como realizado porque el pago no está confirmado.
+                    Este viaje no cuenta como realizado porque el pago total no está confirmado.
                   </div>
                 )}
 

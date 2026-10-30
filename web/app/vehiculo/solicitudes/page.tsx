@@ -1,9 +1,10 @@
 "use client";
 
 import { useConductorPanel } from "../_components/use-conductor-panel";
+import Link from "next/link";
 import {
   Bell, Loader2, MapPin, Users, DollarSign,
-  CheckCircle, X, CalendarDays, ShieldCheck, ShieldAlert,
+  CheckCircle, CalendarDays, ShieldCheck, ShieldAlert,
 } from "lucide-react";
 
 const ESTADO_COLOR: Record<string, string> = {
@@ -24,8 +25,8 @@ const ESTADO_LABEL: Record<string, string> = {
 
 export default function SolicitudesPage() {
   const {
-    panel, loadingPanel, actionLoadingId, msg, err,
-    callAction, formatFecha, checkingSession,
+    panel, loadingPanel, msg, err,
+    formatFecha, checkingSession,
   } = useConductorPanel();
 
   if (checkingSession) {
@@ -79,7 +80,6 @@ export default function SolicitudesPage() {
       ) : (
         <div className="space-y-3">
           {solicitudes.map((r) => {
-            const isLoading = actionLoadingId === r.id;
             return (
               <div
                 key={r.id}
@@ -142,22 +142,13 @@ export default function SolicitudesPage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => callAction(r.id, "aceptar")}
-                    disabled={isLoading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all disabled:opacity-60 shadow-sm shadow-emerald-500/20"
+                  <Link
+                    href="/vehiculo/activas"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#E31E24] hover:bg-[#c0181e] text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-sm shadow-red-500/20"
                   >
-                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                    Aceptar
-                  </button>
-                  <button
-                    onClick={() => callAction(r.id, "rechazar")}
-                    disabled={isLoading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-black uppercase tracking-wider rounded-xl border border-red-200 transition-all disabled:opacity-60"
-                  >
-                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
-                    Rechazar
-                  </button>
+                    <CheckCircle size={14} />
+                    Acceder
+                  </Link>
                 </div>
               </div>
             );

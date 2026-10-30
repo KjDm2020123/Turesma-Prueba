@@ -86,7 +86,6 @@ const {
 const {
   listarCotizaciones,
   aprobarCotizacion,
-  contraofertarCotizacion,
   obtenerNegociacion,
   rechazarCotizacion,
   crearCotizacion,
@@ -268,7 +267,6 @@ router.get("/cotizaciones", listarCotizaciones);
 router.get("/cotizaciones/resumen", resumenCotizaciones);
 router.post("/cotizaciones", crearCotizacion);
 router.patch("/cotizaciones/:id/aprobar", aprobarCotizacion);
-router.patch("/cotizaciones/:id/contraoferta", contraofertarCotizacion);
 router.patch("/cotizaciones/:id/rechazar", rechazarCotizacion);
 router.get("/cotizaciones/:id/negociacion", obtenerNegociacion);
 router.get("/cotizaciones/:id/proforma", getProformaCotizacion);

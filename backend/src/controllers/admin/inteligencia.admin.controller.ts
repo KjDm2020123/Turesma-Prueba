@@ -306,7 +306,7 @@ const buildDashboardData = async () => {
       tipo: "pagos",
       prioridad: reservasPendientePago > 5 ? "alta" : "media",
       titulo: "Reservas esperando confirmación de pago",
-      descripcion: `${reservasPendientePago} reserva(s) tienen cotización aprobada pero aún no llega el pago mínimo (50%). No quedarán confirmadas ni visibles al conductor hasta entonces.`,
+      descripcion: `${reservasPendientePago} reserva(s) tienen cotización aprobada pero aún no llega el pago completo. No quedarán confirmadas ni visibles al conductor hasta entonces.`,
       link: LINK_POR_TIPO.pagos,
     });
   }

@@ -5,12 +5,12 @@ import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
-import { descargarCSV, descargarExcel } from "../../../lib/download";
+import { descargarExcel } from "../../../lib/download";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
   UserCircle, Plus, Edit3, Trash2, X, Search, FileSpreadsheet,
-  CheckCircle, AlertCircle, Star, Loader2, Car, UploadCloud, Download
+  CheckCircle, AlertCircle, Star, Loader2, Car, UploadCloud
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -55,7 +55,6 @@ export default function AdminConductoresPage() {
   const confirmar = useConfirm();
   const [conductores, setConductores] = useState<Conductor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [exportando, setExportando] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
   const [search, setSearch] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todos");
@@ -106,13 +105,6 @@ export default function AdminConductoresPage() {
     setForm(emptyForm);
     setMsg(""); setErr("");
     setModalOpen(true);
-  };
-
-  const exportarCSV = async () => {
-    setExportando(true); setErr("");
-    const result = await descargarCSV("/api/admin/reportes/exportar-csv?tipo=conductores", "reporte_conductores.csv");
-    if (!result.ok) setErr(result.error || "No se pudo exportar");
-    setExportando(false);
   };
 
   const exportarExcel = async () => {
@@ -257,10 +249,6 @@ export default function AdminConductoresPage() {
 
       {/* HEADER */}
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <button onClick={exportarCSV} disabled={exportando} className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
-          {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-          Exportar CSV
-        </button>
         <button onClick={exportarExcel} disabled={exportandoExcel} className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
           {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
           Excel con diseño
