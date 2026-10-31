@@ -6,7 +6,7 @@ import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useConfirm } from "../../../components/confirm-dialog";
 import {
-  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video, MapPin, GripVertical,
+  Images, Loader2, UploadCloud, Trash2, Eye, EyeOff, X, Plus, CheckCircle2, Video, MapPin, GripVertical, ArrowUpRight,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -92,6 +92,7 @@ export default function AdminGaleriaPage() {
 
   // Formulario de nuevo contenido
   const [imagenUrl, setImagenUrl] = useState("");
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [tipoContenido, setTipoContenido] = useState<"imagen" | "video">("imagen");
   const [titulo, setTitulo] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -118,6 +119,11 @@ export default function AdminGaleriaPage() {
   const videos = fotosCategoria
     .filter((foto) => foto.tipo === "video")
     .sort((a, b) => a.orden - b.orden || new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
+  const previewAspectRatio = videoFormat === "vertical"
+    ? 9 / 16
+    : videoFormat === "horizontal"
+      ? 16 / 9
+      : videoOriginalAspectRatio;
 
   const flash = (setter: (v: string) => void, value: string) => {
     setter(value);
@@ -128,6 +134,7 @@ export default function AdminGaleriaPage() {
     posterRequestRef.current += 1;
     setCategoria(next);
     setImagenUrl("");
+    setImagePreviewUrl(null);
     setVideoPreview(null);
     setSelectedVideo(null);
     setVideoPosterPreview(null);
@@ -143,6 +150,11 @@ export default function AdminGaleriaPage() {
     if (!videoPreview?.startsWith("blob:")) return;
     return () => URL.revokeObjectURL(videoPreview);
   }, [videoPreview]);
+
+  useEffect(() => {
+    if (!imagePreviewUrl?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(imagePreviewUrl);
+  }, [imagePreviewUrl]);
 
   useEffect(() => {
     if (!videoPosterPreview?.startsWith("blob:")) return;
@@ -169,6 +181,8 @@ export default function AdminGaleriaPage() {
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setImagenUrl("");
     setErr(""); setSubiendo(true);
     try {
       const fd = new FormData();
@@ -182,6 +196,7 @@ export default function AdminGaleriaPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al subir la imagen");
       setImagenUrl(json.imageUrl || "");
+      setImagePreviewUrl(json.imageUrl || null);
     } catch (e) { flash(setErr, e instanceof Error ? e.message : "No se pudo subir la imagen"); }
     finally { setSubiendo(false); }
   };
@@ -191,6 +206,7 @@ export default function AdminGaleriaPage() {
     const posterRequest = ++posterRequestRef.current;
     setErr("");
     setImagenUrl("");
+    setImagePreviewUrl(null);
     setSelectedVideo(file);
     setVideoPreview(URL.createObjectURL(file));
     setVideoPosterPreview(null);
@@ -267,6 +283,7 @@ export default function AdminGaleriaPage() {
       setFotos((p) => [json, ...p]);
       posterRequestRef.current += 1;
       setImagenUrl(""); setTitulo(""); setDescripcion(""); setVideoPreview(null); setSelectedVideo(null);
+      setImagePreviewUrl(null);
       setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl("");
       setVideoFormat("original"); setVideoOriginalAspectRatio(16 / 9);
       if (fileRef.current) fileRef.current.value = "";
@@ -361,18 +378,20 @@ export default function AdminGaleriaPage() {
       }}
       className={`group bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${draggedVideoId === contenido.id ? "border-[#E31E24] opacity-50" : "border-slate-200"} ${contenido.activo ? "" : "opacity-60"}`}
     >
-      <div className={`relative ${contenido.tipo === "video" ? "aspect-video bg-slate-950" : "aspect-[4/3] bg-slate-100 cursor-zoom-in"}`} onClick={() => contenido.tipo === "imagen" && setZoomImg(contenido.imagen_url)}>
+      <div className={`relative ${contenido.tipo === "video" ? "flex aspect-video items-center justify-center bg-slate-950" : "aspect-[4/3] bg-slate-100 cursor-zoom-in"}`} onClick={() => contenido.tipo === "imagen" && setZoomImg(contenido.imagen_url)}>
         {contenido.tipo === "video" ? (
           <>
-            <Image
-              src={contenido.video_poster_url || "/video-poster.svg"}
-              alt="Vista previa del video"
-              aria-hidden="true"
-              fill
-              sizes="(max-width: 768px) 50vw, 25vw"
-              unoptimized
-              className="pointer-events-none scale-110 object-cover opacity-60 blur-2xl"
-            />
+            {contenido.video_poster_url && (
+              <Image
+                src={contenido.video_poster_url}
+                alt=""
+                aria-hidden="true"
+                fill
+                sizes="(max-width: 768px) 50vw, 25vw"
+                unoptimized
+                className="pointer-events-none scale-110 object-cover opacity-60 blur-2xl"
+              />
+            )}
             <span className="absolute left-2 top-2 z-20 rounded-lg bg-slate-950/75 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-white">
               {index === 0 ? "Grande · izquierda" : index % 3 === 1 ? "Pequeño · arriba" : index % 3 === 2 ? "Pequeño · abajo" : `Mosaico ${Math.floor(index / 3) + 1} · grande`}
             </span>
@@ -394,10 +413,23 @@ export default function AdminGaleriaPage() {
             </button>
             <video
               src={contenido.imagen_url}
-              poster={contenido.video_poster_url || "/video-poster.svg"}
+              poster={contenido.video_poster_url || undefined}
+              preload={contenido.video_poster_url ? "metadata" : "auto"}
               controls
-              style={{ transform: `translate(${contenido.video_offset_x || 0}%, ${contenido.video_offset_y || 0}%) scale(${(contenido.video_zoom || 100) / 100})` }}
-              className="relative z-10 h-full w-full bg-transparent object-contain"
+              style={{
+                aspectRatio: contenido.video_format === "vertical"
+                  ? 9 / 16
+                  : contenido.video_format === "horizontal"
+                    ? 16 / 9
+                    : contenido.video_aspect_ratio || 16 / 9,
+                width: (contenido.video_format === "vertical" || (!contenido.video_format && (contenido.video_aspect_ratio || 16 / 9) < 1)) ? "auto" : "100%",
+                height: (contenido.video_format === "vertical" || (!contenido.video_format && (contenido.video_aspect_ratio || 16 / 9) < 1)) ? "100%" : "auto",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                objectFit: "contain",
+                transform: `translate(${contenido.video_offset_x || 0}%, ${contenido.video_offset_y || 0}%) scale(${(contenido.video_zoom || 100) / 100})`,
+              }}
+              className="relative z-10 bg-transparent"
             />
           </>
         ) : (
@@ -488,7 +520,7 @@ export default function AdminGaleriaPage() {
           </p>
         ) : (
           <p className="text-sm text-slate-600 font-medium leading-relaxed">
-            Las fotos y videos que subas aquí aparecen en la sección de viajes de la página principal. Puedes ocultarlos sin borrarlos con el botón de visibilidad.
+            Las fotos y videos que subas aquí aparecen en la sección de viajes de la página principal. La portada del video se toma de su primer fotograma y su orientación original se conserva automáticamente. Puedes ocultarlos sin borrarlos con el botón de visibilidad.
           </p>
         )}
       </div>
@@ -499,8 +531,8 @@ export default function AdminGaleriaPage() {
           <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Agregar {categoria === "destinos" ? "foto de destino" : "contenido de viaje"}</p>
           {categoria === "viajes" && (
             <div className="flex rounded-xl border border-slate-200 p-1 bg-slate-50">
-              <button type="button" onClick={() => { posterRequestRef.current += 1; setTipoContenido("imagen"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl(""); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
-              <button type="button" onClick={() => { posterRequestRef.current += 1; setTipoContenido("video"); setImagenUrl(""); setVideoPreview(null); setSelectedVideo(null); setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl(""); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
+              <button type="button" onClick={() => { posterRequestRef.current += 1; setTipoContenido("imagen"); setImagenUrl(""); setImagePreviewUrl(null); setVideoPreview(null); setSelectedVideo(null); setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl(""); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "imagen" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Foto</button>
+              <button type="button" onClick={() => { posterRequestRef.current += 1; setTipoContenido("video"); setImagenUrl(""); setImagePreviewUrl(null); setVideoPreview(null); setSelectedVideo(null); setVideoPosterPreview(null); setVideoPosterBlob(null); setVideoPosterUrl(""); setVideoFormat("original"); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${tipoContenido === "video" ? "bg-white text-[#E31E24] shadow-sm" : "text-slate-400"}`}>Video</button>
             </div>
           )}
         </div>
@@ -512,26 +544,31 @@ export default function AdminGaleriaPage() {
               <div
                 className="relative mx-auto flex aspect-video max-h-[360px] w-full max-w-full items-center justify-center overflow-hidden rounded-2xl bg-slate-950"
               >
+              {videoPosterPreview && (
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 scale-110 bg-cover bg-center opacity-60 blur-2xl"
-                  style={{ backgroundImage: `url("${videoPosterPreview || "/video-poster.svg"}")` }}
+                  style={{ backgroundImage: `url("${videoPosterPreview}")` }}
                 />
-                <video
-                  src={videoPreview}
-                  poster={videoPosterPreview || "/video-poster.svg"}
-                  controls
-                  onLoadedMetadata={(event) => {
-                    const { videoWidth, videoHeight } = event.currentTarget;
-                    if (videoWidth > 0 && videoHeight > 0) setVideoOriginalAspectRatio(videoWidth / videoHeight);
-                  }}
-                  style={{
-                    aspectRatio: videoOriginalAspectRatio,
-                    width: videoOriginalAspectRatio < 1 ? "auto" : "100%",
-                    height: videoOriginalAspectRatio < 1 ? "100%" : "auto",
-                    objectFit: "contain",
-                    transform: `translate(${videoOffsetX}%, ${videoOffsetY}%) scale(${videoZoom / 100})`,
-                  }}
+              )}
+              <video
+                src={videoPreview}
+                poster={videoPosterPreview || undefined}
+                controls
+                preload={videoPosterPreview ? "metadata" : "auto"}
+                onLoadedMetadata={(event) => {
+                  const { videoWidth, videoHeight } = event.currentTarget;
+                  if (videoWidth > 0 && videoHeight > 0) setVideoOriginalAspectRatio(videoWidth / videoHeight);
+                }}
+                style={{
+                  aspectRatio: previewAspectRatio,
+                  width: previewAspectRatio < 1 ? "auto" : "100%",
+                  height: previewAspectRatio < 1 ? "100%" : "auto",
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  objectFit: "contain",
+                  transform: `translate(${videoOffsetX}%, ${videoOffsetY}%) scale(${videoZoom / 100})`,
+                }}
                   className="relative z-10 max-h-full max-w-full bg-transparent"
                 />
               </div>
@@ -541,8 +578,11 @@ export default function AdminGaleriaPage() {
                 onClick={() => fileRef.current?.click()}
                 className="relative flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 transition-all hover:border-[#E31E24] hover:bg-red-50/40"
               >
-              {imagenUrl ? (
-                <Image src={imagenUrl} alt="Vista previa" fill sizes="240px" unoptimized className="object-cover" />
+              {imagePreviewUrl ? (
+                <>
+                  <Image src={imagePreviewUrl} alt="Vista previa de la foto seleccionada" fill sizes="240px" unoptimized className="object-cover" />
+                  {subiendo && <span className="absolute inset-0 flex items-center justify-center bg-slate-950/35"><Loader2 className="animate-spin text-white" size={28} /></span>}
+                </>
               ) : subiendo ? (
                 <Loader2 className="animate-spin text-[#E31E24]" size={26} />
               ) : (
@@ -560,7 +600,7 @@ export default function AdminGaleriaPage() {
                   <legend className="text-[10px] font-black uppercase tracking-widest text-slate-500">Formato de visualización</legend>
                   <div className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
                     {([
-                      ["original", "Original"],
+                      ["original", "Automático"],
                       ["horizontal", "Horizontal"],
                       ["vertical", "Vertical"],
                     ] as const).map(([format, label]) => (
@@ -600,8 +640,8 @@ export default function AdminGaleriaPage() {
                 )}
               </div>
             )}
-            {imagenUrl && (
-              <button type="button" onClick={() => { setImagenUrl(""); if (fileRef.current) fileRef.current.value = ""; }} className="mt-2 text-[11px] font-bold text-slate-400 hover:text-[#E31E24] transition-colors">
+            {(imagenUrl || imagePreviewUrl) && (
+              <button type="button" onClick={() => { setImagenUrl(""); setImagePreviewUrl(null); if (fileRef.current) fileRef.current.value = ""; }} className="mt-2 text-[11px] font-bold text-slate-400 hover:text-[#E31E24] transition-colors">
                 Quitar archivo
               </button>
             )}
@@ -629,6 +669,36 @@ export default function AdminGaleriaPage() {
               {guardando ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
               Publicar {tipoContenido === "video" ? "video" : "foto"}
             </button>
+            {categoria === "destinos" && (
+              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label="Previsualización del destino">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Vista previa publicada</p>
+                <article className="mx-auto max-w-[320px] overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
+                    {imagePreviewUrl ? (
+                      <Image
+                        src={imagePreviewUrl}
+                        alt={titulo.trim() || "Previsualización de la foto del destino"}
+                        fill
+                        sizes="320px"
+                        unoptimized
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs font-medium text-slate-400">
+                        Selecciona una foto para previsualizarla
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-5">
+                    {titulo.trim() && <h3 className="text-xl font-black italic tracking-tight text-gray-900">{titulo}</h3>}
+                    {descripcion.trim() && <p className="mt-2 min-h-12 text-sm font-medium leading-relaxed text-gray-600">{descripcion}</p>}
+                    <span className="mt-5 inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider text-[#E31E24]">
+                      Cotizar traslado <ArrowUpRight size={15} aria-hidden="true" />
+                    </span>
+                  </div>
+                </article>
+              </section>
+            )}
           </div>
         </div>
       </div>
