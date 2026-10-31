@@ -673,7 +673,7 @@ export default function AdminGaleriaPage() {
               <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-label="Previsualización del destino">
                 <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Vista previa publicada</p>
                 <article className="mx-auto max-w-[320px] overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg">
-                  <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
+                  <div className="relative aspect-[5/4] overflow-hidden bg-gray-200">
                     {imagePreviewUrl ? (
                       <Image
                         src={imagePreviewUrl}
@@ -688,10 +688,15 @@ export default function AdminGaleriaPage() {
                         Selecciona una foto para previsualizarla
                       </div>
                     )}
+                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+                    {titulo.trim() && (
+                      <h3 className="absolute inset-x-0 bottom-0 p-5 text-xl font-black italic tracking-tight text-white drop-shadow-md">
+                        {titulo}
+                      </h3>
+                    )}
                   </div>
-                  <div className="p-5">
-                    {titulo.trim() && <h3 className="text-xl font-black italic tracking-tight text-gray-900">{titulo}</h3>}
-                    {descripcion.trim() && <p className="mt-2 min-h-12 text-sm font-medium leading-relaxed text-gray-600">{descripcion}</p>}
+                  <div className="flex flex-col p-5">
+                    {descripcion.trim() && <p className="text-sm font-medium leading-relaxed text-gray-600">{descripcion}</p>}
                     <span className="mt-5 inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider text-[#E31E24]">
                       Cotizar traslado <ArrowUpRight size={15} aria-hidden="true" />
                     </span>

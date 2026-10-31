@@ -124,6 +124,8 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, videoForma
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [loadPreview, setLoadPreview] = useState(false);
+  const [useNativeControls, setUseNativeControls] = useState(false);
+  const [playbackError, setPlaybackError] = useState("");
   const [detectedAspectRatio, setDetectedAspectRatio] = useState<number | null>(null);
   const displayAspectRatio = videoFormat === "vertical"
     ? 9 / 16
@@ -159,8 +161,11 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, videoForma
     if (video.paused) {
       try {
         await video.play();
+        setPlaybackError("");
       } catch (error) {
         console.error("No se pudo reproducir el video:", error);
+        setPlaybackError("No se pudo iniciar este video. Prueba con los controles del reproductor.");
+        setUseNativeControls(true);
       }
     } else {
       video.pause();
@@ -196,6 +201,7 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, videoForma
         src={src}
         poster={posterUrl || undefined}
         preload={loadPreview ? (posterUrl ? "metadata" : "auto") : "none"}
+        controls={useNativeControls}
         playsInline
         disablePictureInPicture
         controlsList="nodownload noplaybackrate noremoteplayback"
@@ -213,13 +219,23 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, videoForma
           const { videoWidth, videoHeight } = event.currentTarget;
           if (videoWidth > 0 && videoHeight > 0) setDetectedAspectRatio(videoWidth / videoHeight);
         }}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setPlaybackError("");
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
+        onError={(event) => {
+          const mediaError = event.currentTarget.error;
+          console.error("Error cargando el video:", mediaError);
+          setPlaybackError("Este video no pudo cargarse en el navegador. Intenta abrirlo directamente.");
+          setUseNativeControls(true);
+        }}
         onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
         onContextMenu={(event) => event.preventDefault()}
         className="relative z-10 bg-transparent"
       />
+      {!useNativeControls && (
       <div className="video-player-controls absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
         <button
           type="button"
@@ -239,6 +255,15 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, videoForma
           {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>
       </div>
+      )}
+      {playbackError && (
+        <div role="alert" className="absolute inset-x-3 top-3 z-30 rounded-xl bg-slate-950/90 p-3 text-center text-xs font-semibold text-white shadow-lg">
+          <p>{playbackError}</p>
+          <a href={src} target="_blank" rel="noreferrer" className="mt-1 inline-block underline underline-offset-2">
+            Abrir video
+          </a>
+        </div>
+      )}
     </div>
     </LocalizedContent>
   );
@@ -967,7 +992,7 @@ export default function RootPage() {
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {fotosDestinos.map((destino) => (
                 <article key={destino.id} className="home-card group flex flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg transition-shadow hover:shadow-2xl">
-                  <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
+                  <div className="relative aspect-[5/4] overflow-hidden bg-gray-200">
                     <Image
                       src={destino.imagen_url}
                       alt={destino.titulo || "Destino en Ecuador"}
@@ -977,11 +1002,15 @@ export default function RootPage() {
                       quality={75}
                       className="object-cover transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+                    {destino.titulo && (
+                      <h3 data-no-translate className="absolute inset-x-0 bottom-0 p-5 text-xl font-black italic tracking-tight text-white drop-shadow-md">
+                        {destino.titulo}
+                      </h3>
+                    )}
                   </div>
                   <div className="flex flex-1 flex-col p-5">
-                    {destino.titulo && <h3 data-no-translate className="text-xl font-black italic tracking-tight text-gray-900">{destino.titulo}</h3>}
-                    {destino.descripcion && <p data-no-translate className="mt-2 min-h-12 text-sm font-medium leading-relaxed text-gray-600">{destino.descripcion}</p>}
+                    {destino.descripcion && <p data-no-translate className="text-sm font-medium leading-relaxed text-gray-600">{destino.descripcion}</p>}
                     {(destino.credito || destino.licencia) && (
                       <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-gray-100 pt-3 text-xs font-medium text-gray-500">
                         {destino.credito && (
@@ -1017,6 +1046,20 @@ export default function RootPage() {
               ))}
             </div>
 
+            <div className="mt-12 rounded-3xl border border-gray-200 bg-white px-6 py-8 text-center shadow-sm sm:px-10">
+              <h3 className="text-xl font-black italic tracking-tight text-gray-900 sm:text-2xl">
+                ¡Hay muchos destinos más por descubrir!
+              </h3>
+              <p className="mx-auto mt-2 max-w-2xl text-sm font-medium leading-relaxed text-gray-600 sm:text-base">
+                Cuéntanos a dónde quieres ir y cotiza tu traslado con Turesma.
+              </p>
+              <Link
+                href="/login"
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-6 py-3 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-gray-900"
+              >
+                Cotiza tu viaje <ArrowUpRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
           </div>
         </section>
       )}
