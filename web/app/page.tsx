@@ -1035,7 +1035,7 @@ export default function RootPage() {
           </div>
 
           {videosGaleria.length > 0 ? (
-            <div className="mx-auto max-w-6xl space-y-6">
+            <div className="mx-auto max-w-4xl space-y-6">
               {mosaicosVideos.map((mosaico) => {
                 const hasPortraitVideo = mosaico.some((video) => getVideoAspectRatio(video) < 1);
                 const allPortraitVideos = mosaico.every((video) => getVideoAspectRatio(video) < 1);
@@ -1047,7 +1047,7 @@ export default function RootPage() {
                     <div
                       key={mosaico[0].id}
                       className={hasFourVideoComposition
-                        ? "grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] md:grid-rows-2 md:items-center"
+                        ? "grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] md:grid-rows-2 md:items-center"
                         : hasPortraitVideosInOppositeCorners
                           ? "grid grid-cols-1 gap-4 md:grid-cols-[1fr_2fr_1fr] md:items-center"
                         : hasPortraitVideo
@@ -1092,7 +1092,9 @@ export default function RootPage() {
                         return (
                           <figure
                             key={video.id}
-                            className={`group relative min-w-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl ${
+                            className={`group relative mx-auto min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl ${
+                              isPortrait ? "max-w-[280px] md:max-w-none" : "max-w-[320px] md:max-w-none"
+                            } ${
                               hasFourVideoComposition
                                 ? `w-full ${oppositeCornerClass}`
                                 : hasPortraitVideosInOppositeCorners
