@@ -13,7 +13,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type Verificacion = {
   id: number; nombre: string; email: string; telefono: string | null;
-  cedula: string | null; cedula_url: string | null;
+  cedula: string | null; cedula_url: string | null; selfie_cedula_url: string | null;
   estado_verificacion: string; notas_verificacion: string | null; fecha_verificacion: string | null;
 };
 
@@ -125,13 +125,14 @@ export default function AdminVerificacionesPage() {
                 {v.telefono && <span className="flex items-center gap-1.5"><Phone size={13} className="text-slate-400" /> {v.telefono}</span>}
               </div>
 
-              {v.cedula_url ? (
-                <button onClick={() => setZoomImg(v.cedula_url)} className="block w-full">
-                  <Image src={v.cedula_url} alt="Cédula" width={320} height={160} unoptimized className="w-full h-40 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-all" />
-                </button>
-              ) : (
-                <div className="w-full h-40 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-200"><ImageIcon size={24} className="text-slate-300" /></div>
-              )}
+              <div className="grid grid-cols-2 gap-2">
+                {[{ url: v.cedula_url, label: "Cédula" }, { url: v.selfie_cedula_url, label: "Selfie con cédula" }].map(doc => doc.url ? (
+                  <button key={doc.label} onClick={() => setZoomImg(doc.url)} className="block">
+                    <Image src={doc.url} alt={doc.label} width={320} height={160} unoptimized className="w-full h-32 object-cover rounded-xl border border-slate-200 hover:opacity-80 transition-all" />
+                    <span className="text-[10px] text-slate-500">{doc.label}</span>
+                  </button>
+                ) : <div key={doc.label} className="h-32 flex flex-col items-center justify-center bg-slate-50 rounded-xl border border-slate-200 text-[10px] text-slate-400"><ImageIcon size={24} />{doc.label} faltante</div>)}
+              </div>
 
               {v.estado_verificacion === "rechazado" && v.notas_verificacion && (
                 <p className="text-[10px] text-red-500 bg-red-50 rounded-lg p-2">Motivo: {v.notas_verificacion}</p>
@@ -139,7 +140,7 @@ export default function AdminVerificacionesPage() {
 
               {v.estado_verificacion === "pendiente" && (
                 <div className="flex gap-2 pt-1">
-                  <button onClick={() => aprobar(v.id)} disabled={actingId === v.id}
+                  <button onClick={() => aprobar(v.id)} disabled={actingId === v.id || !v.cedula_url || !v.selfie_cedula_url}
                     className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60">
                     {actingId === v.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} Verificar
                   </button>

@@ -1,6 +1,10 @@
 node_modules/
 dist/
 .env
+certificado/*.p12
+certificado/*.pfx
+certificados/*.p12
+certificados/*.pfx
 .DS_Store
 *.log
 uploads/*

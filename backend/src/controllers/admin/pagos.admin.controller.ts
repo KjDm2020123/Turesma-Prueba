@@ -3,7 +3,7 @@ export {};
 const pool = require("../../config/db");
 const { crearNotificacion, usuarioIdDeConductor } = require("../../config/notificaciones");
 const { notificarClienteReserva } = require("../../config/reservaMailer");
-const { obtenerPagoAprobado, enviarReciboPago } = require("../../config/reciboPago");
+const { emitirFacturaPorReserva, obtenerFactura, reenviarFacturaPorReserva } = require("../../config/sriFacturacion");
 
 // Recalcula monto_pagado y estado_pago de una reserva a partir de sus pagos
 // APROBADOS. La reserva solo se confirma cuando el total está pagado. Cuando
@@ -42,6 +42,14 @@ const recalcularEstadoPago = async (reservaId: number, adminId: number | null | 
     await notificarClienteReserva(reservaId, "confirmada", adminId);
   }
 
+  if (estadoPago === "pagado") {
+    try {
+      await emitirFacturaPorReserva(reservaId);
+    } catch (error: any) {
+      console.error(`Error emitiendo factura SRI para reserva #${reservaId}:`, error?.message || error);
+    }
+  }
+
   return { montoPagado, estadoPago, total, reservaConfirmada };
 };
 
@@ -78,12 +86,65 @@ const descargarReciboPagoAdmin = async (req: any, res: any) => {
   }
 
   try {
-    const pago = await obtenerPagoAprobado(pagoId);
-    if (!pago) return res.status(404).json({ error: "Recibo no encontrado o pago aún no aprobado" });
-    return await enviarReciboPago(res, pago);
+    const pago = await pool.query(
+      `SELECT p.reserva_id
+       FROM pagos_reserva p
+       WHERE p.id = $1 AND p.estado = 'aprobado'
+       LIMIT 1`,
+      [pagoId]
+    );
+    if (!pago.rowCount) return res.status(404).json({ error: "Pago no encontrado o aún no aprobado" });
+
+    const factura = await obtenerFactura(pago.rows[0].reserva_id);
+    if (!factura || factura.estado !== "autorizada" || !factura.pdf_url) {
+      return res.status(404).json({ error: "La factura de esta reserva todavía no está autorizada" });
+    }
+
+    const filePath = require("path").resolve(process.cwd(), factura.pdf_url.replace(/^\/uploads\//, "uploads/"));
+    if (!require("fs").existsSync(filePath)) return res.status(404).json({ error: "Archivo de factura no encontrado" });
+    return res.download(filePath, `factura_${factura.clave_acceso}.pdf`);
   } catch (error) {
-    console.error("Error generando recibo de pago para administración:", error);
-    return res.status(500).json({ error: "No se pudo generar el recibo de pago" });
+    console.error("Error descargando factura desde pagos para administración:", error);
+    return res.status(500).json({ error: "No se pudo descargar la factura" });
+  }
+};
+
+const descargarFacturaAdmin = async (req: any, res: any) => {
+  const reservaId = Number(req.params.id);
+  if (!Number.isInteger(reservaId) || reservaId <= 0) return res.status(400).json({ error: "ID de reserva inválido" });
+  try {
+    const factura = await obtenerFactura(reservaId);
+    if (!factura || factura.estado !== "autorizada") return res.status(404).json({ error: "La factura todavía no está autorizada" });
+    const filePath = require("path").resolve(process.cwd(), factura.pdf_url.replace(/^\/uploads\//, "uploads/"));
+    if (!require("fs").existsSync(filePath)) return res.status(404).json({ error: "Archivo de factura no encontrado" });
+    return res.download(filePath, `factura_${factura.clave_acceso}.pdf`);
+  } catch (error) {
+    console.error("Error descargando factura para administración:", error);
+    return res.status(500).json({ error: "No se pudo descargar la factura" });
+  }
+};
+
+const emitirFacturaAdmin = async (req: any, res: any) => {
+  const reservaId = Number(req.params.id);
+  if (!Number.isInteger(reservaId) || reservaId <= 0) return res.status(400).json({ error: "ID de reserva inválido" });
+  try {
+    const factura = await emitirFacturaPorReserva(reservaId);
+    return res.status(200).json({ message: "Factura emitida y autorizada por el SRI", factura });
+  } catch (error: any) {
+    console.error(`Error reintentando factura SRI para reserva #${reservaId}:`, error?.message || error);
+    return res.status(502).json({ error: error?.message || "No se pudo emitir la factura ante el SRI" });
+  }
+};
+
+const reenviarFacturaAdmin = async (req: any, res: any) => {
+  const reservaId = Number(req.params.id);
+  if (!Number.isInteger(reservaId) || reservaId <= 0) return res.status(400).json({ error: "ID de reserva inválido" });
+  try {
+    const result = await reenviarFacturaPorReserva(reservaId);
+    return res.status(200).json({ message: `Factura reenviada a ${result.email}` });
+  } catch (error: any) {
+    console.error(`Error reenviando factura de reserva #${reservaId}:`, error?.message || error);
+    return res.status(502).json({ error: error?.message || "No se pudo reenviar la factura" });
   }
 };
 
@@ -231,6 +292,9 @@ const registrarPagoManual = async (req: any, res: any) => {
 module.exports = {
   listarPagosAdmin,
   descargarReciboPagoAdmin,
+  descargarFacturaAdmin,
+  emitirFacturaAdmin,
+  reenviarFacturaAdmin,
   aprobarPago,
   rechazarPago,
   actualizarLinkPago,

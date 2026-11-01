@@ -4,6 +4,8 @@ const pool = require("../config/db");
 const { notificarAdmins } = require("../config/notificaciones");
 const { createPayphonePayment, confirmPayphonePayment } = require("../config/payphone");
 const { obtenerPagoAprobado, enviarReciboPago } = require("../config/reciboPago");
+const { obtenerFactura } = require("../config/sriFacturacion");
+const { emitirFacturaPorReserva } = require("../config/sriFacturacion");
 
 const METODOS_VALIDOS = ["transferencia", "link_pago", "payphone"];
 
@@ -26,7 +28,7 @@ const crearPagoPayphone = async (req: any, res: any) => {
   const reservaId = Number(req.params.id);
   const monto = Number(String(req.body?.monto ?? "").replace(",", "."));
   if (!userId || !Number.isInteger(reservaId)) return res.status(400).json({ error: "Datos de pago inválidos" });
-  if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: "Ingresa un monto válido" });
+  if (!Number.isFinite(monto) || monto < 1) return res.status(400).json({ error: "El monto mínimo para pagar con PayPhone es $1.00" });
   try {
     const reserva = await getPaymentInfo(reservaId, userId);
     if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
@@ -88,6 +90,11 @@ const confirmarPagoPayphone = async (req: any, res: any) => {
         "UPDATE reservas SET estado = 'confirmada' WHERE id = $1 AND estado = 'pendiente_pago'",
         [reservaId]
       );
+      try {
+        await emitirFacturaPorReserva(reservaId);
+      } catch (error: any) {
+        console.error(`Error emitiendo factura SRI para reserva #${reservaId}:`, error?.message || error);
+      }
     }
     await notificarAdmins(userId, `Pago PayPhone confirmado para la reserva #${reservaId} ($${monto.toFixed(2)}).`, "reserva", reservaId);
     return res.json({ message: "Pago PayPhone confirmado", pago: saved.rows[0], estado_pago: estadoPago });
@@ -186,10 +193,44 @@ const descargarReciboPago = async (req: any, res: any) => {
   }
 };
 
+const descargarFactura = async (req: any, res: any) => {
+  const userId = Number(req.user?.id);
+  const reservaId = Number(req.params.id);
+  if (!Number.isInteger(userId) || !Number.isInteger(reservaId)) return res.status(400).json({ error: "Datos de factura inválidos" });
+  try {
+    const owns = await pool.query("SELECT id FROM reservas WHERE id = $1 AND usuario_id = $2 LIMIT 1", [reservaId, userId]);
+    if (!owns.rowCount) return res.status(404).json({ error: "Reserva no encontrada" });
+    const reserva = await pool.query(
+      "SELECT estado_pago FROM reservas WHERE id = $1 AND usuario_id = $2 LIMIT 1",
+      [reservaId, userId]
+    );
+    if (!reserva.rowCount || reserva.rows[0].estado_pago !== "pagado") {
+      return res.status(400).json({ error: "La factura estará disponible cuando la reserva esté completamente pagada" });
+    }
+
+    let factura = await obtenerFactura(reservaId);
+    if (!factura || factura.estado !== "autorizada") {
+      try {
+        factura = await emitirFacturaPorReserva(reservaId);
+      } catch (error: any) {
+        console.error(`Error reintentando factura SRI para reserva #${reservaId}:`, error?.message || error);
+        return res.status(502).json({ error: error?.message || "El SRI todavía no ha autorizado esta factura" });
+      }
+    }
+    const filePath = require("path").resolve(process.cwd(), factura.pdf_url.replace(/^\/uploads\//, "uploads/"));
+    if (!require("fs").existsSync(filePath)) return res.status(404).json({ error: "Archivo de factura no encontrado" });
+    return res.download(filePath, `factura_${factura.clave_acceso}.pdf`);
+  } catch (error) {
+    console.error("Error descargando factura:", error);
+    return res.status(500).json({ error: "No se pudo descargar la factura" });
+  }
+};
+
 module.exports = {
   crearPagoReserva,
   listarPagosDeReserva,
   descargarReciboPago,
+  descargarFactura,
   crearPagoPayphone,
   confirmarPagoPayphone,
 };

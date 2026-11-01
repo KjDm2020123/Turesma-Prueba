@@ -14,7 +14,7 @@ import { LocalizedContent } from "../../../lib/i18n";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 type Perfil = { id: number; nombre: string; email: string; rol: string; telefono?: string | null; imagen_url?: string | null };
-type Verif = { estado_verificacion: string; cedula: string | null; notas_verificacion: string | null };
+type Verif = { estado_verificacion: string; cedula: string | null; cedula_url?: string | null; selfie_cedula_url?: string | null; email_verified_at?: string | null; notas_verificacion: string | null };
 
 const INPUT = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-all focus:border-[#E31E24] focus:ring-2 focus:ring-[#E31E24]/10 disabled:bg-slate-50 disabled:text-slate-400";
 
@@ -43,6 +43,8 @@ export default function ClientePerfilPage() {
   // Verificación de identidad
   const [verif, setVerif] = useState<Verif | null>(null);
   const [cedula, setCedula] = useState("");
+  const [cedulaFile, setCedulaFile] = useState<File | null>(null);
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [enviandoVerif, setEnviandoVerif] = useState(false);
 
   const load = async () => {
@@ -116,16 +118,28 @@ export default function ClientePerfilPage() {
   const enviarVerif = async () => {
     setErr(""); setMsg("");
     if (!/^\d{10}$/.test(cedula.trim())) { setErr("La cédula debe tener 10 dígitos"); return; }
+    if (!cedulaFile || !selfieFile) { setErr("Debes adjuntar una foto de la cédula y una selfie sosteniendo la cédula"); return; }
     setEnviandoVerif(true);
     try {
+      const subir = async (file: File, tipo: string) => {
+        const fd = new FormData(); fd.append("imagen", file); fd.append("tipo", tipo);
+        const headers = getAuthHeaders();
+        delete headers["Content-Type"];
+        const upload = await fetch(`${API}/api/usuarios/verificacion/documento`, { method: "POST", headers, body: fd });
+        const result = await upload.json();
+        if (!upload.ok) throw new Error(result?.error || "No se pudo subir el documento");
+        return result.imageUrl as string;
+      };
+      const cedulaUrl = await subir(cedulaFile, "cedula");
+      const selfieUrl = await subir(selfieFile, "selfie");
       const res = await fetch(`${API}/api/usuarios/verificacion`, {
         method: "POST", headers: getAuthHeaders(),
-        body: JSON.stringify({ cedula: cedula.trim() }),
+        body: JSON.stringify({ cedula: cedula.trim(), cedula_url: cedulaUrl, selfie_cedula_url: selfieUrl }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo enviar");
       setMsg(data.message || "Documento enviado para verificación");
-      setVerif({ estado_verificacion: "pendiente", cedula: cedula.trim(), notas_verificacion: null });
+      setVerif({ estado_verificacion: "pendiente", cedula: cedula.trim(), cedula_url: cedulaUrl, selfie_cedula_url: selfieUrl, notas_verificacion: null });
     } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setEnviandoVerif(false); }
   };
@@ -179,11 +193,11 @@ export default function ClientePerfilPage() {
         ) : estado === "pendiente" ? (
           <div className="flex items-center gap-3 bg-amber-50 rounded-xl p-4 text-amber-700">
             <Clock size={22} className="shrink-0" />
-            <p className="text-sm font-medium">Revisa tu correo y abre el enlace de verificación para confirmar tu identidad.</p>
+            <p className="text-sm font-medium">Tus fotos están en revisión. El administrador verificará tu cédula y tu selfie.</p>
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-500">Para solicitar servicios necesitas verificar tu identidad. Ingresa tu número de cédula y confirma tu correo electrónico.</p>
+            <p className="text-xs text-slate-500">Para solicitar servicios necesitas verificar tu identidad. Sube una foto clara de tu cédula y una selfie sosteniéndola; luego confirma tu correo electrónico.</p>
             {estado === "rechazado" && verif?.notas_verificacion && (
               <div className="flex items-start gap-2 bg-red-50 rounded-lg p-3 text-red-600 text-xs font-medium">
                 <XCircle size={16} className="shrink-0 mt-0.5" /> Rechazado: {verif.notas_verificacion}. Vuelve a intentarlo.
@@ -195,8 +209,32 @@ export default function ClientePerfilPage() {
                 <input value={cedula} onChange={e => setCedula(e.target.value.replace(/\D/g, "").slice(0, 10))} className={INPUT + " pl-9"} placeholder="10 dígitos" inputMode="numeric" />
               </div>
             </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-3">
+                {verif?.email_verified_at ? <CheckCircle2 className="text-emerald-500" size={20} /> : <Clock className="text-amber-500" size={20} />}
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800">Verificación de correo</h2>
+                  <p className="text-xs text-slate-500">
+                    {verif?.email_verified_at ? "Tu correo electrónico está verificado." : "Debes confirmar el enlace enviado a tu correo electrónico."}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500 cursor-pointer hover:border-[#E31E24]">
+                <span className="font-semibold block mb-1">Foto frontal de cédula</span>
+                <span>{cedulaFile?.name || "Seleccionar imagen"}</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => setCedulaFile(e.target.files?.[0] || null)} />
+              </label>
+              <label className="rounded-xl border border-dashed border-slate-300 p-4 text-xs text-slate-500 cursor-pointer hover:border-[#E31E24]">
+                <span className="font-semibold block mb-1">Selfie sosteniendo la cédula</span>
+                <span>{selfieFile?.name || "Seleccionar imagen"}</span>
+                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => setSelfieFile(e.target.files?.[0] || null)} />
+              </label>
+            </div>
             <button onClick={enviarVerif} disabled={enviandoVerif} className="w-full py-3 bg-[#E31E24] hover:bg-[#b3141a] text-white font-bold text-sm rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-              {enviandoVerif ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Enviar enlace de verificación
+              {enviandoVerif ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Enviar documentos para revisión
             </button>
           </>
         )}

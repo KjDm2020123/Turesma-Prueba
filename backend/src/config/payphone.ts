@@ -73,8 +73,8 @@ const createPayphonePayment = async ({
 }) => {
   const { storeId } = getConfig();
   const amountInCents = Math.round(amount * 100);
-  if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
-    throw new Error("El monto de PayPhone debe ser mayor que cero");
+  if (!Number.isInteger(amountInCents) || amountInCents < 100) {
+    throw new Error("El monto mínimo para pagar con PayPhone es $1.00");
   }
   if (amountInCents > 99999999) {
     throw new Error("El monto de PayPhone supera el límite permitido");

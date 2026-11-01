@@ -57,7 +57,7 @@ const reservarViajePublicado = async (req: any, res: any) => {
     if (Number(occupied.rows[0].total) + passengers > capacity) return res.status(409).json({ success: false, error: "No hay personas disponibles en el vehículo para este viaje" });
 
     const verified = await client.query("SELECT estado_verificacion FROM usuarios WHERE id = $1", [userId]);
-    if (verified.rows[0]?.estado_verificacion && verified.rows[0].estado_verificacion !== "verificado") {
+    if (verified.rows[0]?.estado_verificacion !== "verificado") {
       return res.status(403).json({ success: false, error: "Debes verificar tu identidad antes de reservar", requiere_verificacion: true });
     }
 

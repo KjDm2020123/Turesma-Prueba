@@ -65,9 +65,7 @@ export default function LoginPage() {
     };
 
     checkSession();
-    window.addEventListener("pageshow", checkSession);
     return () => {
-      window.removeEventListener("pageshow", checkSession);
       if (sessionRedirectTimeoutRef.current) clearTimeout(sessionRedirectTimeoutRef.current);
     };
   }, [router]);

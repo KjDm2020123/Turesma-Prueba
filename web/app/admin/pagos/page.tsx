@@ -78,9 +78,9 @@ export default function AdminPagosPage() {
     setErr("");
     const result = await descargarArchivo(
       `/api/admin/pagos/${pagoId}/recibo`,
-      `recibo_pago_${pagoId}.pdf`
+      `factura_pago_${pagoId}.pdf`
     );
-    if (!result.ok) setErr(result.error || "No se pudo descargar el recibo");
+    if (!result.ok) setErr(result.error || "No se pudo descargar la factura");
     setDownloadingReceiptId(null);
   };
 
@@ -215,7 +215,7 @@ export default function AdminPagosPage() {
                   {downloadingReceiptId === p.id
                     ? <Loader2 size={14} className="animate-spin" />
                     : <FileDown size={14} />}
-                  Descargar recibo de pago
+                  Descargar factura
                 </button>
               )}
 

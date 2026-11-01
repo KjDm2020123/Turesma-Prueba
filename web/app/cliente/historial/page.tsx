@@ -126,6 +126,10 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
   const handleSubmit = async () => {
     setErr(""); setMsg("");
     if (!monto || Number(monto) <= 0) { setErr("Ingresa un monto válido"); return; }
+    if (metodo === "payphone" && Number(monto) < 1) {
+      setErr("El monto mínimo para pagar con PayPhone es $1.00");
+      return;
+    }
 
     if (metodo === "payphone") {
       setSending(true);
@@ -235,7 +239,7 @@ function PagoModal({ reserva, onClose, onSuccess }: { reserva: Reserva; onClose:
           <div className="space-y-3 pt-2 border-t border-slate-100">
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Monto que estás pagando ($) *</label>
-              <input type="number" min="0.01" step="0.01" value={monto} onChange={e => setMonto(e.target.value)}
+              <input type="number" min={metodo === "payphone" ? "1.00" : "0.01"} step="0.01" value={monto} onChange={e => setMonto(e.target.value)}
                 className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24] focus:bg-white" />
             </div>
             {metodo !== "payphone" && <div className="space-y-1">
@@ -311,6 +315,7 @@ export default function ClienteHistorialPage() {
   const [msg, setMsg] = useState("");
   const [trackId, setTrackId] = useState<number | null>(null);
   const [pagoReserva, setPagoReserva] = useState<Reserva | null>(null);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
 
   // Reprogramar (cambiar fecha/hora de salida) de una reserva confirmada
   const [reprogReserva, setReprogReserva] = useState<Reserva | null>(null);
@@ -324,6 +329,16 @@ export default function ClienteHistorialPage() {
     setReprogFecha(r.fecha_reserva ? String(r.fecha_reserva).slice(0, 10) : "");
     setReprogHora(r.hora_salida || "");
     setReprogMsg("");
+  };
+
+  const descargarFactura = async (reservaId: number) => {
+    setDownloadingInvoiceId(reservaId);
+    const result = await descargarArchivo(
+      `/api/usuarios/mis-reservas/${reservaId}/factura`,
+      `factura_reserva_${reservaId}.pdf`
+    );
+    if (!result.ok) setMsg(result.error || "La factura todavía no está disponible");
+    setDownloadingInvoiceId(null);
   };
 
   const guardarReprogramacion = async () => {
@@ -453,7 +468,8 @@ export default function ClienteHistorialPage() {
             const totalReserva = Number(r.total) || 0;
             const montoPagado = Math.min(totalReserva, Math.max(0, Number(r.monto_pagado) || 0));
             const saldoPendiente = Math.max(0, totalReserva - montoPagado);
-            const pagoCompleto = totalReserva <= 0 || saldoPendiente <= 0.01;
+            const pagoConfirmado = ["pagado", "confirmado"].includes(String(r.estado_pago || "").toLowerCase());
+            const pagoCompleto = totalReserva > 0 && pagoConfirmado && saldoPendiente <= 0.01;
             const requierePago = totalReserva > 0 && !["cancelada"].includes(r.estado) && !pagoCompleto;
             const pagoStyle = pagoCompleto
               ? ESTADO_PAGO_STYLE.pagado
@@ -500,6 +516,16 @@ export default function ClienteHistorialPage() {
                       <button onClick={() => setPagoReserva(r)}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#E31E24] hover:bg-black text-white text-[10px] font-black uppercase tracking-widest transition-all">
                         <CreditCard size={13} /> Pagar mi reserva
+                      </button>
+                    )}
+                    {pagoCompleto && (
+                      <button
+                        onClick={() => descargarFactura(r.id)}
+                        disabled={downloadingInvoiceId === r.id}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60"
+                      >
+                        {downloadingInvoiceId === r.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
+                        Descargar factura
                       </button>
                     )}
                   </div>

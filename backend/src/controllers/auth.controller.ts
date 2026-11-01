@@ -143,7 +143,7 @@ const register = async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO usuarios (nombre, email, telefono, cedula, password_hash, rol, imagen_url, activo, estado_verificacion)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pendiente')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'no_verificado')
        RETURNING id, nombre, email, telefono, cedula, rol, imagen_url, activo, creado_en`,
       [nombre, email, telefono, cedula, passwordHash, rol, fotoUrl]
     );
@@ -181,7 +181,7 @@ const login = async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, nombre, email, rol, imagen_url, password_hash,
-              activo, COALESCE(estado_verificacion, 'no_verificado') AS estado_verificacion
+              activo, email_verified_at, COALESCE(estado_verificacion, 'no_verificado') AS estado_verificacion
        FROM usuarios
        WHERE LOWER(email) = LOWER($1)
        LIMIT 1`,
@@ -204,7 +204,7 @@ const login = async (req, res) => {
     }
 
     const normalizedRole = (await normalizeRole(user.rol)) || user.rol;
-    if (normalizedRole === "cliente" && user.estado_verificacion !== "verificado") {
+    if (normalizedRole === "cliente" && !user.email_verified_at) {
       return res.status(403).json({
         error: "Debes verificar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada.",
         code: "EMAIL_NOT_VERIFIED",

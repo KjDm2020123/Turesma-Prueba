@@ -79,6 +79,7 @@ const initDatabase = async () => {
     ALTER TABLE usuarios
     ADD COLUMN IF NOT EXISTS cedula VARCHAR(20),
     ADD COLUMN IF NOT EXISTS cedula_url VARCHAR(600),
+    ADD COLUMN IF NOT EXISTS selfie_cedula_url VARCHAR(600),
     ADD COLUMN IF NOT EXISTS estado_verificacion VARCHAR(20) DEFAULT 'no_verificado',
     ADD COLUMN IF NOT EXISTS fecha_verificacion TIMESTAMP,
     ADD COLUMN IF NOT EXISTS verificado_por INT,
@@ -726,6 +727,23 @@ const initDatabase = async () => {
   await pool.query(`
     ALTER TABLE pagos_reserva
     ADD COLUMN IF NOT EXISTS proveedor_id VARCHAR(120);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS facturas (
+      id SERIAL PRIMARY KEY,
+      reserva_id INT NOT NULL UNIQUE REFERENCES reservas(id) ON DELETE CASCADE,
+      usuario_id INT NOT NULL REFERENCES usuarios(id),
+      secuencial VARCHAR(9) NOT NULL,
+      clave_acceso VARCHAR(49) NOT NULL UNIQUE,
+      estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+      xml_autorizado TEXT,
+      pdf_url TEXT,
+      total DECIMAL(10, 2) NOT NULL,
+      autorizado_en TIMESTAMP,
+      mensaje_sri TEXT,
+      creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // ============ CAMPOS ADICIONALES PARA CONDUCTORES ============

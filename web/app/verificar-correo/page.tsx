@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -9,8 +9,12 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 export default function VerificarCorreoPage() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
+  const verificationStarted = useRef(false);
 
   useEffect(() => {
+    if (verificationStarted.current) return;
+    verificationStarted.current = true;
+
     const token = new URLSearchParams(window.location.search).get("token") || "";
     if (!token) {
       Promise.resolve().then(() => {
@@ -24,7 +28,7 @@ export default function VerificarCorreoPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "No se pudo verificar el correo");
         setStatus("success");
-        setMessage(data.message);
+        setMessage(data.message || "Tu correo fue verificado correctamente. Ya puedes iniciar sesión.");
       })
       .catch((error) => {
         setStatus("error");

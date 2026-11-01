@@ -16,9 +16,9 @@ const {
   seguimientoMiReserva,
   eliminarMiCuenta,
 } = require("../controllers/usuarios.controller");
-const { crearPagoReserva, listarPagosDeReserva, descargarReciboPago, crearPagoPayphone, confirmarPagoPayphone } = require("../controllers/pagos.controller");
+const { crearPagoReserva, listarPagosDeReserva, descargarReciboPago, descargarFactura, crearPagoPayphone, confirmarPagoPayphone } = require("../controllers/pagos.controller");
 const { uploadComprobantePago, serveComprobante } = require("../controllers/uploads.controller");
-const { enviarVerificacion, miVerificacion } = require("../controllers/verificacion.controller");
+const { enviarVerificacion, miVerificacion, subirDocumentoVerificacion } = require("../controllers/verificacion.controller");
 const { listarGaleriaPublica } = require("../controllers/galeria.controller");
 const { listarViajesPublicos, reservarViajePublicado } = require("../controllers/viajes.controller");
 const { getPublicHomeShowcaseImages } = require("../controllers/home-showcase.controller");
@@ -44,12 +44,14 @@ router.get("/mis-reservas/:id/ubicacion", verifyToken, seguimientoMiReserva);
 router.post("/mis-reservas/:id/pagos", verifyToken, crearPagoReserva);
 router.get("/mis-reservas/:id/pagos", verifyToken, listarPagosDeReserva);
 router.get("/mis-reservas/:id/pagos/:pagoId/recibo", verifyToken, descargarReciboPago);
+router.get("/mis-reservas/:id/factura", verifyToken, descargarFactura);
 router.post("/mis-reservas/:id/pagos/payphone", verifyToken, crearPagoPayphone);
 router.post("/mis-reservas/:id/pagos/payphone/confirmar", verifyToken, confirmarPagoPayphone);
 router.post("/uploads/comprobante-pago", verifyToken, uploadComprobantePago);
 router.get("/comprobantes/:filename", optionalAuth, serveComprobante);
 router.get("/verificacion", verifyToken, miVerificacion);
 router.post("/verificacion", verifyToken, enviarVerificacion);
+router.post("/verificacion/documento", verifyToken, subirDocumentoVerificacion);
 router.delete("/mi-cuenta", verifyToken, eliminarMiCuenta);
 
 router.get("/", verifyToken, requireRole("admin"), listarUsuarios);

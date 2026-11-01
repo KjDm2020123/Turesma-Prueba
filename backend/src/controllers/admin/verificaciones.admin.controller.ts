@@ -15,7 +15,7 @@ const listarVerificaciones = async (req: any, res: any) => {
     const params = estado && estado !== "todos" ? [estado] : [];
 
     const result = await pool.query(
-      `SELECT u.id, u.nombre, u.email, u.telefono, u.cedula, u.cedula_url,
+      `SELECT u.id, u.nombre, u.email, u.telefono, u.cedula, u.cedula_url, u.selfie_cedula_url,
               COALESCE(u.estado_verificacion, 'no_verificado') AS estado_verificacion,
               u.notas_verificacion, u.fecha_verificacion
        FROM usuarios u
@@ -52,12 +52,14 @@ const aprobarVerificacion = async (req: any, res: any) => {
 
   try {
     const cliente = await pool.query(
-      "SELECT id, nombre, email, estado_verificacion FROM usuarios WHERE id = $1 AND LOWER(rol) = 'cliente' LIMIT 1",
+      "SELECT id, nombre, email, estado_verificacion, cedula_url, selfie_cedula_url FROM usuarios WHERE id = $1 AND LOWER(rol) = 'cliente' LIMIT 1",
       [clienteId]
     );
     if (cliente.rowCount === 0) return res.status(404).json({ error: "Cliente no encontrado" });
     if (cliente.rows[0].estado_verificacion !== "pendiente")
       return res.status(400).json({ error: "Esta verificación no está pendiente" });
+    if (!cliente.rows[0].cedula_url || !cliente.rows[0].selfie_cedula_url)
+      return res.status(400).json({ error: "No se puede aprobar: faltan la cédula o la selfie" });
 
     await pool.query(
       `UPDATE usuarios

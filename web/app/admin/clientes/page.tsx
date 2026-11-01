@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
-import { escapeReportHtml, openPrintableReport } from "../../../lib/print-report";
 import {
   deleteAdminUser,
   listAdminUsers,
-  resetAdminUserPassword,
   saveAdminUser,
 } from "../../../lib/admin-users";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
@@ -17,7 +15,7 @@ import { useConfirm } from "../../../components/confirm-dialog";
 import { descargarExcel } from "../../../lib/download";
 import {
   Users, Plus, X, Search, Loader2, Trash2,
-  Edit3, Eye, ShoppingCart, DollarSign, Key, Printer, FileText, FileSpreadsheet,
+  Edit3, Eye, ShoppingCart, DollarSign, Mail, FileText, FileSpreadsheet,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -55,8 +53,6 @@ export default function AdminClientesPage() {
   const [detalle, setDetalle] = useState<Cliente | null>(null);
   const [detalleReservas, setDetalleReservas] = useState<ReservaCliente[]>([]);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
-  const [newPass, setNewPass] = useState("");
-  const [showPassInput, setShowPassInput] = useState(false);
   const [form, setForm] = useState<Partial<Cliente>>(EMPTY);
   const [formPass, setFormPass] = useState("");
   const [formConfirmPass, setFormConfirmPass] = useState("");
@@ -66,8 +62,9 @@ export default function AdminClientesPage() {
   const [saving, setSaving] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [exportandoExcel, setExportandoExcel] = useState(false);
+  const [reenviandoFacturaId, setReenviandoFacturaId] = useState<number | null>(null);
   const openDetalle = async (c: Cliente) => {
-    setDetalle(c); setDetalleReservas([]); setShowPassInput(false); setNewPass("");
+    setDetalle(c); setDetalleReservas([]);
     setLoadingDetalle(true);
     try {
       const res = await fetch(`${API}/api/admin/reservas?usuario_id=${c.id}`, { headers: getAuthHeaders() });
@@ -78,63 +75,21 @@ export default function AdminClientesPage() {
     finally { setLoadingDetalle(false); }
   };
 
-  const cambiarPassword = async () => {
-    if (!detalle || newPass.length < 6) { setErr("La contraseña debe tener al menos 6 caracteres"); return; }
-    setSaving(true); setErr(""); setMsg("");
+  const reenviarFactura = async (reservaId: number) => {
+    setReenviandoFacturaId(reservaId);
+    setErr(""); setMsg("");
     try {
-      await resetAdminUserPassword(detalle.id, newPass);
-      setMsg(`Contraseña de ${detalle.nombre} actualizada`);
-      setShowPassInput(false); setNewPass("");
-    } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
-    finally { setSaving(false); }
-  };
-
-  const verFactura = (c: Cliente, r: ReservaCliente) => {
-    const fecha = r.fecha_reserva ? new Date(r.fecha_reserva).toLocaleDateString("es-EC") : "—";
-    const total = Number(r.total || 0).toFixed(2);
-    const logoUrl = `${window.location.origin}/logo.png`;
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Factura #${r.id} - Turesma</title>
-      <style>
-        *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
-        body{margin:0;padding:40px;color:#1a1a1a}
-        .head{display:flex;flex-direction:column;align-items:center;text-align:center;border-bottom:4px solid #E31E24;padding-bottom:20px}
-        .logo{font-size:30px;font-weight:900;font-style:italic;color:#E31E24;letter-spacing:-1px}
-        .sub{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:2px}
-        .doc{text-align:center;margin-top:12px} .doc h2{margin:0;font-size:24px} .doc p{margin:2px 0;font-size:12px;color:#666}
-        .grid{display:flex;gap:20px;margin-top:24px}
-        .box{flex:1;background:#f6f7f9;border-radius:12px;padding:16px}
-        .box .t{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;color:#999;margin-bottom:6px}
-        table{width:100%;border-collapse:collapse;margin-top:24px}
-        th{background:#0b0f1a;color:#fff;text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:1px}
-        td{padding:12px;border-bottom:1px solid #eee;font-size:13px}
-        .total{margin-top:24px;text-align:right} .total .amt{font-size:30px;font-weight:900;color:#E31E24}
-        .ft{margin-top:40px;text-align:center;font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:2px}
-        .badge{display:inline-block;background:#16a34a;color:#fff;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}
-        @media print{.noprint{display:none}}
-      </style></head><body>
-      <div class="head">
-        <div><img class="report-logo" src="${logoUrl}" alt="Turesma" onerror="this.style.display='none'"/><div class="logo">TURESMA <span style="font-size:12px">S.A</span></div><div class="sub">Transporte Turístico</div></div>
-        <div class="doc"><h2>FACTURA</h2><p>No. ${escapeReportHtml(String(r.id).padStart(6, "0"))}</p><p>Fecha emisión: ${new Date().toLocaleDateString("es-EC")}</p></div>
-      </div>
-      <div class="grid">
-        <div class="box"><div class="t">Cliente</div><b>${escapeReportHtml(c.nombre)}</b><br>${escapeReportHtml(c.email)}<br>${escapeReportHtml(c.telefono || "")}</div>
-        <div class="box"><div class="t">Servicio</div>Fecha del viaje: <b>${escapeReportHtml(fecha)}</b><br>Estado: <span class="badge">${escapeReportHtml(r.estado || "—")}</span></div>
-      </div>
-      <table>
-        <thead><tr><th>Descripción</th><th>Ruta</th><th>Pasajeros</th><th>Vehículo</th><th style="text-align:right">Valor</th></tr></thead>
-        <tbody><tr>
-          <td>Servicio de transporte turístico</td>
-          <td>${escapeReportHtml(r.origen || "—")} → ${escapeReportHtml(r.destino || "—")}</td>
-          <td>${escapeReportHtml(r.num_personas || 1)}</td>
-          <td>${escapeReportHtml(r.vehiculo_placa || "—")}</td>
-          <td style="text-align:right">$${total}</td>
-        </tr></tbody>
-      </table>
-      <div class="total"><div class="t" style="font-size:11px;color:#999">Total a pagar</div><div class="amt">$${total}</div></div>
-      <div class="ft">Gracias por confiar en Turesma S.A. · Documento generado electrónicamente</div>
-      <div class="noprint" style="text-align:center;margin-top:30px"><button onclick="window.print()" style="background:#E31E24;color:#fff;border:none;padding:12px 30px;border-radius:10px;font-weight:900;cursor:pointer;text-transform:uppercase;letter-spacing:1px">Imprimir / Guardar PDF</button></div>
-      </body></html>`;
-    openPrintableReport(html, "width=760,height=900");
+      const res = await fetch(`${API}/api/admin/reservas/${reservaId}/factura/reenviar`, {
+        method: "POST", headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo reenviar la factura");
+      setMsg(data.message || "Factura reenviada correctamente");
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "No se pudo reenviar la factura");
+    } finally {
+      setReenviandoFacturaId(null);
+    }
   };
 
   const load = async (silencioso = false) => {
@@ -189,12 +144,7 @@ export default function AdminClientesPage() {
     setErr(""); setMsg("");
 
     // La contraseña es obligatoria al crear (el cliente la usará para ingresar).
-    // Al editar, solo se cambia si el admin escribe una nueva.
     if (!editId && (!formPass || formPass.length < 6)) {
-      setErr("La contraseña debe tener al menos 6 caracteres");
-      return;
-    }
-    if (editId && formPass && formPass.length < 6) {
       setErr("La contraseña debe tener al menos 6 caracteres");
       return;
     }
@@ -212,7 +162,7 @@ export default function AdminClientesPage() {
         cedula: form.cedula || "",
         imagen_url: form.imagen_url || null,
         rol: "cliente",
-        ...(!editId || formPass ? { password: formPass } : {}),
+        ...(!editId ? { password: formPass } : {}),
       });
       setMsg(editId
         ? "Cliente actualizado"
@@ -463,28 +413,26 @@ export default function AdminClientesPage() {
                 <input type="file" accept="image/*" disabled={uploadingFoto} onChange={(e) => handleFotoUpload(e.target.files?.[0] || null)} className="w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-red-50 file:px-3 file:py-2 file:font-bold file:text-[#E31E24]" />
                 {uploadingFoto && <p className="mt-1 text-[10px] font-bold text-slate-400">Subiendo foto…</p>}
               </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">
-                  {editId ? "Nueva contraseña (opcional)" : "Contraseña"}
-                </label>
-                <input
-                  className={INPUT}
-                  type="password"
-                  required={!editId}
-                  value={formPass}
-                  onChange={(e) => setFormPass(e.target.value)}
-                  placeholder={editId ? "Dejar en blanco para no cambiarla" : "Mínimo 6 caracteres"}
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {editId
-                    ? "Solo se cambia si escribes una nueva. Recuerda avisarle al cliente."
-                    : "El cliente ingresará con su correo y esta contraseña. Compártesela."}
-                </p>
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Confirmar contraseña</label>
-                <input className={INPUT} type="password" required={!editId} value={formConfirmPass} onChange={(e) => setFormConfirmPass(e.target.value)} placeholder="Repite la contraseña" />
-              </div>
+              {!editId && (
+                <>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Contraseña</label>
+                    <input
+                      className={INPUT}
+                      type="password"
+                      required
+                      value={formPass}
+                      onChange={(e) => setFormPass(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">El cliente ingresará con su correo y esta contraseña. Compártesela.</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Confirmar contraseña</label>
+                    <input className={INPUT} type="password" required value={formConfirmPass} onChange={(e) => setFormConfirmPass(e.target.value)} placeholder="Repite la contraseña" />
+                  </div>
+                </>
+              )}
               {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setModal(false)} className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-sm font-black uppercase tracking-wide text-slate-600 hover:bg-slate-50">
@@ -531,21 +479,6 @@ export default function AdminClientesPage() {
               </div>
             </div>
 
-            {/* CAMBIAR CONTRASEÑA */}
-            <div className="bg-slate-50 rounded-2xl p-4 mb-5">
-              {!showPassInput ? (
-                <button onClick={() => { setShowPassInput(true); setErr(""); }} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white border-2 border-amber-200 text-amber-600 text-[10px] font-black uppercase tracking-widest hover:bg-amber-50 transition-all">
-                  <Key size={13} /> Cambiar contraseña del cliente
-                </button>
-              ) : (
-                <div className="flex gap-2 items-center">
-                  <input type="text" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Nueva contraseña (mín. 6)" className="flex-1 rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-[#E31E24]" />
-                  <button onClick={cambiarPassword} disabled={saving} className="px-4 py-2 rounded-xl bg-amber-500 text-white text-[10px] font-black uppercase disabled:opacity-60">Guardar</button>
-                  <button onClick={() => setShowPassInput(false)} className="px-3 py-2 rounded-xl bg-slate-200 text-slate-500 text-[10px] font-black uppercase">X</button>
-                </div>
-              )}
-            </div>
-
             {/* RESERVAS REALES CON # Y FACTURA */}
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1"><FileText size={12} /> Reservas del cliente</p>
             {loadingDetalle ? (
@@ -562,8 +495,8 @@ export default function AdminClientesPage() {
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs font-black text-emerald-600">${Number(r.total || 0).toFixed(0)}</span>
-                      <button onClick={() => verFactura(detalle, r)} className="p-2 rounded-lg bg-[#0b0f1a] text-white hover:bg-slate-700 transition-colors" title="Ver factura">
-                        <Printer size={13} />
+                      <button onClick={() => reenviarFactura(r.id)} disabled={reenviandoFacturaId === r.id} className="p-2 rounded-lg bg-[#0b0f1a] text-white hover:bg-slate-700 transition-colors disabled:opacity-60" title="Reenviar factura al correo">
+                        {reenviandoFacturaId === r.id ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
                       </button>
                     </div>
                   </div>
