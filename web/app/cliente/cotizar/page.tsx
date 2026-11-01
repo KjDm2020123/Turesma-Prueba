@@ -210,6 +210,7 @@ export default function ClienteCotizarPage() {
     if (wizardStep === 2) {
       if (!form.fecha_servicio) { setFormErr("Selecciona la fecha de inicio del servicio."); return; }
       if (variosDias && !form.fecha_fin) { setFormErr("Toca también el último día del viaje en el calendario."); return; }
+      if (!form.hora_salida) { setFormErr("Indica la hora de salida que prefieres."); return; }
       if (variosDias && form.fecha_fin && diasEntre(form.fecha_servicio, form.fecha_fin) > MAX_DIAS) {
         setFormErr(`El servicio no puede superar los ${MAX_DIAS} días seguidos.`);
         return;
@@ -232,6 +233,7 @@ export default function ClienteCotizarPage() {
     if (!origin || !destination) { setFormErr("Marca el punto de salida y el destino en el mapa."); return; }
     if (!form.fecha_servicio) { setFormErr("Selecciona la fecha de inicio del servicio."); return; }
     if (variosDias && !form.fecha_fin) { setFormErr("Elegiste varios días: toca también el último día del viaje en el calendario."); return; }
+    if (!form.hora_salida) { setFormErr("Indica la hora de salida que prefieres."); setWizardStep(2); return; }
     if (variosDias && form.fecha_fin && diasEntre(form.fecha_servicio, form.fecha_fin) > MAX_DIAS) { setFormErr(`El servicio no puede superar los ${MAX_DIAS} días seguidos.`); return; }
     const capacidadCategoria = categorias.find(({ tipo }) => tipo === form.tipo_vehiculo)?.capacidad || 0;
     if (capacidadCategoria && Number(form.num_personas) > capacidadCategoria) {
@@ -278,8 +280,6 @@ export default function ClienteCotizarPage() {
   const tipoSeleccionado = form.tipo_vehiculo.toString().trim().toLowerCase();
   const selectedDays = form.fecha_servicio && variosDias && form.fecha_fin ? diasEntre(form.fecha_servicio, form.fecha_fin) : 1;
   const selectedTrips = Math.max(1, Number(form.num_viajes) || 1);
-  const modalidad = variosDias ? "varios_dias" : form.modalidad_servicio;
-  const horasServicio = Math.max(1, Number(form.duracion_horas) || 1);
   if (checkingSession) return (
     <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-[#E31E24]" size={34} /></div>
   );
@@ -303,7 +303,7 @@ export default function ClienteCotizarPage() {
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-xs font-black uppercase tracking-widest text-slate-700">Paso {wizardStep} de 4</p>
-                <p className="text-[10px] font-bold text-slate-400">{["Ruta", "Fecha y pasajeros", "Vehículo y modalidad", "Resumen"][wizardStep - 1]}</p>
+                <p className="text-[10px] font-bold text-slate-400">{["Ruta", "Fecha y pasajeros", "Vehículo", "Resumen"][wizardStep - 1]}</p>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {["Ruta", "Fecha", "Vehículo", "Resumen"].map((label, index) => (
@@ -377,26 +377,6 @@ export default function ClienteCotizarPage() {
               {categorias.length === 0 && <p className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-700">No hay categorías de vehículos disponibles en este momento.</p>}
             </div>
 
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Clock size={12} /> Modalidad del servicio</p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  ["traslado", "Traslado puntual"], ["horas", "Por horas"], ["medio_dia", "Medio día"], ["dia", "Día completo"],
-                ].map(([value, label]) => (
-                  <button key={value} type="button" onClick={() => setForm(p => ({ ...p, modalidad_servicio: value }))}
-                    className={`rounded-xl border-2 px-3 py-3 text-[11px] font-black transition-all ${modalidad === value ? "border-[#E31E24] bg-red-50 text-[#E31E24]" : "border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-300"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {modalidad === "horas" && (
-                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <label className="text-xs font-black text-slate-600">Cantidad de horas</label>
-                  <input type="number" min="1" max="24" step="1" value={form.duracion_horas} onChange={e => setForm(p => ({ ...p, duracion_horas: e.target.value }))} className="w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24]" />
-                </div>
-              )}
-              <p className="text-[10px] text-slate-400">La estimación cambia según la categoría y la modalidad que elijas.</p>
-            </div>
             </div>
 
             {/* PASO 2: FECHA (calendario con días reservados bloqueados) */}
@@ -440,6 +420,19 @@ export default function ClienteCotizarPage() {
                     : <span><b className="text-slate-700">{new Date(form.fecha_servicio + "T00:00").toLocaleDateString(dateLocale)}</b>{variosDias ? " — elige el último día" : " · 1 día"}</span>}
                 </div>
               )}
+              </div>
+              <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                <label htmlFor="hora-salida" className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-slate-600">
+                  <Clock size={14} className="text-[#E31E24]" /> Hora de salida <span className="text-[#E31E24]">*</span>
+                </label>
+                <input
+                  id="hora-salida"
+                  type="time"
+                  value={form.hora_salida}
+                  onChange={e => setForm(p => ({ ...p, hora_salida: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24] sm:w-auto"
+                />
+                <p className="text-[11px] text-slate-500">Indica la hora en que deseas iniciar el viaje.</p>
               </div>
               <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-between">
                 <span className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5"><Users size={14} /> Personas</span>
@@ -488,12 +481,6 @@ export default function ClienteCotizarPage() {
                     <span className="w-6 text-center font-black text-slate-800">{form.num_viajes}</span>
                     <button type="button" onClick={() => setForm(p => ({ ...p, num_viajes: String(Number(p.num_viajes) + 1) }))} className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600"><Plus size={14} /></button>
                   </div>
-                </div>
-                {/* Hora de salida */}
-                <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-between gap-2">
-                  <span className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5"><Clock size={14} /> Hora de salida</span>
-                  <input type="time" value={form.hora_salida} onChange={e => setForm(p => ({ ...p, hora_salida: e.target.value }))}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24]" />
                 </div>
                 {/* Mensaje / detalles opcional para el administrador */}
                 <div className="space-y-1.5 sm:col-span-2">
