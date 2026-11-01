@@ -13,7 +13,7 @@ import { useClienteGuard } from "../../../lib/use-cliente-guard";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { MapPicker, Punto } from "../../../components/map-picker";
 import { VehiculoCalendario } from "../../../components/vehiculo-calendario";
-import { calcularRuta, reverseGeocode, RutaCalculada } from "../../../lib/leaflet";
+import { calcularRuta, formatDuracion, reverseGeocode, RutaCalculada } from "../../../lib/leaflet";
 import { formatLocalizedDate, LocalizedContent, useLocale } from "../../../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -464,9 +464,17 @@ export default function ClienteCotizarPage() {
                 <p className="text-[11px] text-amber-600 font-bold flex items-center gap-1.5"><AlertCircle size={12} /> {locationError}</p>
               )}
 
-              <MapPicker localized origin={origin} destination={destination} onChange={onMapChange} focusDestinationSignal={focusSignal} />
+              <MapPicker
+                localized
+                addressSearch
+                origin={origin}
+                destination={destination}
+                onChange={onMapChange}
+                onClear={(which) => (which === "origin" ? setOrigin(null) : setDestination(null))}
+                focusDestinationSignal={focusSignal}
+              />
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-800">
-                {routeLoading ? "Calculando distancia por carretera…" : route ? `Distancia estimada: ${route.distanciaKm.toFixed(1)} km · Duración: ${Math.round(route.duracionMin)} min` : "Marca ambos puntos para calcular la distancia."}
+                {routeLoading ? "Calculando distancia por carretera…" : route ? `Distancia estimada: ${route.distanciaKm.toFixed(1)} km · Duración: ${formatDuracion(route.duracionMin)}` : "Marca ambos puntos para calcular la distancia."}
               </div>
             </div>
 

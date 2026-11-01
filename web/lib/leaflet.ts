@@ -28,10 +28,48 @@ export const ensureLeaflet = (): Promise<any> =>
 
 export type Coord = { lat: number; lng: number };
 
+export type GeocodingResult = Coord & { label: string };
+
+let locationSearchQueue: Promise<void> = Promise.resolve();
+let lastLocationSearchAt = 0;
+
 export type RutaCalculada = {
   coords: [number, number][]; // lista de puntos [lat, lng] para dibujar la línea
   distanciaKm: number;
   duracionMin: number;
+};
+
+// Búsqueda bajo demanda para evitar solicitudes de geocodificación en cada tecla.
+export const searchLocations = async (query: string): Promise<GeocodingResult[]> => {
+  const searchSlot = locationSearchQueue.then(async () => {
+    const wait = Math.max(0, lastLocationSearchAt + 1000 - Date.now());
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastLocationSearchAt = Date.now();
+  });
+  locationSearchQueue = searchSlot.catch(() => undefined);
+  await searchSlot;
+
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    q: query.trim(),
+    countrycodes: "ec",
+    addressdetails: "1",
+    limit: "5",
+    "accept-language": "es",
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error("No se pudo buscar la dirección. Inténtalo de nuevo.");
+  }
+
+  const data: Array<{ lat: string; lon: string; display_name: string }> = await response.json();
+  return data.map((item) => ({
+    lat: Number(item.lat),
+    lng: Number(item.lon),
+    label: item.display_name,
+  })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng) && item.label);
 };
 
 // Calcula la ruta real por carretera entre dos puntos usando OSRM (servicio

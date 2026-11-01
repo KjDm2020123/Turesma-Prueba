@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MapPin, Flag, Loader2, LocateFixed } from "lucide-react";
-import { ensureLeaflet, reverseGeocode } from "../lib/leaflet";
+import { MapPin, Flag, Loader2, LocateFixed, Search } from "lucide-react";
+import { ensureLeaflet, GeocodingResult, reverseGeocode, searchLocations } from "../lib/leaflet";
 import { LocalizedContent } from "../lib/i18n";
 
 export type Punto = { lat: number; lng: number; label: string };
@@ -11,13 +11,15 @@ export type Punto = { lat: number; lng: number; label: string };
 // los puntos (sin escribir). Hace geocodificación inversa para mostrar el nombre.
 export function MapPicker({
   origin, destination, onChange, focusDestinationSignal = 0,
-  pickupOnly = false, localized = false,
+  pickupOnly = false, localized = false, addressSearch = false, onClear,
 }: {
   origin: Punto | null;
   destination: Punto | null;
   onChange: (which: "origin" | "destination", val: Punto) => void;
+  onClear?: (which: "origin" | "destination") => void;
   pickupOnly?: boolean;
   localized?: boolean;
+  addressSearch?: boolean;
   // Al incrementar este número (p.ej. tras autocompletar el origen por GPS),
   // el mapa cambia el foco a "destino" para que el usuario solo tenga que
   // seleccionar ese punto. Ignorado si no se usa.
@@ -32,6 +34,11 @@ export function MapPicker({
   const [ready, setReady] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const [queries, setQueries] = useState({ origin: origin?.label || "", destination: destination?.label || "" });
+  const [searchResults, setSearchResults] = useState<Record<"origin" | "destination", GeocodingResult[]>>({ origin: [], destination: [] });
+  const [searching, setSearching] = useState<Record<"origin" | "destination", boolean>>({ origin: false, destination: false });
+  const [searchErrors, setSearchErrors] = useState<Partial<Record<"origin" | "destination", string>>>({});
+  const focusPoint = useRef<{ lat: number; lng: number } | null>(null);
   const firstFocusRun = useRef(true);
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
@@ -40,6 +47,14 @@ export function MapPicker({
     if (firstFocusRun.current) { firstFocusRun.current = false; return; }
     setMode("destination");
   }, [focusDestinationSignal]);
+
+  useEffect(() => {
+    if (origin) setQueries((current) => ({ ...current, origin: origin.label }));
+  }, [origin]);
+
+  useEffect(() => {
+    if (destination) setQueries((current) => ({ ...current, destination: destination.label }));
+  }, [destination]);
 
   const setMarker = (L: any, map: any, which: "origin" | "destination", lat: number, lng: number) => {
     const color = which === "origin" ? "#16a34a" : "#E31E24";
@@ -50,6 +65,57 @@ export function MapPicker({
     });
     if (markers.current[which]) { markers.current[which].setLatLng([lat, lng]); }
     else { markers.current[which] = L.marker([lat, lng], { icon }).addTo(map); }
+  };
+
+  const handleSearchInput = (which: "origin" | "destination", value: string) => {
+    setQueries((current) => ({ ...current, [which]: value }));
+    setSearchResults((current) => ({ ...current, [which]: [] }));
+    setSearchErrors((current) => ({ ...current, [which]: "" }));
+    const selected = which === "origin" ? origin : destination;
+    if (selected && value.trim() !== selected.label) onClear?.(which);
+  };
+
+  const searchAddress = async (which: "origin" | "destination") => {
+    const query = queries[which].trim();
+    if (query.length < 3) {
+      setSearchErrors((current) => ({ ...current, [which]: "Escribe al menos 3 caracteres para buscar." }));
+      return;
+    }
+
+    setSearching((current) => ({ ...current, [which]: true }));
+    setSearchErrors((current) => ({ ...current, [which]: "" }));
+    setSearchResults((current) => ({ ...current, [which]: [] }));
+    try {
+      const results = await searchLocations(query);
+      setSearchResults((current) => ({ ...current, [which]: results }));
+      if (results.length === 0) {
+        setSearchErrors((current) => ({ ...current, [which]: "No se encontraron lugares en Ecuador. Prueba con otra búsqueda." }));
+      }
+    } catch (error) {
+      setSearchErrors((current) => ({
+        ...current,
+        [which]: error instanceof Error ? error.message : "No se pudo buscar el lugar. Inténtalo de nuevo.",
+      }));
+    } finally {
+      setSearching((current) => ({ ...current, [which]: false }));
+    }
+  };
+
+  const selectSearchResult = (which: "origin" | "destination", result: GeocodingResult) => {
+    const point: Punto = { lat: result.lat, lng: result.lng, label: result.label };
+    onChange(which, point);
+    setQueries((current) => ({ ...current, [which]: result.label }));
+    setSearchResults((current) => ({ ...current, [which]: [] }));
+    setSearchErrors((current) => ({ ...current, [which]: "" }));
+    setMode(which);
+    focusPoint.current = result;
+    const L = (window as any).L;
+    const map = mapRef.current;
+    if (L && map) {
+      setMarker(L, map, which, result.lat, result.lng);
+      map.setView([result.lat, result.lng], 15);
+      focusPoint.current = null;
+    }
   };
 
   const useCurrentLocation = () => {
@@ -115,12 +181,86 @@ export function MapPicker({
     const L = (window as any).L; const map = mapRef.current;
     if (!L || !map) return;
     if (origin) setMarker(L, map, "origin", origin.lat, origin.lng);
+    else if (markers.current.origin) {
+      markers.current.origin.remove();
+      markers.current.origin = null;
+    }
     if (destination) setMarker(L, map, "destination", destination.lat, destination.lng);
+    else if (markers.current.destination) {
+      markers.current.destination.remove();
+      markers.current.destination = null;
+    }
+    if (focusPoint.current) {
+      map.setView([focusPoint.current.lat, focusPoint.current.lng], 15);
+      focusPoint.current = null;
+    }
   }, [ready, origin, destination]);
 
   return (
     <LocalizedContent enabled={localized}>
     <div className="space-y-2">
+      {addressSearch && !pickupOnly && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["origin", "destination"] as const).map((which) => {
+            const label = which === "origin" ? "Salida" : "Destino";
+            const Icon = which === "origin" ? MapPin : Flag;
+            return (
+              <div key={which} className="space-y-1.5">
+                <label htmlFor={`map-picker-${which}`} className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wide text-slate-600">
+                  <Icon size={14} className={which === "origin" ? "text-emerald-600" : "text-[#E31E24]"} />
+                  {which === "origin" ? "Buscar salida" : "Buscar destino"}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id={`map-picker-${which}`}
+                    type="search"
+                    value={queries[which]}
+                    onChange={(event) => handleSearchInput(which, event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void searchAddress(which);
+                      }
+                    }}
+                    placeholder={which === "origin" ? "Ej.: Manta, Manabí" : "Ej.: Aeropuerto de Quito"}
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none focus:border-[#E31E24]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void searchAddress(which)}
+                    disabled={searching[which]}
+                    aria-label={`Buscar ${label.toLowerCase()}`}
+                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {searching[which] ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
+                    <span className="hidden sm:inline">{searching[which] ? "Buscando" : "Buscar"}</span>
+                  </button>
+                </div>
+                {searchResults[which].length > 0 && (
+                  <ul role="listbox" aria-label={`Resultados para ${label.toLowerCase()}`} className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                    {searchResults[which].map((result, index) => (
+                      <li key={`${result.lat}-${result.lng}-${index}`} role="option" aria-selected="false">
+                        <button
+                          type="button"
+                          onClick={() => selectSearchResult(which, result)}
+                          className="w-full border-b border-slate-100 px-3 py-2.5 text-left text-xs font-medium leading-relaxed text-slate-700 last:border-0 hover:bg-slate-50"
+                        >
+                          {result.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {searchErrors[which] && <p role="status" className="text-[11px] font-semibold text-amber-700">{searchErrors[which]}</p>}
+              </div>
+            );
+          })}
+          <p className="text-[11px] font-medium text-slate-500 sm:col-span-2">
+            Escribe una dirección y pulsa Buscar; luego selecciona un resultado. También puedes ajustar los puntos directamente en el mapa.
+          </p>
+        </div>
+      )}
+
       {/* Selector de qué punto se está marcando */}
       {pickupOnly ? (
         <div className="space-y-2">
