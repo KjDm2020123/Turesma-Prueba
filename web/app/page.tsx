@@ -49,6 +49,7 @@ type GaleriaFoto = {
   video_offset_x?: number | null;
   video_offset_y?: number | null;
   video_zoom?: number | null;
+  video_format?: "original" | "horizontal" | "vertical";
   video_aspect_ratio?: number | null;
   video_poster_url?: string | null;
   titulo: string | null;
@@ -57,6 +58,29 @@ type GaleriaFoto = {
   fuente_url?: string | null;
   licencia?: string | null;
   licencia_url?: string | null;
+};
+
+const getVideoAspectRatio = (video: GaleriaFoto) => (
+  video.video_format === "vertical"
+    ? 9 / 16
+    : video.video_format === "horizontal"
+      ? 16 / 9
+      : video.video_aspect_ratio || 16 / 9
+);
+
+const createVideoMosaics = (videos: GaleriaFoto[]) => {
+  const mosaics: GaleriaFoto[][] = [];
+  let index = 0;
+
+  while (index < videos.length) {
+    const nextFour = videos.slice(index, index + 4);
+    const portraitCount = nextFour.filter((video) => getVideoAspectRatio(video) < 1).length;
+    const mosaicSize = nextFour.length === 4 && portraitCount === 2 ? 4 : Math.min(3, videos.length - index);
+    mosaics.push(videos.slice(index, index + mosaicSize));
+    index += mosaicSize;
+  }
+
+  return mosaics;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -95,11 +119,19 @@ type HomeShowcaseImages = {
   secondary: HomeShowcaseImage | null;
 };
 
-function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, className }: { src: string; posterUrl?: string | null; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null; className?: string }) {
+function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, videoFormat, aspectRatio, className }: { src: string; posterUrl?: string | null; title: string | null; offsetX?: number | null; offsetY?: number | null; zoom?: number | null; videoFormat?: "original" | "horizontal" | "vertical"; aspectRatio?: number | null; className?: string }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [loadPreview, setLoadPreview] = useState(false);
+  const [useNativeControls, setUseNativeControls] = useState(false);
+  const [playbackError, setPlaybackError] = useState("");
+  const [detectedAspectRatio, setDetectedAspectRatio] = useState<number | null>(null);
+  const displayAspectRatio = videoFormat === "vertical"
+    ? 9 / 16
+    : videoFormat === "horizontal"
+      ? 16 / 9
+      : detectedAspectRatio || aspectRatio || 16 / 9;
 
   useEffect(() => {
     const video = videoRef.current;
@@ -129,8 +161,11 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, className 
     if (video.paused) {
       try {
         await video.play();
+        setPlaybackError("");
       } catch (error) {
         console.error("No se pudo reproducir el video:", error);
+        setPlaybackError("No se pudo iniciar este video. Prueba con los controles del reproductor.");
+        setUseNativeControls(true);
       }
     } else {
       video.pause();
@@ -146,33 +181,61 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, className 
 
   return (
     <LocalizedContent>
-    <div className={`video-player group/video relative overflow-hidden bg-slate-950 ${className || "mx-auto aspect-video max-h-[420px] max-w-full"}`}>
-      <Image
-        src={posterUrl || "/video-poster.svg"}
-        alt="Vista previa del video"
-        aria-hidden="true"
-        fill
-        sizes="(max-width: 768px) 100vw, 50vw"
-        unoptimized
-        className="pointer-events-none scale-110 object-cover opacity-60 blur-2xl"
-      />
+    <div
+      className={`video-player group/video relative flex items-center justify-center overflow-hidden bg-slate-950 ${className || "mx-auto max-h-[420px] max-w-full"}`}
+      style={{ aspectRatio: displayAspectRatio }}
+    >
+      {posterUrl && (
+        <Image
+          src={posterUrl}
+          alt="Fondo difuminado de la vista previa del video"
+          aria-hidden="true"
+          fill
+          sizes="(max-width: 768px) 100vw, 50vw"
+          unoptimized
+          className="pointer-events-none scale-110 object-cover opacity-60 blur-2xl"
+        />
+      )}
       <video
         ref={videoRef}
         src={src}
-        poster={posterUrl || "/video-poster.svg"}
-        preload={loadPreview ? "metadata" : "none"}
+        poster={posterUrl || undefined}
+        preload={loadPreview ? (posterUrl ? "metadata" : "auto") : "none"}
+        controls={useNativeControls}
         playsInline
         disablePictureInPicture
         controlsList="nodownload noplaybackrate noremoteplayback"
         aria-label={title || "Video de Turesma"}
-        style={{ transform: `translate(${offsetX || 0}%, ${offsetY || 0}%) scale(${(zoom || 100) / 100})` }}
-        onPlay={() => setIsPlaying(true)}
+        style={{
+          aspectRatio: displayAspectRatio,
+          width: displayAspectRatio < 1 ? "auto" : "100%",
+          height: displayAspectRatio < 1 ? "100%" : "auto",
+          maxWidth: "100%",
+          maxHeight: "100%",
+          objectFit: "contain",
+          transform: `translate(${offsetX || 0}%, ${offsetY || 0}%) scale(${(zoom || 100) / 100})`,
+        }}
+        onLoadedMetadata={(event) => {
+          const { videoWidth, videoHeight } = event.currentTarget;
+          if (videoWidth > 0 && videoHeight > 0) setDetectedAspectRatio(videoWidth / videoHeight);
+        }}
+        onPlay={() => {
+          setIsPlaying(true);
+          setPlaybackError("");
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
+        onError={(event) => {
+          const mediaError = event.currentTarget.error;
+          console.error("Error cargando el video:", mediaError);
+          setPlaybackError("Este video no pudo cargarse en el navegador. Intenta abrirlo directamente.");
+          setUseNativeControls(true);
+        }}
         onVolumeChange={(event) => setIsMuted(event.currentTarget.muted)}
         onContextMenu={(event) => event.preventDefault()}
-        className="relative z-10 h-full w-full bg-transparent object-contain"
+        className="relative z-10 bg-transparent"
       />
+      {!useNativeControls && (
       <div className="video-player-controls absolute inset-x-0 bottom-0 z-20 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-4 pb-4 pt-10">
         <button
           type="button"
@@ -192,6 +255,15 @@ function VideoPlayer({ src, posterUrl, title, offsetX, offsetY, zoom, className 
           {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>
       </div>
+      )}
+      {playbackError && (
+        <div role="alert" className="absolute inset-x-3 top-3 z-30 rounded-xl bg-slate-950/90 p-3 text-center text-xs font-semibold text-white shadow-lg">
+          <p>{playbackError}</p>
+          <a href={src} target="_blank" rel="noreferrer" className="mt-1 inline-block underline underline-offset-2">
+            Abrir video
+          </a>
+        </div>
+      )}
     </div>
     </LocalizedContent>
   );
@@ -220,10 +292,7 @@ export default function RootPage() {
   const videosGaleria = galeria.filter((contenido) => contenido.categoria !== "destinos" && contenido.tipo === "video");
   const imagenPrincipal = homeShowcaseImages.primary?.image_url || HERO_IMAGE_URL;
   const imagenSecundaria = homeShowcaseImages.secondary?.image_url || "/destinos/puerto-lopez.jpg";
-  const mosaicosVideos = Array.from(
-    { length: Math.ceil(videosGaleria.length / 3) },
-    (_, index) => videosGaleria.slice(index * 3, index * 3 + 3)
-  );
+  const mosaicosVideos = createVideoMosaics(videosGaleria);
   const fotosDestinos = galeria.filter((contenido) => contenido.categoria === "destinos" && contenido.tipo !== "video");
 
   useEffect(() => {
@@ -920,10 +989,10 @@ export default function RootPage() {
               </p>
             </div>
 
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {fotosDestinos.map((destino) => (
-                <article key={destino.id} className="home-card group overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg transition-shadow hover:shadow-2xl">
-                  <div className="relative aspect-[4/3] overflow-hidden bg-gray-200">
+                <article key={destino.id} className="home-card group flex flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-lg transition-shadow hover:shadow-2xl">
+                  <div className="relative aspect-[5/4] overflow-hidden bg-gray-200">
                     <Image
                       src={destino.imagen_url}
                       alt={destino.titulo || "Destino en Ecuador"}
@@ -933,11 +1002,15 @@ export default function RootPage() {
                       quality={75}
                       className="object-cover transition-transform duration-700 group-hover:scale-105"
                     />
-                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/45 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+                    {destino.titulo && (
+                      <h3 data-no-translate className="absolute inset-x-0 bottom-0 p-5 text-xl font-black italic tracking-tight text-white drop-shadow-md">
+                        {destino.titulo}
+                      </h3>
+                    )}
                   </div>
-                  <div className="p-5">
-                    {destino.titulo && <h3 data-no-translate className="text-xl font-black italic tracking-tight text-gray-900">{destino.titulo}</h3>}
-                    {destino.descripcion && <p data-no-translate className="mt-2 min-h-12 text-sm font-medium leading-relaxed text-gray-600">{destino.descripcion}</p>}
+                  <div className="flex flex-1 flex-col p-5">
+                    {destino.descripcion && <p data-no-translate className="text-sm font-medium leading-relaxed text-gray-600">{destino.descripcion}</p>}
                     {(destino.credito || destino.licencia) && (
                       <p className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-gray-100 pt-3 text-xs font-medium text-gray-500">
                         {destino.credito && (
@@ -962,11 +1035,31 @@ export default function RootPage() {
                         ))}
                       </p>
                     )}
+                    <Link
+                      href="/login"
+                      className="mt-5 inline-flex items-center gap-1 self-start text-xs font-black uppercase tracking-wider text-[#E31E24] transition-colors hover:text-gray-900"
+                    >
+                      Cotizar traslado <ArrowUpRight size={15} aria-hidden="true" />
+                    </Link>
                   </div>
                 </article>
               ))}
             </div>
 
+            <div className="mt-12 rounded-3xl border border-gray-200 bg-white px-6 py-8 text-center shadow-sm sm:px-10">
+              <h3 className="text-xl font-black italic tracking-tight text-gray-900 sm:text-2xl">
+                ¡Hay muchos destinos más por descubrir!
+              </h3>
+              <p className="mx-auto mt-2 max-w-2xl text-sm font-medium leading-relaxed text-gray-600 sm:text-base">
+                Cuéntanos a dónde quieres ir y cotiza tu traslado con Turesma.
+              </p>
+              <Link
+                href="/login"
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#E31E24] px-6 py-3 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-gray-900"
+              >
+                Cotiza tu viaje <ArrowUpRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
           </div>
         </section>
       )}
@@ -985,46 +1078,102 @@ export default function RootPage() {
           </div>
 
           {videosGaleria.length > 0 ? (
-            <div className="mx-auto max-w-6xl space-y-6">
-              {mosaicosVideos.map((mosaico) => (
-                <div
-                  key={mosaico[0].id}
-                  className={`grid grid-cols-1 gap-4 ${
-                    mosaico.length === 1
-                      ? "md:grid-cols-1"
-                      : mosaico.length === 2
-                        ? "md:grid-cols-2"
-                        : "md:grid-cols-3 md:grid-rows-2"
-                  }`}
-                >
-                  {mosaico.map((video, index) => (
-                    <figure
-                      key={video.id}
-                      className={`group relative min-w-0 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl ${
-                        mosaico.length === 3 && index === 0 ? "md:col-span-2 md:row-span-2" : ""
-                      }`}
+            <div className="mx-auto max-w-4xl space-y-6">
+              {mosaicosVideos.map((mosaico) => {
+                const hasPortraitVideo = mosaico.some((video) => getVideoAspectRatio(video) < 1);
+                const allPortraitVideos = mosaico.every((video) => getVideoAspectRatio(video) < 1);
+                const portraitCount = mosaico.filter((video) => getVideoAspectRatio(video) < 1).length;
+                const hasPortraitVideosInOppositeCorners = portraitCount === 2
+                  && (mosaico.length === 3 || mosaico.length === 4);
+                const hasFourVideoComposition = mosaico.length === 4 && portraitCount === 2;
+                return (
+                    <div
+                      key={mosaico[0].id}
+                      className={hasFourVideoComposition
+                        ? "grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.8fr)] md:grid-rows-2 md:items-center"
+                        : hasPortraitVideosInOppositeCorners
+                          ? "grid grid-cols-1 gap-4 md:grid-cols-[1fr_2fr_1fr] md:items-center"
+                        : hasPortraitVideo
+                          ? "flex flex-wrap items-start justify-center gap-4"
+                          : `grid grid-cols-1 gap-4 ${
+                          mosaico.length === 1
+                            ? "md:grid-cols-1"
+                            : mosaico.length === 2
+                              ? "md:grid-cols-2"
+                              : "md:grid-cols-3 md:grid-rows-2"
+                        }`}
                     >
-                      <VideoPlayer
-                        src={video.imagen_url}
-                        posterUrl={video.video_poster_url}
-                        title={video.titulo}
-                        offsetX={video.video_offset_x}
-                        offsetY={video.video_offset_y}
-                        zoom={video.video_zoom}
-                        className={mosaico.length === 3 && index === 0
-                          ? "h-full w-full aspect-video max-h-none"
-                          : undefined}
-                      />
-                      {(video.titulo || video.descripcion) && (
-                        <figcaption className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/75 to-transparent p-4 pt-5">
-                          {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
-                          {video.descripcion && <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-gray-200">{video.descripcion}</p>}
-                        </figcaption>
-                      )}
-                    </figure>
-                  ))}
-                </div>
-              ))}
+                      {mosaico.map((video, index) => {
+                        const videoAspectRatio = getVideoAspectRatio(video);
+                        const isPortrait = videoAspectRatio < 1;
+                        const isFeaturedLandscape = !hasPortraitVideo && mosaico.length === 3 && index === 0;
+                        const portraitIndex = mosaico
+                          .slice(0, index)
+                          .filter((item) => getVideoAspectRatio(item) < 1).length;
+                        const landscapeIndex = mosaico
+                          .slice(0, index)
+                          .filter((item) => getVideoAspectRatio(item) >= 1).length;
+                        const oppositeCornerClass = hasPortraitVideosInOppositeCorners
+                          ? isPortrait
+                            ? portraitIndex === 0
+                              ? "md:col-start-1 md:row-span-2"
+                              : hasFourVideoComposition ? "md:col-start-4 md:row-span-2" : "md:col-start-3 md:row-span-2"
+                            : hasFourVideoComposition
+                              ? landscapeIndex === 0
+                                ? "md:col-start-2 md:col-span-2 md:row-start-1"
+                                : "md:col-start-2 md:col-span-2 md:row-start-2"
+                              : "md:col-start-2 md:row-start-1"
+                          : "";
+                        const portraitLayoutWidth = mosaico.length === 1
+                          ? "md:w-full md:max-w-[360px]"
+                          : allPortraitVideos && mosaico.length === 3
+                            ? "md:w-[calc(33.333%-10.667px)]"
+                            : isPortrait
+                              ? "md:w-[calc(33.333%-8px)]"
+                              : "md:w-[calc(66.667%-8px)]";
+
+                        return (
+                          <figure
+                            key={video.id}
+                            className={`group relative mx-auto min-w-0 w-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl ${
+                              isPortrait ? "max-w-[280px] md:max-w-none" : "max-w-[320px] md:max-w-none"
+                            } ${
+                              hasFourVideoComposition
+                                ? `w-full ${oppositeCornerClass}`
+                                : hasPortraitVideosInOppositeCorners
+                                ? `w-full ${oppositeCornerClass}`
+                                : hasPortraitVideo
+                                ? `w-full ${portraitLayoutWidth}`
+                                : isFeaturedLandscape
+                                  ? "md:col-span-2 md:row-span-2"
+                                  : ""
+                            }`}
+                          >
+                            <VideoPlayer
+                              src={video.imagen_url}
+                              posterUrl={video.video_poster_url}
+                              title={video.titulo}
+                              offsetX={video.video_offset_x}
+                              offsetY={video.video_offset_y}
+                              zoom={video.video_zoom}
+                              videoFormat={video.video_format}
+                              aspectRatio={video.video_aspect_ratio}
+                              className={hasPortraitVideo || isFeaturedLandscape || hasFourVideoComposition
+                                ? "h-auto w-full max-h-none"
+                                : undefined}
+                            />
+                            {(video.titulo || video.descripcion) && (
+                              <figcaption className="pointer-events-none absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/75 to-transparent p-4 pt-5">
+                                {video.titulo && <h3 className="text-lg font-black uppercase italic tracking-tight text-white">{video.titulo}</h3>}
+                                {video.descripcion && <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-gray-200">{video.descripcion}</p>}
+                              </figcaption>
+                            )}
+                          </figure>
+                        );
+                      })}
+                    </div>
+                );
+              })}
             </div>
           ) : (
             <div className="mx-auto flex min-h-80 max-w-4xl flex-col items-center justify-center rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-12 text-center shadow-2xl">
@@ -1253,9 +1402,9 @@ export default function RootPage() {
                   "Sí. Operamos en Manta y realizamos traslados a nivel provincial y nacional, según disponibilidad y planificación de ruta.",
               },
               {
-                question: "¿Qué tipo de vehículos ofrecen?",
+                question: "¿Cómo elijo el vehículo adecuado para mi viaje?",
                 answer:
-                  "Contamos con sedanes ejecutivos, SUVs y furgonetas para grupos. Te recomendamos la opción ideal según el número de pasajeros y el tipo de viaje.",
+                  "La mejor opción depende del número de pasajeros, el equipaje y el tipo de recorrido. Al cotizar, cuéntanos esos detalles y te ayudaremos a elegir el vehículo adecuado.",
               },
               {
                 question: "¿Puedo pedir una cotización antes de reservar?",
