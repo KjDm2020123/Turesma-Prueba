@@ -317,6 +317,8 @@ export default function ClienteHistorialPage() {
   const [trackId, setTrackId] = useState<number | null>(null);
   const [pagoReserva, setPagoReserva] = useState<Reserva | null>(null);
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
+  const [downloadingProformaId, setDownloadingProformaId] = useState<number | null>(null);
+  const [fileError, setFileError] = useState("");
 
   // Reprogramar (cambiar fecha/hora de salida) de una reserva confirmada
   const [reprogReserva, setReprogReserva] = useState<Reserva | null>(null);
@@ -334,12 +336,24 @@ export default function ClienteHistorialPage() {
 
   const descargarFactura = async (reservaId: number) => {
     setDownloadingInvoiceId(reservaId);
+    setFileError("");
     const result = await descargarArchivo(
       `/api/usuarios/mis-reservas/${reservaId}/factura`,
       `factura_reserva_${reservaId}.pdf`
     );
-    if (!result.ok) setMsg(result.error || "La factura todavía no está disponible");
+    if (!result.ok) setFileError(result.error || "La factura todavía no está disponible");
     setDownloadingInvoiceId(null);
+  };
+
+  const descargarProforma = async (reservaId: number) => {
+    setDownloadingProformaId(reservaId);
+    setFileError("");
+    const result = await descargarArchivo(
+      `/api/usuarios/mis-reservas/${reservaId}/proforma`,
+      `proforma_reserva_${reservaId}.pdf`
+    );
+    if (!result.ok) setFileError(result.error || "No se pudo descargar la proforma");
+    setDownloadingProformaId(null);
   };
 
   const guardarReprogramacion = async () => {
@@ -452,6 +466,7 @@ export default function ClienteHistorialPage() {
       </div>
 
       {msg && <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-sm text-emerald-700 font-bold flex items-center gap-2"><CheckCircle2 size={16} />{msg}</div>}
+      {fileError && <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-2xl text-sm text-red-700 font-bold flex items-center gap-2"><AlertTriangle size={16} />{fileError}</div>}
 
       {reservas.length === 0 ? (
         <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center shadow-sm">
@@ -513,6 +528,16 @@ export default function ClienteHistorialPage() {
                       <pagoStyle.icon size={12} />
                       {pagoCompleto ? "Pagado completo" : montoPagado > 0 ? `Abono: $${montoPagado.toFixed(2)} · Falta: $${saldoPendiente.toFixed(2)}` : pagoStyle.label}
                     </span>
+                    {r.estado !== "cancelada" && (
+                      <button
+                        onClick={() => void descargarProforma(r.id)}
+                        disabled={downloadingProformaId === r.id}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-60"
+                      >
+                        {downloadingProformaId === r.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
+                        Ver proforma
+                      </button>
+                    )}
                     {requierePago && (
                       <button onClick={() => setPagoReserva(r)}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#E31E24] hover:bg-black text-white text-[10px] font-black uppercase tracking-widest transition-all">

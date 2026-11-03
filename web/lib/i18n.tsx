@@ -299,6 +299,7 @@ const translations: Record<string, string> = {
   "Pagado": "Paid",
   "Abono: $": "Paid: $",
   " · Falta: $": " · Balance: $",
+  "Ver proforma": "View pro forma",
   "Pagar mi reserva": "Pay for my booking",
   "Este viaje no cuenta como realizado porque el pago no está confirmado.": "This trip is not marked as completed because the payment has not been confirmed.",
   "Ocultar mapa": "Hide map",

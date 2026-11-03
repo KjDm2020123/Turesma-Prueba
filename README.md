@@ -95,6 +95,15 @@ la reserva para el acceso del cliente:
 El recibo funciona como constancia de pago aprobado y no reemplaza una factura
 tributaria ni el comprobante emitido por la entidad financiera.
 
+## Proformas
+
+El cliente puede descargar desde su historial una proforma PDF de cada reserva
+con precio definido. Incluye la ruta, fechas, categoría solicitada y total; el
+documento es informativo y no reemplaza una factura ni un comprobante de pago.
+La descarga verifica que la reserva pertenezca al usuario autenticado:
+
+- `GET /api/usuarios/mis-reservas/:id/proforma`
+
 ## Comprobaciones
 
 ```powershell

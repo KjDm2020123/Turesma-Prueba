@@ -37,17 +37,26 @@ const EMPRESA = {
 
 const fmtFecha = (f: any) => {
   if (!f) return "";
-  try { const d = new Date(f); return `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`; }
+  try {
+    const isoDate = String(f).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const d = isoDate
+      ? new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]))
+      : new Date(f);
+    return `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+  }
   catch { return String(f); }
 };
 const fmtUSD = (n: number) => Number(n || 0).toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Devuelve el id de la cotización asociada a una reserva (si existe).
-const getCotizacionIdDeReserva = async (reservaId: number): Promise<number | null> => {
-  try {
-    const r = await pool.query("SELECT id FROM cotizaciones WHERE reserva_id = $1 ORDER BY id DESC LIMIT 1", [reservaId]);
-    return r.rowCount ? Number(r.rows[0].id) : null;
-  } catch { return null; }
+const getCotizacionIdDeReserva = async (reservaId: number, usuarioId?: number): Promise<number | null> => {
+  const ownershipFilter = usuarioId === undefined ? "" : "AND usuario_id = $2";
+  const params = usuarioId === undefined ? [reservaId] : [reservaId, usuarioId];
+  const r = await pool.query(
+    `SELECT id FROM cotizaciones WHERE reserva_id = $1 ${ownershipFilter} ORDER BY id DESC LIMIT 1`,
+    params
+  );
+  return r.rowCount ? Number(r.rows[0].id) : null;
 };
 
 // Arma los datos de la proforma de una cotización y le asigna número si no tiene
@@ -56,7 +65,7 @@ const buildProformaData = async (cotizacionId: number) => {
   const r = await pool.query(
     `SELECT c.id, c.origen, c.destino, c.fecha_servicio, c.hora_salida,
             c.fecha_regreso, c.hora_regreso, c.num_personas,
-            c.notas, c.proforma_numero,
+            c.notas, c.tipo_vehiculo, c.proforma_numero,
             COALESCE(c.precio_final, c.precio_estimado, 0)::numeric AS precio,
             u.nombre AS cliente_nombre, u.email AS cliente_email,
             u.telefono AS cliente_telefono, u.cedula AS cliente_cedula
@@ -83,9 +92,81 @@ const buildProformaData = async (cotizacionId: number) => {
     servicio: {
       origen: c.origen, destino: c.destino, fecha_servicio: c.fecha_servicio, hora_salida: c.hora_salida,
       fecha_regreso: c.fecha_regreso, hora_regreso: c.hora_regreso,
-      num_personas: c.num_personas, notas: c.notas,
+      num_personas: c.num_personas, notas: c.notas, tipo_vehiculo: c.tipo_vehiculo,
     },
     precio: Number(c.precio) || 0,
+  };
+};
+
+const buildProformaDataDeReserva = async (reservaId: number, usuarioId: number) => {
+  const reservationResult = await pool.query(
+    `SELECT r.id, r.origen, r.destino,
+            COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva)::text AS fecha_servicio,
+            COALESCE(r.hora_salida::text, c.hora_salida) AS hora_salida,
+            r.fecha_regreso::text AS fecha_regreso, r.hora_regreso::text AS hora_regreso,
+            r.num_personas, r.notas, COALESCE(r.tipo_vehiculo, v.tipo) AS tipo_vehiculo,
+            r.total::numeric AS precio,
+            u.nombre AS cliente_nombre, u.email AS cliente_email,
+            u.telefono AS cliente_telefono, u.cedula AS cliente_cedula
+     FROM reservas r
+     JOIN usuarios u ON u.id = r.usuario_id
+     LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
+     LEFT JOIN LATERAL (
+       SELECT hora_salida FROM cotizaciones
+       WHERE reserva_id = r.id AND usuario_id = r.usuario_id
+       ORDER BY id DESC LIMIT 1
+     ) c ON true
+     WHERE r.id = $1 AND r.usuario_id = $2
+     LIMIT 1`,
+    [reservaId, usuarioId]
+  );
+  if (!reservationResult.rowCount) return null;
+
+  const cotizacionId = await getCotizacionIdDeReserva(reservaId, usuarioId);
+  if (cotizacionId) {
+    const quoteData = await buildProformaData(cotizacionId);
+    if (quoteData) {
+      const currentReservation = reservationResult.rows[0];
+      quoteData.precio = Number(currentReservation.precio) || 0;
+      quoteData.servicio = {
+        ...quoteData.servicio,
+        origen: currentReservation.origen,
+        destino: currentReservation.destino,
+        fecha_servicio: currentReservation.fecha_servicio,
+        hora_salida: currentReservation.hora_salida,
+        fecha_regreso: currentReservation.fecha_regreso,
+        hora_regreso: currentReservation.hora_regreso,
+        num_personas: currentReservation.num_personas,
+        notas: currentReservation.notas,
+        tipo_vehiculo: currentReservation.tipo_vehiculo,
+      };
+      return quoteData;
+    }
+  }
+
+  const reservation = reservationResult.rows[0];
+  return {
+    numero: `RES-${reservation.id}`,
+    fecha: new Date().toISOString().slice(0, 10),
+    empresa: EMPRESA,
+    cliente: {
+      nombre: reservation.cliente_nombre,
+      email: reservation.cliente_email,
+      telefono: reservation.cliente_telefono,
+      cedula: reservation.cliente_cedula,
+    },
+    servicio: {
+      origen: reservation.origen,
+      destino: reservation.destino,
+      fecha_servicio: reservation.fecha_servicio,
+      hora_salida: reservation.hora_salida,
+      fecha_regreso: reservation.fecha_regreso,
+      hora_regreso: reservation.hora_regreso,
+      num_personas: reservation.num_personas,
+      notas: reservation.notas,
+      tipo_vehiculo: reservation.tipo_vehiculo,
+    },
+    precio: Number(reservation.precio) || 0,
   };
 };
 
@@ -175,6 +256,11 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
       doc.font("Helvetica-Bold").text("Regreso: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
       doc.font("Helvetica").text(`${fmtFecha(d.servicio.fecha_regreso)}${d.servicio.hora_regreso ? " · recogida " + d.servicio.hora_regreso : ""} · ${d.servicio.destino} → ${d.servicio.origen}`);
     }
+    if (d.servicio.tipo_vehiculo) {
+      dy = doc.y + 2;
+      doc.font("Helvetica-Bold").text("Categoría solicitada: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
+      doc.font("Helvetica").text(String(d.servicio.tipo_vehiculo));
+    }
     dy = doc.y + 10;
     doc.font("Helvetica").text(d.servicio.notas || "Servicio de transporte para traslado de personal.", cols.desc + 6, dy, { width: colW.desc - 12 });
     // Precios
@@ -205,6 +291,9 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
     doc.font("Helvetica-Bold").text("Numero: ", { continued: true }).font("Helvetica").text(e.banco.numero);
     doc.font("Helvetica-Bold").text("Nombre: ", { continued: true }).font("Helvetica").text(e.banco.titular);
     doc.font("Helvetica-Bold").text("RUC: ", { continued: true }).font("Helvetica").text(e.banco.ruc);
+    doc.font("Helvetica-Oblique").fontSize(8).fillColor("#64748b")
+      .text("Documento informativo: no es factura ni comprobante de pago.", left, footY + 68, { width: 280 });
+    doc.fillColor("#000000");
 
     // Firma (derecha)
     const firmaX = 340, firmaW = 215;
@@ -219,4 +308,4 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
   }
 });
 
-module.exports = { EMPRESA, buildProformaData, generarProformaPDF, getCotizacionIdDeReserva };
+module.exports = { EMPRESA, buildProformaData, buildProformaDataDeReserva, generarProformaPDF, getCotizacionIdDeReserva };

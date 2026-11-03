@@ -6,6 +6,7 @@ const { createPayphonePayment, confirmPayphonePayment } = require("../config/pay
 const { obtenerPagoAprobado, enviarReciboPago } = require("../config/reciboPago");
 const { obtenerFactura } = require("../config/sriFacturacion");
 const { emitirFacturaPorReserva } = require("../config/sriFacturacion");
+const { buildProformaDataDeReserva, generarProformaPDF } = require("../config/proforma");
 
 const METODOS_VALIDOS = ["transferencia", "link_pago", "payphone"];
 
@@ -193,6 +194,35 @@ const descargarReciboPago = async (req: any, res: any) => {
   }
 };
 
+const descargarProformaReserva = async (req: any, res: any) => {
+  const userId = Number(req.user?.id);
+  const reservaId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId <= 0
+    || !Number.isInteger(reservaId) || reservaId <= 0) {
+    return res.status(400).json({ error: "Datos de proforma inválidos" });
+  }
+
+  try {
+    const data = await buildProformaDataDeReserva(reservaId, userId);
+    if (!data) return res.status(404).json({ error: "Reserva no encontrada" });
+    if (!Number.isFinite(Number(data.precio)) || Number(data.precio) <= 0) {
+      return res.status(400).json({ error: "La reserva todavía no tiene un precio para generar la proforma" });
+    }
+
+    const pdf = await generarProformaPDF(data);
+    const numero = String(data.numero).replace(/[^a-zA-Z0-9_-]/g, "");
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="proforma_${numero}.pdf"`,
+      "Cache-Control": "private, no-store",
+    });
+    return res.status(200).send(pdf);
+  } catch (error) {
+    console.error("Error generando proforma para cliente:", error);
+    return res.status(500).json({ error: "No se pudo generar la proforma" });
+  }
+};
+
 const descargarFactura = async (req: any, res: any) => {
   const userId = Number(req.user?.id);
   const reservaId = Number(req.params.id);
@@ -230,6 +260,7 @@ module.exports = {
   crearPagoReserva,
   listarPagosDeReserva,
   descargarReciboPago,
+  descargarProformaReserva,
   descargarFactura,
   crearPagoPayphone,
   confirmarPagoPayphone,
