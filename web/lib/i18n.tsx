@@ -194,9 +194,30 @@ const translations: Record<string, string> = {
   "Paso ": "Step ",
   " de 4": " of 4",
   "Ruta": "Route",
+  "Vehículo": "Vehicle",
   "Fecha y pasajeros": "Date and passengers",
   "Vehículo y modalidad": "Vehicle and service type",
   "Resumen": "Summary",
+  "¿A dónde necesitas viajar?": "Where would you like to go?",
+  "Indica tu punto de salida y destino. Puedes buscar una dirección o ajustar el marcador en el mapa.": "Enter your pickup and destination. You can search for an address or adjust the map marker.",
+  "¿Cuándo será tu viaje?": "When is your trip?",
+  "Elige la fecha, horario y pasajeros. Si necesitas varios días o regresar después, selecciona la opción correspondiente.": "Choose your date, time, and passenger count. Select the appropriate option for multi-day trips or a later return.",
+  "Elige una categoría": "Choose a vehicle category",
+  "Selecciona la categoría que prefieres. La unidad específica se asignará después de confirmar el pago.": "Choose your preferred category. The specific vehicle will be assigned after payment is confirmed.",
+  "Revisa antes de enviar": "Review before submitting",
+  "Confirma que los datos del viaje sean correctos. Administración revisará tu solicitud y te enviará el precio.": "Confirm your trip details are correct. The team will review your request and send you a quote.",
+  "Resumen del viaje": "Trip summary",
+  "Salida": "Pickup",
+  "Fecha y horario": "Date and time",
+  "Recogida de regreso": "Return pickup",
+  "Pasajeros y categoría": "Passengers and category",
+  "Modalidad y viajes": "Service type and trips",
+  "Por día": "By the day",
+  "Esta solicitud no confirma una reserva ni asigna un vehículo todavía. Recibirás el precio para revisarlo y, si lo aceptas, podrás pagar el anticipo; Despacho asignará la unidad después de confirmar el pago.": "This request does not confirm a booking or assign a vehicle yet. You will receive a quote to review and, if you accept it, you can pay the deposit; Dispatch will assign the vehicle after payment is confirmed.",
+  "Podrás seguir el estado y aceptar la cotización desde tu historial. No necesitas elegir una unidad ahora; se asignará después de confirmar el pago.": "You can track the status and accept the quote from your history. You do not need to choose a specific vehicle now; one will be assigned after payment is confirmed.",
+  "Ir a mi historial": "Go to my history",
+  "Pasos de la solicitud": "Request steps",
+  "Progreso de solicitud": "Request progress",
   "Asistente inteligente": "Smart assistant",
   "Cuéntame qué necesitas y te sugiero el vehículo ideal": "Tell me what you need and I will suggest the right vehicle",
   "Usaré pasajeros, fechas y tus preferencias para sugerirte una categoría con capacidad suficiente. Despacho asignará la unidad específica después de confirmar el pago.": "I will use your passenger count, dates, and preferences to suggest a vehicle category with enough capacity. Dispatch will assign the specific vehicle after payment is confirmed.",
@@ -233,6 +254,10 @@ const translations: Record<string, string> = {
   "Indica la fecha y hora para recoger al regreso.": "Enter the date and time for your return pickup.",
   "La fecha de regreso debe ser posterior a la fecha de salida.": "The return date must be after the departure date.",
   "Selecciona las fechas que prefieres. La disponibilidad final se confirma después de revisar tu solicitud.": "Select your preferred dates. Final availability will be confirmed after your request is reviewed.",
+  "Selecciona la fecha de salida y luego el último día del servicio. La disponibilidad se confirma al revisar tu solicitud.": "Select the departure date and then the last day of service. Availability will be confirmed when your request is reviewed.",
+  "Elige la fecha del viaje. Después seleccionarás la fecha de recogida de regreso.": "Choose the trip date. Then select the return pickup date.",
+  "Elige la fecha de salida que prefieres. La disponibilidad final se confirma después de revisar tu solicitud.": "Choose your preferred departure date. Final availability will be confirmed after your request is reviewed.",
+  "· máximo": "· maximum",
   "Un día": "One day",
   "Varios días": "Multiple days",
   "Del ": "From ",
@@ -450,10 +475,22 @@ const translations: Record<string, string> = {
   "Toca el día de inicio del viaje": "Select the first day of your trip",
   "Ahora toca el último día del viaje": "Now select the last day of your trip",
   "Rango seleccionado — toca otro día para cambiarlo": "Date range selected — select another day to change it",
-  " · máx. ": " · max ",
+  "Elige la fecha de salida": "Choose the departure date",
+  "Ahora elige el último día del servicio": "Now choose the last day of service",
+  "Rango listo · elige otra fecha para empezar de nuevo": "Date range ready · choose another date to start over",
+  "Elige el día de tu viaje": "Choose your trip date",
+  "Selecciona fecha de recogida": "Select the return pickup date",
+  "El rango incluye fechas no disponibles. Elige otro rango.": "The range includes unavailable dates. Choose another range.",
+  "Tu elección": "Your selection",
+  "Días pasados": "Past dates",
+  "Antes de fecha permitida": "Before the allowed date",
   "Libre": "Available",
   "Reservado": "Booked",
-  "Tu elección": "Your selection",
+  " · máx. ": " · max ",
+  "Regreso": "Return",
+  "días": "days",
+  "Mes anterior": "Previous month",
+  "Mes siguiente": "Next month",
   "Seguimiento en vivo": "Live tracking",
   " · actualizado ": " · updated ",
   "Llega en ~": "Arrives in ~",
@@ -651,7 +688,12 @@ const translate = (value: string, language: Language) => {
   const paidBalance = content.match(/^Abono: (\$[\d,.]+) · Falta: (\$[\d,.]+)$/);
   const rangeLimit = content.match(/^· máx\. (\d+) días$/);
   const dayCount = content.match(/^· (\d+) días$/);
+  const selectedDayCount = content.match(/^(\d+) días$/);
+  const tripCount = content.match(/^(\d+) viajes?$/);
+  const hourlyService = content.match(/^Por horas · (\d+) h$/);
   const maximumDays = content.match(/^Máximo (\d+) días seguidos por reserva\.$/);
+  const calendarSelection = content.match(/^(Fecha de recogida|Fecha seleccionada): (.+)$/);
+  const calendarMaxDays = content.match(/^· máximo (\d+) días$/);
   const capacity = content.match(/^Hasta (\d+) pasajeros$/);
   const selectedCapacity = content.match(/^La categoría seleccionada admite hasta (\d+) pasajeros\. Elige otra categoría\.$/);
   const detectedPassengers = content.match(/^Detecté (\d+) pasajero(?:s)? en tu descripción; usaré ese número para filtrar vehículos\.$/);
@@ -671,7 +713,12 @@ const translate = (value: string, language: Language) => {
     ?? (paidBalance ? `Paid: ${paidBalance[1]} · Balance: ${paidBalance[2]}` : undefined)
     ?? (rangeLimit ? `· max ${rangeLimit[1]} days` : undefined)
     ?? (dayCount ? `· ${dayCount[1]} days` : undefined)
+    ?? (selectedDayCount ? `${selectedDayCount[1]} days` : undefined)
+    ?? (tripCount ? `${tripCount[1]} trip${tripCount[1] === "1" ? "" : "s"}` : undefined)
+    ?? (hourlyService ? `By the hour · ${hourlyService[1]} hr` : undefined)
     ?? (maximumDays ? `Maximum ${maximumDays[1]} consecutive days per booking.` : undefined)
+    ?? (calendarSelection ? `${calendarSelection[1] === "Fecha de recogida" ? "Pickup date" : "Selected date"}: ${calendarSelection[2]}` : undefined)
+    ?? (calendarMaxDays ? `· maximum ${calendarMaxDays[1]} days` : undefined)
     ?? (capacity ? `Up to ${capacity[1]} passengers` : undefined)
     ?? (selectedCapacity ? `The selected category accommodates up to ${selectedCapacity[1]} passengers. Choose another category.` : undefined)
     ?? (detectedPassengers ? `I detected ${detectedPassengers[1]} passenger${detectedPassengers[1] === "1" ? "" : "s"} in your description and will use that number to filter vehicles.` : undefined)

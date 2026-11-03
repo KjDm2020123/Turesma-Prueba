@@ -5,10 +5,13 @@ import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { LocalizedContent, useLocale } from "../lib/i18n";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const DIAS = ["D", "L", "M", "X", "J", "V", "S"];
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+const iso = (d: Date) => [
+  d.getFullYear(),
+  String(d.getMonth() + 1).padStart(2, "0"),
+  String(d.getDate()).padStart(2, "0"),
+].join("-");
 // Suma días a una fecha ISO (YYYY-MM-DD) sin problemas de zona horaria.
 const addDaysIso = (isoDate: string, n: number) => {
   const [y, m, d] = isoDate.split("-").map(Number);
@@ -18,7 +21,7 @@ const addDaysIso = (isoDate: string, n: number) => {
 
 // Permite elegir fechas y, cuando hay una unidad concreta, muestra sus días no disponibles.
 export function VehiculoCalendario({
-  vehiculoId, value, onSelect, range = false, endValue = "", onSelectEnd, maxDays = 0, allowUnassigned = false, localized = false,
+  vehiculoId, value, onSelect, range = false, endValue = "", onSelectEnd, maxDays = 0, allowUnassigned = false, localized = false, minDate = "", selectionLabel = "",
 }: {
   vehiculoId: number | null;
   value: string;
@@ -29,6 +32,8 @@ export function VehiculoCalendario({
   maxDays?: number; // tope de días seguidos en modo rango (0 = sin tope)
   allowUnassigned?: boolean;
   localized?: boolean;
+  minDate?: string;
+  selectionLabel?: string;
 }) {
   const [dispo, setDispo] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
@@ -53,7 +58,8 @@ export function VehiculoCalendario({
   }, [vehiculoId, allowUnassigned]);
 
   const hoy = iso(new Date());
-  const esLibre = (f: string) => f >= hoy
+  const fechaMinima = minDate > hoy ? minDate : hoy;
+  const esLibre = (f: string) => f >= fechaMinima
     && (!vehiculoId || allowUnassigned || dispo[f] === undefined || dispo[f] === true);
 
   // ¿Están libres TODOS los días entre a y b (inclusive)? Para validar el rango.
@@ -83,7 +89,7 @@ export function VehiculoCalendario({
 
   const clickDia = (f: string) => {
     if (!esLibre(f)) return;
-    if (!range) { onSelect(f); return; }
+    if (!range) { setAviso(""); onSelect(f); return; }
     setAviso("");
     // Modo rango: primer clic = inicio; segundo clic válido = fin.
     if (!value || (value && endValue)) {
@@ -97,6 +103,8 @@ export function VehiculoCalendario({
         return;
       }
       if (rangoLibre(value, f)) { onSelectEnd?.(f); return; }
+      setAviso("El rango incluye fechas no disponibles. Elige otro rango.");
+      return;
     }
     // clic anterior al inicio o con días ocupados en medio → reinicia el rango
     onSelect(f); onSelectEnd?.("");
@@ -108,65 +116,105 @@ export function VehiculoCalendario({
 
   return (
     <LocalizedContent enabled={localized}>
-    <div className="bg-white border-2 border-slate-100 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <button type="button" onClick={() => cambiarMes(-1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ChevronLeft size={18} /></button>
-        <p className="text-sm font-black uppercase italic tracking-tighter text-slate-700">{MESES[cursor.getMonth()]} {cursor.getFullYear()}</p>
-        <button type="button" onClick={() => cambiarMes(1)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ChevronRight size={18} /></button>
+      <div className="mx-auto max-w-[720px] rounded-2xl border-2 border-slate-100 bg-white p-3 sm:p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <button type="button" onClick={() => cambiarMes(-1)} aria-label={localized && language === "en" ? "Previous month" : "Mes anterior"} className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100">
+            <ChevronLeft size={18} />
+          </button>
+          <p className="text-sm font-black uppercase italic tracking-tight text-slate-800">
+            {cursor.toLocaleDateString(localized && language === "en" ? "en-US" : "es-EC", { month: "long", year: "numeric" })}
+          </p>
+          <button type="button" onClick={() => cambiarMes(1)} aria-label={localized && language === "en" ? "Next month" : "Mes siguiente"} className="rounded-lg p-2 text-slate-600 transition hover:bg-slate-100">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        <div className="mb-3 flex min-h-10 items-center justify-center rounded-xl bg-slate-50 px-3 py-2 text-center text-xs font-bold text-slate-700" aria-live="polite">
+          {selectionLabel
+            ? value
+              ? `${selectionLabel}: ${new Date(`${value}T00:00:00`).toLocaleDateString(localized && language === "en" ? "en-US" : "es-EC", { day: "numeric", month: "long", year: "numeric" })}`
+              : `Selecciona ${selectionLabel.toLowerCase()}`
+            : range
+              ? !value ? "Elige la fecha de salida" : !endValue ? "Ahora elige el último día del servicio" : "Rango listo · elige otra fecha para empezar de nuevo"
+              : value
+                ? `Fecha seleccionada: ${new Date(`${value}T00:00:00`).toLocaleDateString(localized && language === "en" ? "en-US" : "es-EC", { day: "numeric", month: "long", year: "numeric" })}`
+                : "Elige el día de tu viaje"}
+          {range && maxDays > 0 && <span className="ml-1 font-medium text-slate-500">· máximo {maxDays} días</span>}
+        </div>
+        {aviso && <p role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-center text-xs font-bold text-red-700">{aviso}</p>}
+
+        {loading ? (
+          <div className="flex justify-center py-8"><Loader2 className="animate-spin text-[#E31E24]" size={24} /></div>
+        ) : (
+          <>
+            <div className="mx-auto grid max-w-[680px] grid-cols-7 gap-1.5">
+              {(localized && language === "en" ? ["S", "M", "T", "W", "T", "F", "S"] : DIAS).map((day, i) => (
+                <div key={i} className="py-1 text-center text-[10px] font-black uppercase text-slate-500">
+                  <span aria-hidden="true">{day}</span>
+                  <span className="sr-only">{(localized && language === "en" ? ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] : ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"])[i]}</span>
+                </div>
+              ))}
+              {dias.map((date, i) => {
+                if (!date) return <span key={`empty-${i}`} aria-hidden="true" className="h-12 sm:h-14" />;
+                const dayNum = Number(date.slice(8, 10));
+                const past = date < hoy;
+                const beforeMinDate = !past && date < fechaMinima;
+                const libre = esLibre(date);
+                const reservado = dispo[date] === false && !past;
+                const isStart = value === date;
+                const isEnd = !!endValue && endValue === date;
+                const inRange = range && !!value && !!endValue && date > value && date < endValue;
+                const selected = isStart || isEnd;
+                const today = date === hoy;
+                const marker = selectionLabel
+                  ? selectionLabel.replace(/^Fecha de /, "")
+                  : range
+                    ? isStart ? "Salida" : isEnd ? "Fin" : ""
+                    : "";
+                const accessibleMarker = localized && language === "en"
+                  ? marker === "recogida" ? "return pickup" : marker === "Salida" ? "departure" : marker === "Fin" ? "last day" : "selected"
+                  : marker || "seleccionada";
+                const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString(
+                  localized && language === "en" ? "en-US" : "es-EC",
+                  { weekday: "long", day: "numeric", month: "long", year: "numeric" }
+                );
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    disabled={!libre}
+                    onClick={() => clickDia(date)}
+                    aria-label={`${dateLabel}${selected ? `, ${accessibleMarker}` : ""}${reservado ? localized && language === "en" ? ", unavailable" : ", no disponible" : ""}`}
+                    aria-pressed={selected}
+                    title={reservado ? "No disponible" : dateLabel}
+                    className={`flex h-12 min-w-0 flex-col items-center justify-center rounded-xl border text-xs font-bold transition-colors sm:h-14 ${
+                      selected ? "border-[#E31E24] bg-[#E31E24] text-white shadow-sm" :
+                      inRange ? "border-red-100 bg-red-50 text-red-800" :
+                      reservado ? "cursor-not-allowed border-red-100 bg-red-50 text-red-400 line-through" :
+                      past ? "cursor-not-allowed border-transparent bg-slate-50 text-slate-300" :
+                      beforeMinDate ? "cursor-not-allowed border-transparent bg-slate-100 text-slate-400" :
+                      `border-transparent bg-slate-50 text-slate-800 hover:border-emerald-200 hover:bg-emerald-50 ${today ? "ring-1 ring-inset ring-[#E31E24]" : ""}`
+                    }`}
+                  >
+                    <span>{dayNum}</span>
+                    {marker && selected && <span className="max-w-full truncate px-0.5 text-[8px] font-black leading-3">{marker}</span>}
+                    {!selected && today && <span className="text-[8px] font-bold leading-3 text-[#E31E24]">Hoy</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-slate-100 pt-3 text-[10px] font-semibold text-slate-600">
+              {vehiculoId && !allowUnassigned && <>
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-emerald-100" /> Libre</span>
+                <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-100" /> Reservado</span>
+              </>}
+              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-[#E31E24]" /> Tu elección</span>
+              <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-slate-200 bg-slate-50" /> Días pasados</span>
+              {minDate > hoy && <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-slate-100" /> Antes de fecha permitida</span>}
+            </div>
+          </>
+        )}
       </div>
-
-      {range && (
-        <p className="text-[10px] font-bold text-slate-400 mb-2 text-center">
-          {!value ? "Toca el día de inicio del viaje" : !endValue ? "Ahora toca el último día del viaje" : "Rango seleccionado — toca otro día para cambiarlo"}
-          {maxDays > 0 && <span className="text-slate-300"> · máx. {maxDays} días</span>}
-        </p>
-      )}
-      {aviso && <p className="text-[10px] font-bold text-[#E31E24] mb-2 text-center">{aviso}</p>}
-
-      {loading ? (
-        <div className="flex justify-center py-8"><Loader2 className="animate-spin text-[#E31E24]" size={24} /></div>
-      ) : (
-        <>
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {(localized && language === "en" ? ["S", "M", "T", "W", "T", "F", "S"] : DIAS).map((d, i) => <div key={i} className="text-center text-[9px] font-black uppercase text-slate-300">{d}</div>)}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {dias.map((f, i) => {
-              if (!f) return <div key={i} />;
-              const dayNum = Number(f.slice(8, 10));
-              const past = f < hoy;
-              const libre = esLibre(f);
-              const reservado = dispo[f] === false && !past;
-              const esInicio = value === f;
-              const esFin = !!endValue && endValue === f;
-              const enRango = range && !!value && !!endValue && f > value && f < endValue;
-              const sel = esInicio || esFin;
-              return (
-                <button key={i} type="button" disabled={!libre}
-                  onClick={() => clickDia(f)}
-                  title={reservado ? "No disponible" : ""}
-                  className={`aspect-square rounded-lg text-xs font-bold transition-all ${
-                    sel ? "bg-[#E31E24] text-white shadow" :
-                    enRango ? "bg-red-100 text-red-600" :
-                    libre ? "bg-slate-50 text-slate-700 hover:bg-emerald-100" :
-                    reservado ? "bg-red-50 text-red-300 line-through cursor-not-allowed" :
-                    "bg-slate-50 text-slate-200 cursor-not-allowed"
-                  }`}>
-                  {dayNum}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-3 mt-3 text-[9px] font-bold text-slate-400 flex-wrap">
-            {vehiculoId && !allowUnassigned && <>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 inline-block" /> Libre</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block" /> Reservado</span>
-            </>}
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#E31E24] inline-block" /> Tu elección</span>
-          </div>
-        </>
-      )}
-    </div>
     </LocalizedContent>
   );
 }
