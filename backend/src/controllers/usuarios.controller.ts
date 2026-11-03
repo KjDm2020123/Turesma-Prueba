@@ -166,8 +166,13 @@ const listarVehiculosCliente = async (req, res) => {
 };
 
 const recomendarVehiculo = async (req: any, res: any) => {
-  const personas = Math.max(1, Number(req.body?.num_personas) || 1);
-  const notas = String(req.body?.notas || "").trim().toLowerCase();
+  const rawPersonas = Number(req.body?.num_personas);
+  const personas = Number.isFinite(rawPersonas) ? Math.max(1, Math.floor(rawPersonas)) : 1;
+  const notas = String(req.body?.notas || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
   const fechaInicio = typeof req.body?.fecha_servicio === "string" ? req.body.fecha_servicio : null;
   const fechaRegreso = typeof req.body?.fecha_regreso === "string" ? req.body.fecha_regreso : null;
   const fechaFin = typeof req.body?.fecha_fin === "string" && req.body.fecha_fin >= fechaInicio
@@ -232,15 +237,15 @@ const recomendarVehiculo = async (req: any, res: any) => {
       [personas, fechaInicio, fechaFin, fechaRegreso]
     );
 
-    const palabrasGrandes = /(equipaje|maleta|equipajes|grupo|amplio|espacio)/i;
-    const palabrasComodas = /(comodidad|lujo|ejecutivo|premium|privado)/i;
+    const palabrasGrandes = /(equipaj|malet|grupo|ampli|espacio|holgad|voluminos|bulto)/i;
+    const palabrasComodas = /(comod|confort|lujo|ejecutivo|premium|privado|aire acondicionado)/i;
     const ranked = result.rows
       .map((vehiculo: any) => {
         let score = 100 - Math.max(0, Number(vehiculo.capacidad) - personas) * 4;
         const textoVehiculo = `${vehiculo.tipo || ""} ${vehiculo.modelo || ""} ${vehiculo.descripcion || ""}`;
         if (tipoPreferido && textoVehiculo.toLowerCase().includes(tipoPreferido)) score += 30;
         if (palabrasGrandes.test(notas) && Number(vehiculo.capacidad) >= personas + 2) score += 18;
-        if (palabrasComodas.test(notas) && /(bus|van|sprinter|minibus)/i.test(textoVehiculo)) score += 8;
+        if (palabrasComodas.test(notas) && /(bus|van|sprinter|minibus)/i.test(textoVehiculo.normalize("NFD").replace(/[\u0300-\u036f]/g, ""))) score += 8;
         return { ...vehiculo, score };
       })
       .sort((a: any, b: any) => b.score - a.score)

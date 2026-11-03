@@ -75,8 +75,6 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 type NegoItem = { actor: string; precio: number | null; mensaje: string | null; creado_en: string };
-type VehiculoAsignable = { id: number; placa: string; tipo: string; modelo?: string | null; capacidad?: number | null; activo?: boolean; usuario_id?: number | null; conductor_id?: number | null; conductor_nombre?: string | null };
-
 const INPUT_CLS = "w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white placeholder:font-normal";
 
 function AdminCotizacionesContent() {
@@ -97,9 +95,6 @@ function AdminCotizacionesContent() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const [vehiculosAsignables, setVehiculosAsignables] = useState<VehiculoAsignable[]>([]);
-  const [vehiculoSeleccionado, setVehiculoSeleccionado] = useState("");
-
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     try {
@@ -275,21 +270,6 @@ function AdminCotizacionesContent() {
     setRespuesta("");
     setNego([]);
     setMsg(""); setErr("");
-    if (mode === "aprobar") {
-      setVehiculoSeleccionado(cot.vehiculo_id ? String(cot.vehiculo_id) : "");
-      try {
-        const vehiculosRes = await fetch(`${API_URL}/api/admin/vehiculos`, { headers: getAuthHeaders() });
-        if (vehiculosRes.ok) {
-          const data = await vehiculosRes.json();
-          const categoria = String(cot.tipo_vehiculo || "").trim().toLowerCase();
-          setVehiculosAsignables((Array.isArray(data) ? data : data.data || []).filter((v: VehiculoAsignable) =>
-            v.activo !== false && (!categoria || String(v.tipo || "").toLowerCase() === categoria)
-          ));
-        }
-      } catch {
-        setErr("No se pudieron cargar los vehículos disponibles");
-      }
-    }
     try {
       const r = await fetch(`${API_URL}/api/admin/cotizaciones/${cot.id}/negociacion`, { headers: getAuthHeaders() });
       if (r.ok) setNego(await r.json());
@@ -330,20 +310,16 @@ function AdminCotizacionesContent() {
         body: JSON.stringify({
           precio_final: Number(precioFinal),
           respuesta_admin: respuesta,
-          vehiculo_id: vehiculoSeleccionado ? Number(vehiculoSeleccionado) : null,
-          conductor_id: vehiculosAsignables.find((vehicle) => String(vehicle.id) === vehiculoSeleccionado)?.conductor_id || null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setMsg(`✅ Cotización aprobada. Reserva #${data.reserva_id} creada.`);
+      setMsg(`✅ Cotización aprobada. Reserva #${data.reserva_id} creada; se asignará desde Despacho tras confirmarse el pago.`);
       setSelected(null);
       load();
-    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo aprobar la cotización. Revisa el vehículo y su conductor asignado."); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "No se pudo aprobar la cotización. Intenta nuevamente."); }
     finally { setSaving(false); }
   };
-
-  const vehiculoActual = vehiculosAsignables.find((vehicle) => String(vehicle.id) === vehiculoSeleccionado);
 
   const handleRechazar = async () => {
     if (!selected) return;
@@ -623,7 +599,9 @@ function AdminCotizacionesContent() {
                 <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
                   <Car size={16} className="text-[#E31E24] flex-shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Vehículo</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      {selected.vehiculo_placa ? "Vehículo asignado" : "Categoría solicitada"}
+                    </p>
                     <p className="text-sm font-bold text-slate-700 truncate">
                       {selected.vehiculo_placa ? `${selected.vehiculo_placa}${selected.vehiculo_modelo ? " · " + selected.vehiculo_modelo : ""}` : (selected.tipo_vehiculo || "Sin preferencia")}
                     </p>
@@ -682,36 +660,11 @@ function AdminCotizacionesContent() {
               {/* Acciones */}
               {modalMode === "aprobar" && (
                 <div className="space-y-3 pt-2">
-                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Asignación del servicio</p>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Vehículo ({selected.tipo_vehiculo || "categoría solicitada"}) *</label>
-                      <select
-                        value={vehiculoSeleccionado}
-                        onChange={(event) => {
-                          const id = event.target.value;
-                          setVehiculoSeleccionado(id);
-                        }}
-                        className={INPUT_CLS}
-                      >
-                        <option value="">Selecciona un vehículo</option>
-                        {vehiculosAsignables.map((vehicle) => (
-                          <option key={vehicle.id} value={vehicle.id}>
-                            {vehicle.placa} · {vehicle.modelo || "Sin modelo"} · {vehicle.capacidad || 0} pasajeros
-                          </option>
-                        ))}
-                      </select>
-                      {vehiculosAsignables.length === 0 && <p className="mt-1 text-[11px] font-bold text-amber-700">No hay vehículos disponibles para esta categoría.</p>}
-                    </div>
-                    <div className="rounded-xl border border-blue-200 bg-white px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Conductor asignado</p>
-                      <p className="mt-1 text-sm font-black text-blue-800">
-                        {vehiculoActual?.conductor_nombre || "Este vehículo no tiene conductor asignado"}
-                      </p>
-                      <p className="mt-1 text-[11px] font-medium text-blue-700">
-                        El conductor cambia automáticamente al cambiar de vehículo.
-                      </p>
-                    </div>
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Asignación por Despacho</p>
+                    <p className="mt-1 text-xs leading-relaxed text-blue-800">
+                      La categoría solicitada ({selected.tipo_vehiculo || "sin preferencia"}) es solo una referencia. El vehículo y el conductor se asignarán desde Despacho después de que el cliente complete el pago.
+                    </p>
                   </div>
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5 block">Precio Final ($) *</label>
@@ -732,12 +685,12 @@ function AdminCotizacionesContent() {
                       value={respuesta}
                       onChange={e => setRespuesta(e.target.value)}
                       rows={2}
-                      placeholder="Ej: Su cotización fue aprobada. El vehículo estará listo..."
+                      placeholder="Ej: Su cotización fue aprobada. Tras confirmar el pago, asignaremos el vehículo desde Despacho."
                       className={INPUT_CLS + " resize-none"}
                     />
                   </div>
                   {err && <p className="text-red-600 text-xs font-bold">{err}</p>}
-                  <button onClick={handleAprobar} disabled={saving || !vehiculoSeleccionado || !vehiculoActual?.conductor_id}
+                  <button onClick={handleAprobar} disabled={saving || !precioFinal}
                     className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-60">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                     Confirmar Aprobación

@@ -69,7 +69,10 @@ const findScheduleConflict = async (client: any, operationId: number, date: stri
      FROM reservas r
      LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
      WHERE r.id <> COALESCE((SELECT reserva_id FROM operaciones WHERE id = $1), -1)
-       AND COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date) = $2::date
+       AND (
+         COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date) = $2::date
+         OR r.fecha_regreso = $2::date
+       )
        AND r.estado NOT IN ('cancelada', 'finalizada')
        AND (
          r.vehiculo_id = $5
@@ -375,7 +378,19 @@ const asignarOperacion = async (req: any, res: any) => {
       return reject(409, { success: false, error: "La licencia del conductor está vencida" });
     }
 
-    const conflict = await findScheduleConflict(client, operationId, current.fecha_programada, current.hora_inicio, current.hora_fin, vehicleId, driverId, driverUserId);
+    const linkedReservation = current.reserva_id
+      ? await client.query("SELECT fecha_regreso::text AS fecha_regreso FROM reservas WHERE id = $1", [current.reserva_id])
+      : { rows: [] };
+    const returnDate = linkedReservation.rows[0]?.fecha_regreso || null;
+    const scheduleDates = [
+      { date: current.fecha_programada, start: current.hora_inicio, end: current.hora_fin },
+      ...(returnDate ? [{ date: returnDate, start: null, end: null }] : []),
+    ];
+    let conflict = null;
+    for (const schedule of scheduleDates) {
+      conflict = await findScheduleConflict(client, operationId, schedule.date, schedule.start, schedule.end, vehicleId, driverId, driverUserId);
+      if (conflict) break;
+    }
     if (conflict) {
       const isVehicleConflict = Number(conflict.vehiculo_id) === vehicleId;
       const resource = isVehicleConflict

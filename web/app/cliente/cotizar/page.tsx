@@ -1,6 +1,7 @@
 "use client";
 
 import React, { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   MapPin, Calendar, Users, Car, FileText, Clock, CheckCircle2,
   XCircle, Loader2, RefreshCw, Send, ArrowRight,
@@ -59,6 +60,14 @@ const siguienteFecha = (fecha: string) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
+const detectarPasajeros = (texto: string) => {
+  const coincidencia = texto.match(
+    /(?:\b(?:somos|viajamos|grupo(?:\s+(?:de|para))?|para)\s*)?(\d{1,3})\s*(?:personas?|pasajeros?|pax)\b/i
+  ) || texto.match(/\b(?:somos|viajamos|grupo(?:\s+(?:de|para))?)\s+(\d{1,3})\b/i);
+  const cantidad = Number(coincidencia?.[1]);
+  return Number.isInteger(cantidad) && cantidad > 0 ? cantidad : null;
+};
+
 export default function ClienteCotizarPage() {
   const { language } = useLocale();
   const { user, checkingSession } = useClienteGuard();
@@ -77,6 +86,7 @@ export default function ClienteCotizarPage() {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [recommendation, setRecommendation] = useState<VehicleRecommendation | null>(null);
   const [alternatives, setAlternatives] = useState<VehicleRecommendation[]>([]);
+  const [recommendationCriteria, setRecommendationCriteria] = useState<string | null>(null);
   const [route, setRoute] = useState<RutaCalculada | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const categorias = Array.from(
@@ -86,9 +96,10 @@ export default function ClienteCotizarPage() {
       result.set(tipo, {
         tipo,
         capacidad: Math.max(current?.capacidad || 0, Number(vehiculo.capacidad) || 0),
+        imagen_url: current?.imagen_url || vehiculo.imagen_url || null,
       });
       return result;
-    }, new Map<string, { tipo: string; capacidad: number }>())
+    }, new Map<string, { tipo: string; capacidad: number; imagen_url: string | null }>())
       .values()
   );
 
@@ -105,6 +116,16 @@ export default function ClienteCotizarPage() {
   const [locatingOrigin, setLocatingOrigin] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [focusSignal, setFocusSignal] = useState(0);
+  const pasajerosDetectados = detectarPasajeros(assistantPrompt);
+  const pasajerosAsistente = pasajerosDetectados || Math.max(1, Number(form.num_personas) || 1);
+  const criteriosAsistente = JSON.stringify({
+    pasajeros: pasajerosAsistente,
+    prompt: assistantPrompt.trim(),
+    notas: form.notas.trim(),
+    fecha_servicio: form.fecha_servicio,
+    fecha_fin: variosDias ? form.fecha_fin : "",
+    fecha_regreso: regresoOtraFecha ? form.fecha_regreso : "",
+  });
 
   const onMapChange = (which: "origin" | "destination", val: Punto) => {
     if (which === "origin") setOrigin(val); else setDestination(val);
@@ -166,13 +187,19 @@ export default function ClienteCotizarPage() {
 
   const askVehicleAssistant = async () => {
     setAssistantLoading(true); setAssistantErr(""); setAssistantMsg("");
+    setRecommendation(null);
+    setAlternatives([]);
+    setRecommendationCriteria(null);
+    const criteriosConsultados = criteriosAsistente;
+    if (pasajerosDetectados) {
+      setForm(current => ({ ...current, num_personas: String(pasajerosDetectados) }));
+    }
     try {
       const res = await fetch(`${API}/api/usuarios/vehiculos/recomendacion`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          num_personas: Number(form.num_personas) || 1,
-          tipo_vehiculo: form.tipo_vehiculo,
+          num_personas: pasajerosAsistente,
           fecha_servicio: form.fecha_servicio || null,
           fecha_fin: variosDias ? form.fecha_fin || form.fecha_servicio || null : form.fecha_servicio || null,
           fecha_regreso: regresoOtraFecha ? form.fecha_regreso : null,
@@ -182,10 +209,21 @@ export default function ClienteCotizarPage() {
       if (handleUnauthorized(res.status)) return;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "No se pudo consultar al asistente");
-      setRecommendation(data.recommendation || null);
-      setAlternatives(Array.isArray(data.alternatives) ? data.alternatives : []);
+      const options = [data.recommendation, ...(Array.isArray(data.alternatives) ? data.alternatives : [])]
+        .filter((vehicle): vehicle is VehicleRecommendation =>
+          Boolean(vehicle)
+          && Number.isFinite(Number(vehicle.capacidad))
+          && Number(vehicle.capacidad) >= pasajerosAsistente
+        );
+      setRecommendation(options[0] || null);
+      setAlternatives(options.slice(1));
+      if (data.recommendation && options.length === 0) {
+        setAssistantMsg(`No pude validar una categoría con capacidad para ${pasajerosAsistente} pasajeros. Revisa el número de pasajeros y vuelve a intentar.`);
+        setRecommendationCriteria(criteriosConsultados);
+        return;
+      }
       setAssistantMsg(data.message || "Revisa estas opciones para tu viaje.");
-      if (data.recommendation) setForm(p => ({ ...p, tipo_vehiculo: String(data.recommendation.tipo || "van").trim().toLowerCase() }));
+      setRecommendationCriteria(criteriosConsultados);
     } catch (e) {
       setAssistantErr(e instanceof Error ? e.message : "No se pudo consultar al asistente");
     } finally { setAssistantLoading(false); }
@@ -297,6 +335,12 @@ export default function ClienteCotizarPage() {
       }
       setFormMsg("Solicitud de cotización enviada. Administración revisará tu destino y datos, definirá el precio y te avisará cuando puedas aceptarlo y pagar el anticipo desde Historial.");
       setForm({ fecha_servicio: "", fecha_fin: "", fecha_regreso: "", hora_regreso: "", num_personas: "1", num_viajes: "1", tipo_vehiculo: categorias[0]?.tipo || "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
+      setAssistantPrompt("");
+      setAssistantMsg("");
+      setAssistantErr("");
+      setRecommendation(null);
+      setAlternatives([]);
+      setRecommendationCriteria(null);
       setWizardStep(1);
       setVariosDias(false);
       setRegresoOtraFecha(false);
@@ -308,6 +352,8 @@ export default function ClienteCotizarPage() {
   };
 
   const tipoSeleccionado = form.tipo_vehiculo.toString().trim().toLowerCase();
+  const mostrarRecomendacion = recommendationCriteria === criteriosAsistente;
+  const recomendacionDesactualizada = recommendationCriteria !== null && !mostrarRecomendacion;
   const selectedDays = form.fecha_servicio && variosDias && form.fecha_fin ? diasEntre(form.fecha_servicio, form.fecha_fin) : 1;
   const selectedTrips = Math.max(1, Number(form.num_viajes) || 1);
   if (checkingSession) return (
@@ -349,23 +395,33 @@ export default function ClienteCotizarPage() {
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Asistente inteligente</p>
                   <h2 className="text-base font-black text-slate-900">Cuéntame qué necesitas y te sugiero el vehículo ideal</h2>
-                  <p className="mt-1 text-xs text-slate-500">Usaré pasajeros, fechas y tus preferencias para sugerirte una categoría. La unidad final se asigna después de confirmar la reserva.</p>
+                  <p className="mt-1 text-xs text-slate-500">Usaré pasajeros, fechas y tus preferencias para sugerirte una categoría con capacidad suficiente. Despacho asignará la unidad específica después de confirmar el pago.</p>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input value={assistantPrompt} onChange={e => setAssistantPrompt(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); askVehicleAssistant(); } }}
                   className="flex-1 rounded-2xl border-2 border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-500"
-                  placeholder="Ej: viajamos con maletas y queremos comodidad" />
+                  placeholder="Ej: Somos 5 personas, viajamos con maletas y queremos comodidad" />
                 <button type="button" onClick={askVehicleAssistant} disabled={assistantLoading}
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-blue-700 disabled:opacity-60">
                   {assistantLoading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
                   {assistantLoading ? "Analizando" : "Recomendar"}
                 </button>
               </div>
-              {assistantMsg && <p className="rounded-2xl bg-white/80 p-3 text-sm font-bold text-blue-800">{assistantMsg}</p>}
+              <p className="text-[11px] font-medium text-slate-500">
+                {pasajerosDetectados
+                  ? `Detecté ${pasajerosDetectados} pasajero${pasajerosDetectados === 1 ? "" : "s"} en tu descripción; usaré ese número para filtrar vehículos.`
+                  : `La búsqueda usará ${pasajerosAsistente} pasajero${pasajerosAsistente === 1 ? "" : "s"}, según el número seleccionado en el paso anterior.`}
+              </p>
+              {assistantMsg && mostrarRecomendacion && <p className="rounded-2xl bg-white/80 p-3 text-sm font-bold text-blue-800">{assistantMsg}</p>}
               {assistantErr && <p className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-600">{assistantErr}</p>}
-              {(recommendation || alternatives.length > 0) && (
+              {recomendacionDesactualizada && (
+                <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+                  Cambiaron los pasajeros, las fechas o las preferencias. Pulsa Recomendar para actualizar las opciones.
+                </p>
+              )}
+              {mostrarRecomendacion && (recommendation || alternatives.length > 0) && (
                 <div className="grid gap-2 sm:grid-cols-3">
                   {[recommendation, ...alternatives].filter(Boolean).map((vehicle, index) => {
                     const item = vehicle as VehicleRecommendation;
@@ -384,22 +440,44 @@ export default function ClienteCotizarPage() {
             {/* PASO 1: PREFERENCIA DE CATEGORÍA */}
             <div className="space-y-2">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1"><Car size={12} /> 3. Elige una categoría de vehículo</p>
-              <p className="text-xs text-slate-500">Es una preferencia, no una reserva de una unidad o placa específica. Administración confirmará el vehículo asignado después de verificar el pago.</p>
+              <p className="text-xs text-slate-500">Las fotos son referenciales y muestran vehículos de la flota por categoría. Esta selección es una preferencia, no reserva una unidad ni una placa específica; Despacho asignará el vehículo después de confirmar el pago.</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {categorias.map(({ tipo, capacidad }) => {
+                {categorias.map(({ tipo, capacidad, imagen_url }) => {
                   const selected = tipoSeleccionado === tipo;
                   const exceedsCapacity = Number(form.num_personas) > capacidad;
                   return (
                     <button key={tipo} type="button" disabled={exceedsCapacity}
                       onClick={() => setForm(p => ({ ...p, tipo_vehiculo: tipo }))}
                       aria-pressed={selected}
-                      className={`rounded-2xl border-2 p-4 text-left transition ${selected ? "border-[#E31E24] bg-red-50 ring-2 ring-red-100" : "border-slate-200 bg-white hover:border-slate-300"} ${exceedsCapacity ? "cursor-not-allowed opacity-45" : ""}`}>
+                      className={`overflow-hidden rounded-2xl border-2 text-left transition ${selected ? "border-[#E31E24] bg-red-50 ring-2 ring-red-100" : "border-slate-200 bg-white hover:border-slate-300"} ${exceedsCapacity ? "cursor-not-allowed opacity-45" : ""}`}>
+                      <span className="relative block h-36 w-full overflow-hidden bg-slate-100">
+                        {imagen_url ? (
+                          <Image
+                            src={imagen_url}
+                            alt={`Foto referencial de la flota: categoría ${tipo}`}
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+                            <Bus size={30} />
+                            <span className="text-[10px] font-bold">Foto de esta categoría no disponible</span>
+                          </span>
+                        )}
+                        <span className="absolute bottom-2 left-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-white">
+                          Foto referencial
+                        </span>
+                      </span>
+                      <span className="block p-4">
                       <span className="flex items-center justify-between">
                         <span className="flex items-center gap-2 font-black capitalize text-slate-800"><Bus size={18} className="text-[#E31E24]" />{tipo}</span>
                         {selected && <CheckCircle2 size={17} className="text-[#E31E24]" />}
                       </span>
                       <span className="mt-2 block text-xs font-semibold text-slate-500">Hasta {capacidad} pasajeros</span>
                       <span className="mt-1 block text-xs font-bold text-slate-700">Precio según cotización del administrador</span>
+                      </span>
                     </button>
                   );
                 })}
@@ -683,7 +761,7 @@ export default function ClienteCotizarPage() {
                       {cot.respuesta_admin && <div className={`rounded-xl p-4 border ${info.bg}`}><p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${info.color}`}>Respuesta de Turesma</p><p data-no-translate className="text-sm text-slate-700">{cot.respuesta_admin}</p></div>}
                       {cot.reserva_id && (
                         <div className="bg-orange-50 border border-orange-300 rounded-xl p-4 flex items-center gap-3"><Zap size={18} className="text-orange-600" />
-                          <div><p className="text-xs font-black text-orange-700">Reserva #{cot.reserva_id} creada — pendiente de pago</p><p className="text-[10px] text-orange-600">Paga el total en tu Historial para confirmarla.</p></div></div>
+                          <div><p className="text-xs font-black text-orange-700">Reserva #{cot.reserva_id} creada — pendiente de pago</p><p className="text-[10px] text-orange-600">Paga el total en tu Historial. Tras confirmar el pago, asignaremos el vehículo desde Despacho.</p></div></div>
                       )}
                     </div>
                   )}

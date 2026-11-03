@@ -13,6 +13,7 @@ const state = {
       fecha_servicio: "2026-10-21T09:00:00.000Z",
       fecha_salida: "2026-10-21T09:00:00.000Z",
       fecha_llegada: "2026-10-21T11:00:00.000Z",
+      fecha_regreso: "2026-10-23",
       origen: "Quito",
       destino: "Otavalo",
       num_personas: 8,
@@ -261,6 +262,10 @@ const pool = {
           const driver = driverForUser(params[0]);
           return result(driver ? [{ ...driver }] : []);
         }
+        if (query.startsWith("select fecha_regreso::text as fecha_regreso from reservas")) {
+          const reservation = reservationFor(params[0]);
+          return result(reservation ? [{ fecha_regreso: reservation.fecha_regreso || null }] : []);
+        }
         if (query.startsWith("select o.id, o.vehiculo_id, o.conductor_id")) {
           const [operationId, date, startValue, endValue, activeStates, vehicleId, driverId] = params;
           const start = startValue ? asTime(startValue) : null;
@@ -287,7 +292,7 @@ const pool = {
           const conflict = state.reservations.find((reservation) => {
             const reservationDate = asDate(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva);
             if (reservation.id === operation?.reserva_id
-              || reservationDate !== date
+              || (reservationDate !== date && asDate(reservation.fecha_regreso || "") !== date)
               || ["cancelada", "finalizada"].includes(reservation.estado)) return false;
             const conductorOcupado = reservation.conductor_id === Number(driverUserId)
               || reservation.conductor_id === Number(driverId);

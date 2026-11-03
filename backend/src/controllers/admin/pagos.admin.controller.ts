@@ -7,8 +7,8 @@ const { emitirFacturaPorReserva, obtenerFactura, reenviarFacturaPorReserva } = r
 
 // Recalcula monto_pagado y estado_pago de una reserva a partir de sus pagos
 // APROBADOS. La reserva solo se confirma cuando el total está pagado. Cuando
-// eso ocurre y la reserva todavía está 'pendiente_pago', se vuelve visible
-// para el conductor y se le notifica.
+// eso ocurre y la reserva todavía está 'pendiente_pago', queda confirmada y
+// disponible para que Despacho la prepare. Si ya tiene conductor, se le notifica.
 const recalcularEstadoPago = async (reservaId: number, adminId: number | null | undefined) => {
   const reservaRes = await pool.query("SELECT total, estado, conductor_id, origen, destino FROM reservas WHERE id = $1", [reservaId]);
   const reserva = reservaRes.rows[0];

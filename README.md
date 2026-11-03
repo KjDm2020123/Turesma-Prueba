@@ -55,6 +55,10 @@ La detección de anomalías analiza cancelaciones, pagos antiguos, utilización 
 vehículos y rutas con baja demanda.
 
 El despacho muestra reservas confirmadas que aún necesitan vehículo o conductor.
+En las reservas originadas por una cotización, Administración aprueba el precio
+sin asignar unidades. La categoría solicitada se conserva como preferencia; una
+vez confirmado el pago total, la reserva aparece en la cola de Despacho para que
+el equipo asigne el vehículo y el conductor.
 Al preparar una reserva se crea una operación vinculada, evitando registrar el
 mismo servicio dos veces. En la asignación, el administrador puede pedir una
 recomendación calculada para la fecha, horario y número de pasajeros. La
