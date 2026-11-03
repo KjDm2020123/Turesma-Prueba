@@ -33,6 +33,7 @@ const CUENTA_EMPRESA = {
 
 type Reserva = {
   id: number; estado: string; fecha_reserva: string; fecha_fin?: string | null;
+  fecha_regreso?: string | null; hora_regreso?: string | null;
   origen?: string | null; destino?: string | null; num_personas: number; total: number;
   vehiculo_placa?: string | null; vehiculo_modelo?: string | null;
   conductor_nombre?: string | null; conductor_telefono?: string | null;
@@ -489,7 +490,7 @@ export default function ClienteHistorialPage() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Fecha</p><p className="font-bold text-slate-700">{formatLocalizedDate(r.fecha_reserva, language)}{r.fecha_fin && r.fecha_fin !== r.fecha_reserva ? ` → ${formatLocalizedDate(r.fecha_fin, language)}` : ""}</p></div>
+                  <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Fecha</p><p className="font-bold text-slate-700">{formatLocalizedDate(r.fecha_reserva, language)}{r.fecha_fin && r.fecha_fin !== r.fecha_reserva ? ` → ${formatLocalizedDate(r.fecha_fin, language)}` : ""}{r.fecha_regreso ? ` · Regreso: ${formatLocalizedDate(r.fecha_regreso, language)}${r.hora_regreso ? ` ${r.hora_regreso}` : ""}` : ""}</p></div>
                   <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Personas</p><p className="font-bold text-slate-700">{r.num_personas}</p></div>
                   <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Vehículo</p><p className="font-bold text-slate-700 truncate">{r.vehiculo_placa ? <span data-no-translate>{r.vehiculo_placa}</span> : "Por asignar"}</p></div>
                   <div className="bg-slate-50 rounded-xl p-2.5"><p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Conductor</p><p className="font-bold text-slate-700 truncate">{r.conductor_nombre ? <span data-no-translate>{r.conductor_nombre}</span> : "Por asignar"}</p></div>

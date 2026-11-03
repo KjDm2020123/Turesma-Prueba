@@ -24,7 +24,7 @@ type FleetVehicle = {
 };
 
 type FleetEvent = {
-  id: number;
+  id: number | string;
   vehiculo_id: number;
   fecha_inicio: string;
   fecha_fin: string;
@@ -45,6 +45,8 @@ type UnassignedReservation = {
   fecha_reserva: string;
   fecha_llegada: string | null;
   fecha_fin: string | null;
+  fecha_regreso: string | null;
+  hora_regreso: string | null;
   origen: string | null;
   destino: string | null;
   tipo_vehiculo: string | null;
@@ -87,6 +89,7 @@ const formatDate = (value: string) => fromIsoDate(value).toLocaleDateString("es-
 
 const eventName = (event: FleetEvent) => {
   if (event.tipo === "mantenimiento") return "Mantenimiento";
+  if (event.tipo_servicio === "Regreso de reserva") return "Regreso";
   if (event.tipo === "reserva") return "Reserva";
   return event.tipo_servicio || "Viaje";
 };
@@ -212,7 +215,7 @@ export default function CalendarioFlotaPage() {
   const selectedReservations = unassigned.filter((reservation) => {
     const start = (reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva).slice(0, 10);
     const end = (reservation.fecha_llegada || reservation.fecha_fin || reservation.fecha_reserva).slice(0, 10);
-    return start <= selectedDate && end >= selectedDate;
+    return (start <= selectedDate && end >= selectedDate) || reservation.fecha_regreso === selectedDate;
   });
   const selectedEvent = selectedItemKey?.startsWith("event:")
     ? events.find((event) => `event:${event.tipo}:${event.id}` === selectedItemKey) || null
@@ -250,7 +253,7 @@ export default function CalendarioFlotaPage() {
       reservations: unassigned.filter((reservation) => {
         const start = (reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva).slice(0, 10);
         const end = (reservation.fecha_llegada || reservation.fecha_fin || reservation.fecha_reserva).slice(0, 10);
-        return start <= day && end >= day;
+        return (start <= day && end >= day) || reservation.fecha_regreso === day;
       }),
     })).filter((group) => group.events.length > 0 || group.reservations.length > 0),
     [calendarDays, events, unassigned]
@@ -490,6 +493,7 @@ export default function CalendarioFlotaPage() {
                           <span className="text-[9px] font-black uppercase">Requiere vehículo</span>
                         </span>
                         <span className="mt-1 block text-[11px] font-semibold">{[reservation.origen, reservation.destino].filter(Boolean).join(" → ") || "Ruta pendiente"}</span>
+                        {reservation.fecha_regreso && <span className="mt-1 block text-[10px] font-bold">Regreso: {formatDate(reservation.fecha_regreso)}{reservation.hora_regreso ? ` · ${reservation.hora_regreso}` : ""}</span>}
                       </button>
                     </li>
                   );
@@ -603,6 +607,7 @@ export default function CalendarioFlotaPage() {
             </div>
             <p className="mt-3 text-xs font-semibold">{[selectedUnassignedReservation.origen, selectedUnassignedReservation.destino].filter(Boolean).join(" → ") || "Ruta pendiente"}</p>
             <p className="mt-1 text-xs">{selectedUnassignedReservation.tipo_vehiculo || "Tipo de vehículo por definir"} · {formatDate((selectedUnassignedReservation.fecha_salida || selectedUnassignedReservation.fecha_servicio || selectedUnassignedReservation.fecha_reserva).slice(0, 10))}</p>
+            {selectedUnassignedReservation.fecha_regreso && <p className="mt-1 text-xs font-bold">Regreso: {formatDate(selectedUnassignedReservation.fecha_regreso)}{selectedUnassignedReservation.hora_regreso ? ` · ${selectedUnassignedReservation.hora_regreso}` : ""} · {selectedUnassignedReservation.destino} → {selectedUnassignedReservation.origen}</p>}
             <Link href="/admin/operaciones" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#E31E24] px-3 py-2 text-xs font-black text-white hover:bg-red-700">
               Revisar en despacho <ArrowRight size={14} />
             </Link>

@@ -864,6 +864,12 @@ const initDatabase = async () => {
   `);
 
   await pool.query(`
+    ALTER TABLE cotizaciones
+    ADD COLUMN IF NOT EXISTS fecha_regreso DATE,
+    ADD COLUMN IF NOT EXISTS hora_regreso VARCHAR(10);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS configuracion_tarifas (
       id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       tarifa_diaria DECIMAL(10,2) NOT NULL DEFAULT 80,
@@ -1000,6 +1006,17 @@ const initDatabase = async () => {
     ALTER TABLE reservas
     ADD COLUMN IF NOT EXISTS recogido BOOLEAN DEFAULT false,
     ADD COLUMN IF NOT EXISTS recogido_en TIMESTAMP;
+  `);
+
+  await pool.query(`
+    ALTER TABLE reservas
+    ADD COLUMN IF NOT EXISTS fecha_regreso DATE,
+    ADD COLUMN IF NOT EXISTS hora_regreso VARCHAR(10);
+  `);
+
+  await pool.query(`
+    ALTER TABLE reservas
+    ADD COLUMN IF NOT EXISTS ida_finalizada BOOLEAN NOT NULL DEFAULT false;
   `);
 
   // Número de proforma: se asigna la primera vez que el admin genera la

@@ -54,7 +54,8 @@ const getCotizacionIdDeReserva = async (reservaId: number): Promise<number | nul
 // (continúa la numeración física: 22604 → 22605…).
 const buildProformaData = async (cotizacionId: number) => {
   const r = await pool.query(
-    `SELECT c.id, c.origen, c.destino, c.fecha_servicio, c.hora_salida, c.num_personas,
+    `SELECT c.id, c.origen, c.destino, c.fecha_servicio, c.hora_salida,
+            c.fecha_regreso, c.hora_regreso, c.num_personas,
             c.notas, c.proforma_numero,
             COALESCE(c.precio_final, c.precio_estimado, 0)::numeric AS precio,
             u.nombre AS cliente_nombre, u.email AS cliente_email,
@@ -79,7 +80,11 @@ const buildProformaData = async (cotizacionId: number) => {
     fecha: new Date().toISOString().slice(0, 10),
     empresa: EMPRESA,
     cliente: { nombre: c.cliente_nombre, email: c.cliente_email, telefono: c.cliente_telefono, cedula: c.cliente_cedula },
-    servicio: { origen: c.origen, destino: c.destino, fecha_servicio: c.fecha_servicio, hora_salida: c.hora_salida, num_personas: c.num_personas, notas: c.notas },
+    servicio: {
+      origen: c.origen, destino: c.destino, fecha_servicio: c.fecha_servicio, hora_salida: c.hora_salida,
+      fecha_regreso: c.fecha_regreso, hora_regreso: c.hora_regreso,
+      num_personas: c.num_personas, notas: c.notas,
+    },
     precio: Number(c.precio) || 0,
   };
 };
@@ -165,6 +170,11 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
     dy = doc.y + 2;
     doc.font("Helvetica-Bold").text("Salida: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
     doc.font("Helvetica").text(`${fmtFecha(d.servicio.fecha_servicio)}${d.servicio.hora_salida ? " · " + d.servicio.hora_salida : ""} · ${d.servicio.num_personas} pasajero(s)`);
+    if (d.servicio.fecha_regreso) {
+      dy = doc.y + 2;
+      doc.font("Helvetica-Bold").text("Regreso: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
+      doc.font("Helvetica").text(`${fmtFecha(d.servicio.fecha_regreso)}${d.servicio.hora_regreso ? " · recogida " + d.servicio.hora_regreso : ""} · ${d.servicio.destino} → ${d.servicio.origen}`);
+    }
     dy = doc.y + 10;
     doc.font("Helvetica").text(d.servicio.notas || "Servicio de transporte para traslado de personal.", cols.desc + 6, dy, { width: colW.desc - 12 });
     // Precios

@@ -513,6 +513,9 @@ const listarReservasConductor = async (req, res) => {
            r.id,
            r.fecha_reserva,
            r.fecha_fin,
+           r.fecha_regreso,
+           r.hora_regreso,
+           r.ida_finalizada,
            ${extraSelects.fechaSalida},
            ${extraSelects.fechaLlegada},
            ${extraSelects.origen},
@@ -545,6 +548,9 @@ const listarReservasConductor = async (req, res) => {
            r.id,
            r.fecha_reserva,
            r.fecha_fin,
+           r.fecha_regreso,
+           r.hora_regreso,
+           r.ida_finalizada,
             ${extraSelects.fechaSalida},
             ${extraSelects.fechaLlegada},
             ${extraSelects.origen},
@@ -826,7 +832,8 @@ const actualizarEstadoReservaConductor = async (req, res) => {
     }
 
     const reservaResult = await pool.query(
-      `SELECT id, conductor_id, estado, estado_pago, total
+      `SELECT id, conductor_id, estado, estado_pago, total, fecha_regreso, hora_regreso, ida_finalizada,
+              (fecha_regreso IS NOT NULL AND NOW() < fecha_regreso::timestamp + COALESCE(NULLIF(hora_regreso, '')::time, time '00:00')) AS regreso_pendiente
        FROM reservas
        WHERE id = $1
        LIMIT 1`,
@@ -851,6 +858,10 @@ const actualizarEstadoReservaConductor = async (req, res) => {
       return res.status(400).json({ error: "Para iniciar el viaje, la reserva debe estar confirmada" });
     }
 
+    if (estado === "en_curso" && reserva.ida_finalizada && reserva.regreso_pendiente) {
+      return res.status(400).json({ error: "El regreso aún no está habilitado. Inicia el viaje en la fecha y hora acordadas." });
+    }
+
     // El cliente debe tener aprobado el total antes de iniciar el viaje.
     if (estado === "en_curso" && Number(reserva.total) > 0 && reserva.estado_pago !== "pagado") {
       return res.status(400).json({ error: "El cliente aún no ha completado el pago total para iniciar el viaje" });
@@ -860,22 +871,27 @@ const actualizarEstadoReservaConductor = async (req, res) => {
       return res.status(400).json({ error: "Para finalizar, la reserva debe estar confirmada o en curso" });
     }
 
+    const finalizaIda = estado === "finalizada" && Boolean(reserva.fecha_regreso) && !reserva.ida_finalizada;
+    const estadoReserva = finalizaIda ? "confirmada" : estado;
     const updateResult = await pool.query(
       `UPDATE reservas
        SET estado = $1,
-           recogido = CASE WHEN $1 = 'en_curso' THEN false ELSE recogido END
-       WHERE id = $2
+           ida_finalizada = CASE WHEN $2 THEN true ELSE ida_finalizada END,
+           recogido = CASE WHEN $1 = 'en_curso' OR $2 THEN false ELSE recogido END
+       WHERE id = $3
        RETURNING *`,
-      [estado, reservaId]
+      [estadoReserva, finalizaIda, reservaId]
     );
 
     // Avisar al cliente (campanita + correo) según el nuevo estado del viaje.
-    if (estado === "en_curso" || estado === "finalizada" || estado === "cancelada") {
+    if (estado === "en_curso" || (estado === "finalizada" && !finalizaIda) || estado === "cancelada") {
       await notificarClienteReserva(reservaId, estado, conductorId);
     }
 
     return res.status(200).json({
-      message: "Estado actualizado correctamente",
+      message: finalizaIda
+        ? `Ida finalizada. El regreso queda programado para ${reserva.fecha_regreso}${reserva.hora_regreso ? ` a las ${reserva.hora_regreso}` : ""}.`
+        : "Estado actualizado correctamente",
       reserva: updateResult.rows[0],
     });
   } catch (error) {

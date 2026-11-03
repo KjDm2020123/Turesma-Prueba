@@ -24,6 +24,9 @@ export type ReservaConductor = {
   id: number;
   fecha_reserva: string;
   fecha_fin?: string | null;
+  fecha_regreso?: string | null;
+  hora_regreso?: string | null;
+  ida_finalizada?: boolean;
   fecha_salida?: string | null;
   fecha_llegada?: string | null;
   origen?: string | null;

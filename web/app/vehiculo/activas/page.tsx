@@ -1,6 +1,6 @@
 "use client";
 
-import { useConductorPanel } from "../_components/use-conductor-panel";
+import { useConductorPanel, type ReservaConductor } from "../_components/use-conductor-panel";
 import { LocationSharing } from "../_components/location-sharing";
 import { WhatsAppButton } from "../../../components/whatsapp-button";
 import {
@@ -11,19 +11,33 @@ import {
 // Fecha larga en español (ej. "lunes, 21 de julio de 2026").
 const fmtFechaLarga = (f?: string | null) => {
   if (!f) return "—";
-  const d = new Date(f);
+  const dateOnly = String(f).slice(0, 10);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(dateOnly)
+    ? new Date(`${dateOnly}T12:00:00`)
+    : new Date(f);
   if (Number.isNaN(d.getTime())) return String(f);
   return d.toLocaleDateString("es-EC", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 };
 
 type NavPunto = { lat?: number | null; lng?: number | null; texto?: string | null };
 
-// A dónde debe ir el conductor ahora: si aún no recoge → al origen; si ya → al destino.
-const navTarget = (r: any): NavPunto => (
-  !r.recogido
+const navTarget = (r: ReservaConductor): NavPunto => {
+  const regresando = Boolean(r.ida_finalizada && r.fecha_regreso);
+  if (regresando) {
+    return !r.recogido
+      ? { lat: r.destino_lat, lng: r.destino_lng, texto: r.destino || r.tour_ubicacion }
+      : { lat: r.origen_lat, lng: r.origen_lng, texto: r.origen };
+  }
+  return !r.recogido
     ? { lat: r.origen_lat, lng: r.origen_lng, texto: r.origen }
-    : { lat: r.destino_lat, lng: r.destino_lng, texto: r.destino || r.tour_ubicacion }
-);
+    : { lat: r.destino_lat, lng: r.destino_lng, texto: r.destino || r.tour_ubicacion };
+};
+
+const regresoDisponible = (r: ReservaConductor) => {
+  if (!r.fecha_regreso) return true;
+  const inicio = new Date(`${String(r.fecha_regreso).slice(0, 10)}T${r.hora_regreso || "00:00"}`);
+  return Number.isFinite(inicio.getTime()) && Date.now() >= inicio.getTime();
+};
 
 // ¿Hay algo a lo que navegar? (coordenadas o al menos una dirección de texto)
 const tieneDestino = (t: NavPunto) => (t.lat != null && t.lng != null) || !!(t.texto && String(t.texto).trim());
@@ -119,6 +133,9 @@ export default function ConductorActivasPage() {
           {panel.activas.map((r) => {
             const badgeCls = ESTADO_BADGE[r.estado] || ESTADO_BADGE.pendiente;
             const badgeIcon = ESTADO_ICON[r.estado] || null;
+            const regresoEnCurso = Boolean(r.ida_finalizada && r.fecha_regreso);
+            const regresoHabilitado = regresoDisponible(r);
+            const destinoFinal = regresoEnCurso ? r.origen : (r.destino || r.tour_ubicacion);
 
             return (
               <article
@@ -158,6 +175,16 @@ export default function ConductorActivasPage() {
                       {r.fecha_fin && r.fecha_fin !== r.fecha_reserva && (
                         <p className="text-[11px] font-bold text-blue-600 capitalize mt-0.5">Hasta el {fmtFechaLarga(r.fecha_fin)} (varios días)</p>
                       )}
+                      {r.fecha_regreso && (
+                        <p className="mt-1 text-[11px] font-bold capitalize text-emerald-700">
+                          Regresar a recoger: {fmtFechaLarga(r.fecha_regreso)}{r.hora_regreso ? ` · ${r.hora_regreso}` : ""}
+                        </p>
+                      )}
+                      {regresoEnCurso && r.estado === "confirmada" && (
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                          Ida completada · regreso {regresoHabilitado ? "listo para iniciar" : "programado"}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -191,12 +218,12 @@ export default function ConductorActivasPage() {
                   </div>
 
                   {/* Destino */}
-                  {r.tour_ubicacion && (
+                  {destinoFinal && (
                     <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
                       <p className="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
-                        <MapPin size={12} /> Destino
+                        <MapPin size={12} /> {regresoEnCurso ? "Punto de llegada" : "Destino"}
                       </p>
-                      <p className="text-sm font-bold text-red-900 mt-2">{r.tour_ubicacion}</p>
+                      <p className="text-sm font-bold text-red-900 mt-2">{destinoFinal}</p>
                     </div>
                   )}
 
@@ -206,22 +233,28 @@ export default function ConductorActivasPage() {
                       <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
                         <Flag size={18} className="text-emerald-600 mt-0.5 shrink-0" />
                         <div>
-                          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Ahora lleva al cliente a</p>
-                          <p className="text-sm font-black text-slate-900">{r.destino || r.tour_ubicacion || "Destino"}</p>
+                          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
+                            Ahora lleva al cliente {regresoEnCurso ? "de regreso a" : "a"}
+                          </p>
+                          <p className="text-sm font-black text-slate-900">{destinoFinal || "Destino"}</p>
                         </div>
                       </div>
                     ) : (
                       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3">
                         <Navigation size={18} className="text-blue-600 mt-0.5 shrink-0" />
                         <div>
-                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Primero ve a recoger al cliente en</p>
-                          <p className="text-sm font-black text-slate-900">{r.origen || "Punto de recogida"}</p>
-                          {r.referencia_recogida && (
+                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                            Primero ve a recoger al cliente {regresoEnCurso ? "en el destino" : "en"}
+                          </p>
+                          <p className="text-sm font-black text-slate-900">
+                            {regresoEnCurso ? (r.destino || r.tour_ubicacion || "Destino") : (r.origen || "Punto de recogida")}
+                          </p>
+                          {!regresoEnCurso && r.referencia_recogida && (
                             <p className="mt-2 text-xs font-semibold text-blue-800">
                               Referencia: {r.referencia_recogida}
                             </p>
                           )}
-                          {r.recogida_lat != null && r.recogida_lng != null && (
+                          {!regresoEnCurso && r.recogida_lat != null && r.recogida_lng != null && (
                             <a
                               href={`https://www.google.com/maps/dir/?api=1&destination=${r.recogida_lat},${r.recogida_lng}`}
                               target="_blank"
@@ -238,14 +271,18 @@ export default function ConductorActivasPage() {
                   )}
 
                   {/* CÓMO LLEGAR EN GOOGLE MAPS (según la fase: recoger o destino) */}
-                  {(r.estado === "confirmada" || r.estado === "en_curso") && tieneDestino(navTarget(r)) && (
+                  {(r.estado === "confirmada" || r.estado === "en_curso")
+                    && (!regresoEnCurso || regresoHabilitado)
+                    && tieneDestino(navTarget(r)) && (
                     <a
                       href={gmapsDir(navTarget(r))}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-[11px] uppercase tracking-widest transition-all"
                     >
-                      <Navigation size={14} /> Cómo llegar {r.recogido ? "al destino" : "al cliente"} (Google Maps)
+                      <Navigation size={14} /> Cómo llegar {r.recogido
+                        ? (regresoEnCurso ? "al origen" : "al destino")
+                        : (regresoEnCurso ? "al cliente en el destino" : "al cliente")} (Google Maps)
                     </a>
                   )}
 
@@ -254,10 +291,11 @@ export default function ConductorActivasPage() {
                     {r.estado === "confirmada" && (
                       <button
                         onClick={() => callAction(r.id, "estado", { estado: "en_curso" })}
-                        disabled={actionLoadingId === r.id}
-                        className="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                        disabled={actionLoadingId === r.id || (regresoEnCurso && !regresoHabilitado)}
+                        className="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {actionLoadingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />} Iniciar viaje
+                        {actionLoadingId === r.id ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                        {regresoEnCurso && !regresoHabilitado ? "Regreso programado" : regresoEnCurso ? "Iniciar regreso" : "Iniciar viaje"}
                       </button>
                     )}
                     {r.estado === "en_curso" && !r.recogido && (
@@ -282,7 +320,9 @@ export default function ConductorActivasPage() {
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 flex items-center gap-2">
                     <CheckCircle size={14} className="text-[#E31E24] flex-shrink-0" />
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      Al finalizar, el cliente podrá calificar su viaje
+                      {r.fecha_regreso && !regresoEnCurso
+                        ? "Al finalizar la ida, el regreso seguirá programado en esta reserva."
+                        : "Al finalizar, el cliente podrá calificar su viaje"}
                     </p>
                   </div>
                 </div>

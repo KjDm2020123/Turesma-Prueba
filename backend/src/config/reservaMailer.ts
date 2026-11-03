@@ -142,7 +142,7 @@ const notificarClienteReserva = async (reservaId: number, tipo: TipoEvento, send
 const notificarReprogramacion = async (reservaId: number, senderId: number | null | undefined) => {
   try {
     const r = await pool.query(
-      `SELECT r.id, r.origen, r.destino, r.fecha_reserva, r.usuario_id, r.conductor_id,
+      `SELECT r.id, r.origen, r.destino, r.fecha_reserva, r.fecha_regreso, r.hora_regreso, r.usuario_id, r.conductor_id,
               u.nombre AS cliente_nombre, u.email AS cliente_email,
               co.hora_salida
        FROM reservas r
@@ -153,7 +153,7 @@ const notificarReprogramacion = async (reservaId: number, senderId: number | nul
     );
     if (r.rowCount === 0) return;
     const d = r.rows[0];
-    const cuando = `${fmtFecha(d.fecha_reserva)}${d.hora_salida ? " · " + d.hora_salida : ""}`;
+    const cuando = `${fmtFecha(d.fecha_reserva)}${d.hora_salida ? " · " + d.hora_salida : ""}${d.fecha_regreso ? ` · Regreso: ${fmtFecha(d.fecha_regreso)}${d.hora_regreso ? " · " + d.hora_regreso : ""}` : ""}`;
 
     // 1) Correo al cliente (confirmando su cambio)
     if (d.cliente_email) {

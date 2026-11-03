@@ -65,11 +65,30 @@ export const searchLocations = async (query: string): Promise<GeocodingResult[]>
   }
 
   const data: Array<{ lat: string; lon: string; display_name: string }> = await response.json();
-  return data.map((item) => ({
-    lat: Number(item.lat),
-    lng: Number(item.lon),
-    label: item.display_name,
-  })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng) && item.label);
+  const seenLabels = new Set<string>();
+  return data.reduce<GeocodingResult[]>((results, item) => {
+    const label = item.display_name?.trim().replace(/\s+/g, " ");
+    const normalizedLabel = label
+      ?.normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("es");
+    const lat = Number(item.lat);
+    const lng = Number(item.lon);
+
+    if (
+      !label
+      || !normalizedLabel
+      || seenLabels.has(normalizedLabel)
+      || !Number.isFinite(lat)
+      || !Number.isFinite(lng)
+    ) {
+      return results;
+    }
+
+    seenLabels.add(normalizedLabel);
+    results.push({ lat, lng, label });
+    return results;
+  }, []);
 };
 
 // Calcula la ruta real por carretera entre dos puntos usando OSRM (servicio

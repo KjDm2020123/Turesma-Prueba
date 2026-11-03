@@ -21,6 +21,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 type Vehiculo = { id: number; placa: string; tipo: string; modelo?: string | null; capacidad?: number; imagen_url?: string | null };
 type Cotizacion = {
   id: number; origen: string; destino: string; fecha_servicio: string; fecha_fin?: string | null;
+  fecha_regreso?: string | null; hora_regreso?: string | null;
   num_personas: number; tipo_vehiculo?: string | null; notas?: string | null;
   estado: string; precio_final?: number | null; valor_ofrecido?: number | null;
   turno?: string | null;
@@ -50,6 +51,12 @@ const diasEntre = (a: string, b: string) => {
   if (!a || !b) return 1;
   const d1 = new Date(a + "T00:00"), d2 = new Date(b + "T00:00");
   return Math.max(1, Math.round((d2.getTime() - d1.getTime()) / 86400000) + 1);
+};
+
+const siguienteFecha = (fecha: string) => {
+  const date = new Date(`${fecha}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 };
 
 export default function ClienteCotizarPage() {
@@ -86,12 +93,13 @@ export default function ClienteCotizarPage() {
   );
 
   const [form, setForm] = useState({
-    fecha_servicio: "", fecha_fin: "", num_personas: "1",
+    fecha_servicio: "", fecha_fin: "", fecha_regreso: "", hora_regreso: "", num_personas: "1",
     num_viajes: "1", tipo_vehiculo: "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2",
   });
   const [wizardStep, setWizardStep] = useState(1);
   // false = servicio de un solo día · true = reserva de varios días (rango)
   const [variosDias, setVariosDias] = useState(false);
+  const [regresoOtraFecha, setRegresoOtraFecha] = useState(false);
   const [origin, setOrigin] = useState<Punto | null>(null);
   const [destination, setDestination] = useState<Punto | null>(null);
   const [locatingOrigin, setLocatingOrigin] = useState(false);
@@ -167,6 +175,7 @@ export default function ClienteCotizarPage() {
           tipo_vehiculo: form.tipo_vehiculo,
           fecha_servicio: form.fecha_servicio || null,
           fecha_fin: variosDias ? form.fecha_fin || form.fecha_servicio || null : form.fecha_servicio || null,
+          fecha_regreso: regresoOtraFecha ? form.fecha_regreso : null,
           notas: `${assistantPrompt} ${form.notas}`.trim(),
         }),
       });
@@ -211,6 +220,14 @@ export default function ClienteCotizarPage() {
       if (!form.fecha_servicio) { setFormErr("Selecciona la fecha de inicio del servicio."); return; }
       if (variosDias && !form.fecha_fin) { setFormErr("Toca también el último día del viaje en el calendario."); return; }
       if (!form.hora_salida) { setFormErr("Indica la hora de salida que prefieres."); return; }
+      if (regresoOtraFecha && (!form.fecha_regreso || !form.hora_regreso)) {
+        setFormErr("Indica la fecha y hora para recoger al regreso.");
+        return;
+      }
+      if (regresoOtraFecha && form.fecha_regreso <= form.fecha_servicio) {
+        setFormErr("La fecha de regreso debe ser posterior a la fecha de salida.");
+        return;
+      }
       if (variosDias && form.fecha_fin && diasEntre(form.fecha_servicio, form.fecha_fin) > MAX_DIAS) {
         setFormErr(`El servicio no puede superar los ${MAX_DIAS} días seguidos.`);
         return;
@@ -234,6 +251,16 @@ export default function ClienteCotizarPage() {
     if (!form.fecha_servicio) { setFormErr("Selecciona la fecha de inicio del servicio."); return; }
     if (variosDias && !form.fecha_fin) { setFormErr("Elegiste varios días: toca también el último día del viaje en el calendario."); return; }
     if (!form.hora_salida) { setFormErr("Indica la hora de salida que prefieres."); setWizardStep(2); return; }
+    if (regresoOtraFecha && (!form.fecha_regreso || !form.hora_regreso)) {
+      setFormErr("Indica la fecha y hora para recoger al regreso.");
+      setWizardStep(2);
+      return;
+    }
+    if (regresoOtraFecha && form.fecha_regreso <= form.fecha_servicio) {
+      setFormErr("La fecha de regreso debe ser posterior a la fecha de salida.");
+      setWizardStep(2);
+      return;
+    }
     if (variosDias && form.fecha_fin && diasEntre(form.fecha_servicio, form.fecha_fin) > MAX_DIAS) { setFormErr(`El servicio no puede superar los ${MAX_DIAS} días seguidos.`); return; }
     const capacidadCategoria = categorias.find(({ tipo }) => tipo === form.tipo_vehiculo)?.capacidad || 0;
     if (capacidadCategoria && Number(form.num_personas) > capacidadCategoria) {
@@ -257,6 +284,8 @@ export default function ClienteCotizarPage() {
           modalidad_servicio: variosDias ? "varios_dias" : form.modalidad_servicio,
           duracion_horas: form.modalidad_servicio === "horas" ? Number(form.duracion_horas) || 1 : null,
           hora_salida: form.hora_salida || null,
+          fecha_regreso: regresoOtraFecha ? form.fecha_regreso : null,
+          hora_regreso: regresoOtraFecha ? form.hora_regreso : null,
         }),
       });
       if (handleUnauthorized(res.status)) return;
@@ -267,9 +296,10 @@ export default function ClienteCotizarPage() {
         return;
       }
       setFormMsg("Solicitud de cotización enviada. Administración revisará tu destino y datos, definirá el precio y te avisará cuando puedas aceptarlo y pagar el anticipo desde Historial.");
-      setForm({ fecha_servicio: "", fecha_fin: "", num_personas: "1", num_viajes: "1", tipo_vehiculo: categorias[0]?.tipo || "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
+      setForm({ fecha_servicio: "", fecha_fin: "", fecha_regreso: "", hora_regreso: "", num_personas: "1", num_viajes: "1", tipo_vehiculo: categorias[0]?.tipo || "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2" });
       setWizardStep(1);
       setVariosDias(false);
+      setRegresoOtraFecha(false);
       setOrigin(null); setDestination(null);
       locateMyLocation();
       loadCotizaciones();
@@ -393,8 +423,13 @@ export default function ClienteCotizarPage() {
                   Un día
                 </button>
                 <button type="button"
-                  onClick={() => setVariosDias(true)}
-                  className={`py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${variosDias ? "bg-white text-[#E31E24] shadow" : "text-slate-400"}`}>
+                  onClick={() => {
+                    setVariosDias(true);
+                    setRegresoOtraFecha(false);
+                    setForm(p => ({ ...p, fecha_regreso: "", hora_regreso: "" }));
+                  }}
+                  disabled={regresoOtraFecha}
+                  className={`py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all disabled:cursor-not-allowed disabled:opacity-40 ${variosDias ? "bg-white text-[#E31E24] shadow" : "text-slate-400"}`}>
                   Varios días
                 </button>
               </div>
@@ -403,7 +438,11 @@ export default function ClienteCotizarPage() {
                 localized
                 vehiculoId={null}
                 value={form.fecha_servicio}
-                onSelect={(f) => setForm(p => ({ ...p, fecha_servicio: f }))}
+                onSelect={(f) => setForm(p => ({
+                  ...p,
+                  fecha_servicio: f,
+                  ...(p.fecha_regreso && p.fecha_regreso <= f ? { fecha_regreso: "", hora_regreso: "" } : {}),
+                }))}
                 range={variosDias}
                 endValue={form.fecha_fin}
                 onSelectEnd={(f) => setForm(p => ({ ...p, fecha_fin: f }))}
@@ -433,6 +472,59 @@ export default function ClienteCotizarPage() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#E31E24] sm:w-auto"
                 />
                 <p className="text-[11px] text-slate-500">Indica la hora en que deseas iniciar el viaje.</p>
+              </div>
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={regresoOtraFecha}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setRegresoOtraFecha(enabled);
+                      if (enabled) {
+                        setVariosDias(false);
+                        setForm(current => ({ ...current, fecha_fin: "" }));
+                      } else {
+                        setForm(current => ({ ...current, fecha_regreso: "", hora_regreso: "" }));
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#E31E24]"
+                  />
+                  Regreso en otra fecha
+                </label>
+                {regresoOtraFecha && (
+                  <>
+                    <p className="text-xs leading-relaxed text-slate-500">
+                      Te llevamos al destino y regresamos a recogerte en la fecha acordada para volver al punto de salida.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label htmlFor="fecha-regreso" className="space-y-1 text-xs font-black uppercase tracking-wide text-slate-600">
+                        Fecha de recogida <span className="text-[#E31E24]">*</span>
+                        <input
+                          id="fecha-regreso"
+                          type="date"
+                          required
+                          min={form.fecha_servicio ? siguienteFecha(form.fecha_servicio) : ""}
+                          value={form.fecha_regreso}
+                          onChange={event => setForm(current => ({ ...current, fecha_regreso: event.target.value }))}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold normal-case text-slate-700 outline-none focus:border-[#E31E24]"
+                        />
+                      </label>
+                      <label htmlFor="hora-regreso" className="space-y-1 text-xs font-black uppercase tracking-wide text-slate-600">
+                        Hora de recogida <span className="text-[#E31E24]">*</span>
+                        <input
+                          id="hora-regreso"
+                          type="time"
+                          required
+                          value={form.hora_regreso}
+                          onChange={event => setForm(current => ({ ...current, hora_regreso: event.target.value }))}
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold normal-case text-slate-700 outline-none focus:border-[#E31E24]"
+                        />
+                      </label>
+                    </div>
+                    <p className="text-[11px] font-medium text-slate-500">El regreso será desde el destino hasta el punto de salida original. No se cobrará como espera de varios días.</p>
+                  </>
+                )}
               </div>
               <div className="bg-slate-50 rounded-2xl p-3 flex items-center justify-between">
                 <span className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5"><Users size={14} /> Personas</span>
@@ -564,8 +656,10 @@ export default function ClienteCotizarPage() {
                         <span className="flex items-center gap-1"><Calendar size={10} />
                           {formatLocalizedDate(cot.fecha_servicio, language)}
                           {cot.fecha_fin && <> → {formatLocalizedDate(cot.fecha_fin, language)}</>}
-                        </span>
-                        {cot.hora_salida && <span className="flex items-center gap-1"><Clock size={10} />{cot.hora_salida}</span>}
+                          {cot.fecha_regreso && <> · Regreso: {formatLocalizedDate(cot.fecha_regreso, language)}</>}
+                          </span>
+                          {cot.hora_salida && <span className="flex items-center gap-1"><Clock size={10} />Ida {cot.hora_salida}</span>}
+                          {cot.hora_regreso && <span className="flex items-center gap-1"><Clock size={10} />Regreso {cot.hora_regreso}</span>}
                         <span className="flex items-center gap-1"><Users size={10} />{cot.num_personas}</span>
                         {cot.vehiculo_placa && <span className="flex items-center gap-1"><Car size={10} />{cot.vehiculo_placa}</span>}
                       </div>

@@ -27,6 +27,8 @@ type Cotizacion = {
   destino: string;
   fecha_servicio: string;
   fecha_fin?: string | null;
+  fecha_regreso?: string | null;
+  hora_regreso?: string | null;
   num_personas: number;
   num_viajes?: number | null;
   distancia_km?: number | null;
@@ -202,6 +204,7 @@ function AdminCotizacionesContent() {
                 Servicio de Transporte<br/><br/>
                 <b>Ruta:</b> ${escapeReportHtml(d.servicio.origen)} → ${escapeReportHtml(d.servicio.destino)}<br/>
                 <b>Salida:</b> ${escapeReportHtml(fmtFechaProf(d.servicio.fecha_servicio))}${d.servicio.hora_salida ? " · " + escapeReportHtml(d.servicio.hora_salida) : ""} · ${escapeReportHtml(d.servicio.num_personas)} pasajero(s)<br/><br/>
+                ${d.servicio.fecha_regreso ? `<b>Regreso:</b> ${escapeReportHtml(fmtFechaProf(d.servicio.fecha_regreso))}${d.servicio.hora_regreso ? " · recogida " + escapeReportHtml(d.servicio.hora_regreso) : ""} · ${escapeReportHtml(d.servicio.destino)} → ${escapeReportHtml(d.servicio.origen)}<br/><br/>` : ""}
                 ${escapeReportHtml(d.servicio.notas ? d.servicio.notas : "Servicio de transporte para traslado de personal.")}
               </td>
               <td class="num desc-cell">${fmtUSD(d.precio)}</td>
@@ -499,6 +502,9 @@ function AdminCotizacionesContent() {
                         {c.fecha_fin && c.fecha_fin !== c.fecha_servicio && (
                           <span className="block text-[10px] text-[#E31E24] font-black">→ {new Date(c.fecha_fin).toLocaleDateString("es-EC")}</span>
                         )}
+                        {c.fecha_regreso && (
+                          <span className="block text-[10px] text-blue-600 font-black">Regreso: {new Date(c.fecha_regreso).toLocaleDateString("es-EC")}{c.hora_regreso ? ` · ${c.hora_regreso}` : ""}</span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-sm font-black text-slate-700">{c.num_personas}</td>
                       <td className="px-5 py-4 text-xs text-slate-600 capitalize">{c.tipo_vehiculo || "—"}</td>
@@ -594,6 +600,18 @@ function AdminCotizacionesContent() {
                     {selected.fecha_fin && selected.fecha_fin !== selected.fecha_servicio && ` → ${new Date(selected.fecha_fin).toLocaleDateString("es-EC")}`}
                   </p>
                 </div>
+                {selected.fecha_regreso && (
+                  <div className="col-span-2 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="mb-1 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-blue-600">
+                      <Calendar size={9} /> Regreso en otra fecha
+                    </p>
+                    <p className="text-sm font-bold text-slate-700">
+                      {new Date(selected.fecha_regreso).toLocaleDateString("es-EC")}
+                      {selected.hora_regreso && ` · Recogida a las ${selected.hora_regreso}`}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{selected.destino} → {selected.origen}</p>
+                  </div>
+                )}
                 <div className="bg-slate-50 rounded-2xl p-4">
                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center gap-1"><Users size={9} />Personas</p>
                   <p className="text-sm font-bold text-slate-700">{selected.num_personas}</p>

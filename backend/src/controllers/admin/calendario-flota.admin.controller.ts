@@ -40,7 +40,7 @@ const getCalendarioFlota = async (req: any, res: any) => {
         [desde, hasta]
       ),
       pool.query(
-        `SELECT r.id, r.vehiculo_id,
+        `SELECT r.id::text AS id, r.vehiculo_id,
                 GREATEST(COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva), $1::date)::text AS fecha_inicio,
                 LEAST(COALESCE(r.fecha_llegada::date, r.fecha_fin, r.fecha_reserva), $2::date)::text AS fecha_fin,
                 r.estado, r.tipo_vehiculo AS tipo_servicio,
@@ -56,7 +56,23 @@ const getCalendarioFlota = async (req: any, res: any) => {
              SELECT 1 FROM operaciones o
              WHERE o.reserva_id = r.id AND o.estado <> 'cancelada'
            )
-         ORDER BY fecha_inicio, r.id`,
+         UNION ALL
+         SELECT r.id::text || '-regreso' AS id, r.vehiculo_id,
+                r.fecha_regreso::text AS fecha_inicio,
+                r.fecha_regreso::text AS fecha_fin,
+                r.estado, 'Regreso de reserva' AS tipo_servicio,
+                r.hora_regreso::time::text AS hora_inicio,
+                r.hora_regreso::time::text AS hora_fin,
+                r.destino AS origen, r.origen AS destino, r.id AS reserva_id
+         FROM reservas r
+         WHERE r.fecha_regreso BETWEEN $1::date AND $2::date
+           AND r.vehiculo_id IS NOT NULL
+           AND r.estado NOT IN ('cancelada', 'finalizada')
+           AND NOT EXISTS (
+             SELECT 1 FROM operaciones o
+             WHERE o.reserva_id = r.id AND o.fecha_programada = r.fecha_regreso AND o.estado <> 'cancelada'
+           )
+         ORDER BY fecha_inicio, id`,
         [desde, hasta]
       ),
       pool.query(
@@ -71,7 +87,7 @@ const getCalendarioFlota = async (req: any, res: any) => {
       ),
       pool.query(
         `SELECT r.id, r.fecha_salida, r.fecha_servicio, r.fecha_reserva, r.fecha_llegada,
-                r.fecha_fin, r.origen, r.destino, r.tipo_vehiculo, r.num_personas,
+                r.fecha_fin, r.fecha_regreso::text AS fecha_regreso, r.hora_regreso, r.origen, r.destino, r.tipo_vehiculo, r.num_personas,
                 COALESCE(u.nombre, 'Cliente') AS cliente_nombre,
                 o.id AS operacion_id, o.subcontratacion_estado
          FROM reservas r
@@ -84,8 +100,13 @@ const getCalendarioFlota = async (req: any, res: any) => {
            LIMIT 1
          ) o ON true
          WHERE r.estado = 'confirmada'
-           AND COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva) <= $2::date
-           AND COALESCE(r.fecha_llegada::date, r.fecha_fin, r.fecha_reserva) >= $1::date
+           AND (
+             (
+               COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva) <= $2::date
+               AND COALESCE(r.fecha_llegada::date, r.fecha_fin, r.fecha_reserva) >= $1::date
+             )
+             OR r.fecha_regreso BETWEEN $1::date AND $2::date
+           )
            AND r.vehiculo_id IS NULL
            AND (o.id IS NULL OR (o.vehiculo_id IS NULL AND o.subcontratacion_estado <> 'confirmada'))
          ORDER BY COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva), r.id

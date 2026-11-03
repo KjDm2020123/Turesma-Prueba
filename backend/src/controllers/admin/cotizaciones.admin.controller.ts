@@ -85,9 +85,22 @@ const resolverAsignacionAutomatica = async (client: any, c: any) => {
          OR LOWER(v.modelo) LIKE '%' || $2 || '%'
          OR LOWER(v.marca) LIKE '%' || $2 || '%'
        )
+       AND NOT EXISTS (
+         SELECT 1 FROM reservas r
+         WHERE r.vehiculo_id = v.id
+           AND r.estado NOT IN ('cancelada', 'finalizada')
+           AND (
+             $3::date BETWEEN r.fecha_reserva AND COALESCE(r.fecha_fin, r.fecha_reserva)
+             OR r.fecha_regreso = $3::date
+             OR ($4::date IS NOT NULL AND (
+               $4::date BETWEEN r.fecha_reserva AND COALESCE(r.fecha_fin, r.fecha_reserva)
+               OR r.fecha_regreso = $4::date
+             ))
+           )
+       )
      ORDER BY v.capacidad ASC, v.id ASC
      LIMIT 1`,
-    [capacidad, tipoVehiculo]
+    [capacidad, tipoVehiculo, fechaServicio, c.fecha_regreso || null]
   );
 
   if (!pairRes.rowCount) {
@@ -163,16 +176,17 @@ const crearReservaDesdeCotizacion = async (
   const estadoInicial = Number(precioFinal) > 0 ? "pendiente_pago" : "confirmada";
   const fechaServicio = toDateOnly(c.fecha_servicio);
   const fechaFin = toDateOnly(c.fecha_fin);
+  const fechaRegreso = toDateOnly(c.fecha_regreso);
   if (!fechaServicio) {
     throw new Error(`La cotización #${c.id} no tiene una fecha de servicio válida`);
   }
   const reservaConductorId = await resolveReservaConductorId(client, conductorFinal);
   const reservaRes = await client.query(
     `INSERT INTO reservas
-       (usuario_id, fecha_reserva, fecha_fin, num_personas, total, estado, origen, destino, vehiculo_id, conductor_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (usuario_id, fecha_reserva, fecha_fin, fecha_regreso, hora_regreso, num_personas, total, estado, origen, destino, vehiculo_id, conductor_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id`,
-    [c.usuario_id, fechaServicio, fechaFin, c.num_personas, precioFinal, estadoInicial, c.origen, c.destino, vehiculoFinal, reservaConductorId]
+    [c.usuario_id, fechaServicio, fechaFin, fechaRegreso, c.hora_regreso || null, c.num_personas, precioFinal, estadoInicial, c.origen, c.destino, vehiculoFinal, reservaConductorId]
   );
   return reservaRes.rows[0].id;
 };
@@ -570,6 +584,7 @@ const crearCotizacion = async (req: any, res: any) => {
   const {
     origen, destino, fecha_servicio, fecha_fin, num_personas, tipo_vehiculo, notas,
     vehiculo_id, valor_ofrecido, duracion_valor, duracion_unidad, hora_salida,
+    fecha_regreso, hora_regreso,
     origen_lat, origen_lng, destino_lat, destino_lng,
     num_viajes, modalidad_servicio, duracion_horas,
   } = req.body;
@@ -583,8 +598,27 @@ const crearCotizacion = async (req: any, res: any) => {
   const horaSalida = typeof hora_salida === "string" && hora_salida.trim() ? hora_salida.trim().slice(0, 10) : null;
   // Reserva de varios días: la fecha fin solo se guarda si es una fecha válida
   // POSTERIOR a la de inicio; si no, es un servicio de un solo día (null).
-  const esFecha = (v: any) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+  const esFecha = (v: any) => {
+    if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return false;
+    const value = v.trim();
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
   const fechaFin = esFecha(fecha_fin) && fecha_fin.trim() > String(fecha_servicio).trim() ? fecha_fin.trim() : null;
+  const fechaRegreso = fecha_regreso == null || fecha_regreso === "" ? null : esFecha(fecha_regreso) ? fecha_regreso.trim() : null;
+  const horaRegreso = typeof hora_regreso === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(hora_regreso.trim()) ? hora_regreso.trim() : null;
+  if (fecha_regreso && (!fechaRegreso || fechaRegreso <= String(fecha_servicio).trim())) {
+    return res.status(400).json({ error: "La fecha de regreso debe ser posterior a la fecha de salida" });
+  }
+  if (fechaRegreso && !horaRegreso) {
+    return res.status(400).json({ error: "Indica una hora válida para la recogida de regreso" });
+  }
+  if (!fechaRegreso && hora_regreso) {
+    return res.status(400).json({ error: "La hora de regreso requiere una fecha de regreso" });
+  }
+  if (fechaRegreso && fechaFin) {
+    return res.status(400).json({ error: "El regreso en otra fecha no se combina con un servicio de varios días" });
+  }
   try {
     // Candado de identidad: un cliente solo puede solicitar servicios si su
     // cédula fue verificada por el administrador. El staff (admin/operativo)
@@ -611,13 +645,13 @@ const crearCotizacion = async (req: any, res: any) => {
          (usuario_id, origen, destino, fecha_servicio, fecha_fin, num_personas, tipo_vehiculo, notas,
           vehiculo_id, valor_ofrecido, precio_estimado, num_viajes, distancia_km, precio_desglose,
           duracion_valor, duracion_unidad, turno,
-          origen_lat, origen_lng, destino_lat, destino_lng, hora_salida)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'admin', $17, $18, $19, $20, $21)
+           origen_lat, origen_lng, destino_lat, destino_lng, hora_salida, fecha_regreso, hora_regreso)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'admin', $17, $18, $19, $20, $21, $22, $23)
        RETURNING *`,
       [
         usuario_id, origen, destino, fecha_servicio, fechaFin, num_personas, tipoVehiculo, notas || null,
         vehiculo_id ? Number(vehiculo_id) : null, num(valor_ofrecido), null, trips, null, null,
-        num(duracion_valor), dUnidad, num(origen_lat), num(origen_lng), num(destino_lat), num(destino_lng), horaSalida,
+         num(duracion_valor), dUnidad, num(origen_lat), num(origen_lng), num(destino_lat), num(destino_lng), horaSalida, fechaRegreso, horaRegreso,
       ]
     );
     const cotizacion = result.rows[0];

@@ -142,7 +142,7 @@ const listarVehiculosCliente = async (req, res) => {
                SELECT 1
                FROM reservas r
                WHERE r.vehiculo_id = v.id
-                 AND r.fecha_reserva = $1::date
+                   AND (r.fecha_reserva = $1::date OR r.fecha_regreso = $1::date)
                  AND r.estado NOT IN ('cancelada', 'finalizada')
              )
            )
@@ -169,6 +169,7 @@ const recomendarVehiculo = async (req: any, res: any) => {
   const personas = Math.max(1, Number(req.body?.num_personas) || 1);
   const notas = String(req.body?.notas || "").trim().toLowerCase();
   const fechaInicio = typeof req.body?.fecha_servicio === "string" ? req.body.fecha_servicio : null;
+  const fechaRegreso = typeof req.body?.fecha_regreso === "string" ? req.body.fecha_regreso : null;
   const fechaFin = typeof req.body?.fecha_fin === "string" && req.body.fecha_fin >= fechaInicio
     ? req.body.fecha_fin
     : fechaInicio;
@@ -176,6 +177,9 @@ const recomendarVehiculo = async (req: any, res: any) => {
 
   if (fechaInicio && !/^\d{4}-\d{2}-\d{2}$/.test(fechaInicio)) {
     return res.status(400).json({ error: "La fecha del servicio no es válida" });
+  }
+  if (fechaRegreso && (!/^\d{4}-\d{2}-\d{2}$/.test(fechaRegreso) || !fechaInicio || fechaRegreso <= fechaInicio)) {
+    return res.status(400).json({ error: "La fecha de regreso debe ser posterior a la fecha de salida" });
   }
 
   try {
@@ -200,15 +204,32 @@ const recomendarVehiculo = async (req: any, res: any) => {
            SELECT 1 FROM vehiculo_disponibilidad vd
            WHERE vd.vehiculo_id = v.id AND vd.fecha BETWEEN $2::date AND $3::date AND vd.disponible = false
          ))
+         AND ($4::date IS NULL OR (
+           EXTRACT(DOW FROM $4::date)::INT = ANY(COALESCE(v.dias_servicio, ARRAY[0,1,2,3,4,5,6]))
+           OR EXISTS (
+             SELECT 1 FROM vehiculo_disponibilidad vd
+             WHERE vd.vehiculo_id = v.id AND vd.fecha = $4::date AND vd.disponible = true
+           )
+         ))
+         AND ($4::date IS NULL OR NOT EXISTS (
+           SELECT 1 FROM vehiculo_disponibilidad vd
+           WHERE vd.vehiculo_id = v.id AND vd.fecha = $4::date AND vd.disponible = false
+         ))
          AND ($2::text IS NULL OR NOT EXISTS (
            SELECT 1 FROM reservas r
            WHERE r.vehiculo_id = v.id
              AND r.estado NOT IN ('cancelada', 'finalizada')
-             AND r.fecha_reserva <= $3::date
-             AND COALESCE(r.fecha_fin, r.fecha_reserva) >= $2::date
+             AND (
+               (r.fecha_reserva <= $3::date AND COALESCE(r.fecha_fin, r.fecha_reserva) >= $2::date)
+               OR r.fecha_regreso BETWEEN $2::date AND $3::date
+               OR ($4::date IS NOT NULL AND (
+                 $4::date BETWEEN r.fecha_reserva AND COALESCE(r.fecha_fin, r.fecha_reserva)
+                 OR r.fecha_regreso = $4::date
+               ))
+             )
          ))
        ORDER BY v.capacidad ASC, v.orden ASC NULLS LAST, v.id DESC`,
-      [personas, fechaInicio, fechaFin]
+      [personas, fechaInicio, fechaFin, fechaRegreso]
     );
 
     const palabrasGrandes = /(equipaje|maleta|equipajes|grupo|amplio|espacio)/i;
@@ -323,6 +344,8 @@ const listarMisReservas = async (req: any, res: any) => {
          r.monto_pagado,
          r.estado_pago,
          r.link_pago,
+         r.fecha_regreso,
+         r.hora_regreso,
          r.fecha_creacion AS creado_en,
          t.titulo AS tour_titulo,
          v.placa AS vehiculo_placa,
@@ -419,6 +442,7 @@ const reprogramarMiReserva = async (req: any, res: any) => {
     await pool.query(
       `UPDATE reservas
          SET fecha_fin = CASE WHEN fecha_fin IS NOT NULL THEN fecha_fin + ($1::date - fecha_reserva) ELSE NULL END,
+             fecha_regreso = CASE WHEN fecha_regreso IS NOT NULL THEN fecha_regreso + ($1::date - fecha_reserva) ELSE NULL END,
              fecha_reserva = $1
        WHERE id = $2 AND usuario_id = $3`,
       [fecha, reservaId, userId]
@@ -428,6 +452,7 @@ const reprogramarMiReserva = async (req: any, res: any) => {
     await pool.query(
       `UPDATE cotizaciones
          SET fecha_fin = CASE WHEN fecha_fin IS NOT NULL THEN fecha_fin + ($1::date - fecha_servicio) ELSE NULL END,
+             fecha_regreso = CASE WHEN fecha_regreso IS NOT NULL THEN fecha_regreso + ($1::date - fecha_servicio) ELSE NULL END,
              fecha_servicio = $1,
              hora_salida = COALESCE(NULLIF($2, ''), hora_salida)
        WHERE reserva_id = $3`,
