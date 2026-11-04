@@ -8,7 +8,7 @@ import { descargarExcel } from "../../../lib/download";
 import {
   Calendar, Plus, Edit3, Trash2, X, Search,
   CheckCircle, Clock, AlertCircle, Loader2, User, Car,
-  MapPin, ArrowRight, CreditCard, FileSpreadsheet
+  MapPin, ArrowRight, CreditCard, FileSpreadsheet, History
 } from "lucide-react";
 import { MapPicker, Punto } from "../../../components/map-picker";
 import { VehiculoCalendario } from "../../../components/vehiculo-calendario";
@@ -42,6 +42,16 @@ type Reserva = {
 };
 
 type Cliente = { id: number; nombre: string; email: string };
+type ReservaHistoryEntry = {
+  id: number;
+  accion: string;
+  estado_anterior: string | null;
+  estado_nuevo: string | null;
+  detalle: Record<string, unknown> | string | null;
+  creado_en: string;
+  usuario_nombre: string | null;
+  usuario_apellido: string | null;
+};
 
 const ESTADOS = ["pendiente", "pendiente_pago", "confirmada", "en_curso", "finalizada", "cancelada"];
 
@@ -114,8 +124,29 @@ export default function AdminReservasPage() {
   const [estadoModal, setEstadoModal] = useState<Reserva | null>(null);
   const [nuevoEstado, setNuevoEstado] = useState("");
   const [estadoLoading, setEstadoLoading] = useState(false);
+  const [historyReservation, setHistoryReservation] = useState<Reserva | null>(null);
+  const [reservationHistory, setReservationHistory] = useState<ReservaHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
 
   const h = getAuthHeaders();
+
+  const openHistory = async (reserva: Reserva) => {
+    setHistoryReservation(reserva);
+    setReservationHistory([]);
+    setHistoryError("");
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/reservas/${reserva.id}/historial`, { headers: h });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial");
+      setReservationHistory(data.data || []);
+    } catch (historyLoadError) {
+      setHistoryError(historyLoadError instanceof Error ? historyLoadError.message : "No se pudo cargar el historial");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
@@ -216,8 +247,15 @@ export default function AdminReservasPage() {
 
   const handleDelete = async (r: Reserva) => {
     if (!(await confirmar({ title: "Eliminar reserva", message: `¿Eliminar reserva #${r.id}?`, confirmText: "Eliminar", tone: "danger" }))) return;
-    const res = await fetch(`${API_URL}/api/admin/reservas/${r.id}`, { method: "DELETE", headers: h });
-    if (res.ok) { setMsg("Reserva eliminada"); load(); }
+    try {
+      const res = await fetch(`${API_URL}/api/admin/reservas/${r.id}`, { method: "DELETE", headers: h });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo eliminar la reserva");
+      setMsg("Reserva eliminada");
+      load();
+    } catch (deleteError) {
+      setErr(deleteError instanceof Error ? deleteError.message : "No se pudo eliminar la reserva");
+    }
   };
 
   const handleCambiarEstado = async () => {
@@ -368,6 +406,7 @@ export default function AdminReservasPage() {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-1">
+                  <button onClick={() => void openHistory(r)} className="flex-1 rounded-lg bg-violet-50 px-3 py-2 text-[11px] font-black uppercase text-violet-700">Historial</button>
                   <button
                     onClick={() => { setEstadoModal(r); setNuevoEstado(TRANSICIONES_VALIDAS[r.estado]?.[0] || ""); }}
                     className="flex-1 px-3 py-2 text-[11px] font-black uppercase bg-slate-100 text-slate-600 rounded-lg"
@@ -454,6 +493,7 @@ export default function AdminReservasPage() {
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex gap-1 flex-wrap">
+                        <button onClick={() => void openHistory(r)} className="rounded-lg p-1.5 text-violet-600 hover:bg-violet-50" title="Ver historial"><History size={14} /></button>
                         <button
                           onClick={() => {
                             setEstadoModal(r);
@@ -480,6 +520,30 @@ export default function AdminReservasPage() {
           </>
         )}
       </div>
+
+      {/* MODAL CAMBIAR ESTADO */}
+      {historyReservation && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4">
+          <section className="max-h-[85dvh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="text-xs font-black uppercase tracking-widest text-violet-700">Auditoría</p><h2 className="mt-1 text-lg font-black text-slate-900">Historial de reserva #{historyReservation.id}</h2></div>
+              <button type="button" onClick={() => setHistoryReservation(null)} aria-label="Cerrar historial" className="rounded-lg p-2 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            {historyLoading ? <div className="flex h-32 items-center justify-center"><Loader2 className="animate-spin text-violet-600" /></div>
+              : historyError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{historyError}</p>
+                : reservationHistory.length === 0 ? <p className="mt-5 rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-500">Aún no hay cambios registrados para esta reserva.</p>
+                  : <ol className="mt-5 space-y-3">{reservationHistory.map((entry) => (
+                    <li key={entry.id} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div><p className="font-black text-slate-800">{entry.accion.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-slate-500">{entry.estado_anterior || "—"} → {entry.estado_nuevo || "—"} · {entry.usuario_nombre || "Usuario eliminado"} {entry.usuario_apellido || ""}</p></div>
+                        <time className="text-xs font-semibold text-slate-400">{new Date(entry.creado_en).toLocaleString("es-EC")}</time>
+                      </div>
+                      {entry.detalle && <pre className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{JSON.stringify(typeof entry.detalle === "string" ? JSON.parse(entry.detalle) : entry.detalle, null, 2)}</pre>}
+                    </li>
+                  ))}</ol>}
+          </section>
+        </div>
+      )}
 
       {/* MODAL CAMBIAR ESTADO */}
       {estadoModal && (

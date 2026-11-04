@@ -205,7 +205,7 @@ const reporteViajes = async (_req, res) => {
          fecha_reserva,
          COUNT(*) AS cantidad_viajes,
          COUNT(*) FILTER (WHERE estado = 'finalizada') AS viajes_finalizados,
-         COALESCE(SUM(total), 0) AS ingresos
+         COALESCE(SUM(monto_pagado), 0) AS ingresos
        FROM reservas
        GROUP BY fecha_reserva
        ORDER BY fecha_reserva DESC`
@@ -224,7 +224,8 @@ const reporteReservas = async (_req, res) => {
       `SELECT
          estado,
          COUNT(*) AS cantidad,
-         COALESCE(SUM(total), 0) AS total
+         COALESCE(SUM(total), 0) AS total,
+         COALESCE(SUM(monto_pagado), 0) AS ingresos_netos
        FROM reservas
        GROUP BY estado
        ORDER BY estado ASC`
@@ -269,7 +270,9 @@ const verReportes = async (_req, res) => {
       pool.query(
         `SELECT
            COUNT(*) AS total_reservas,
-           COALESCE(SUM(total), 0) AS ingresos_totales,
+          COALESCE(SUM(total), 0) AS total_facturado,
+          COALESCE(SUM(monto_pagado), 0) AS ingresos_totales,
+          (SELECT COALESCE(SUM(monto), 0) FROM reembolsos_reserva) AS total_devuelto,
            COUNT(*) FILTER (WHERE estado = 'pendiente') AS pendientes,
            COUNT(*) FILTER (WHERE estado = 'confirmada') AS confirmadas,
            COUNT(*) FILTER (WHERE estado = 'cancelada') AS canceladas
@@ -282,7 +285,9 @@ const verReportes = async (_req, res) => {
          ORDER BY estado ASC`
       ),
       pool.query(
-        `SELECT t.titulo, COUNT(r.id) AS cantidad_reservas, COALESCE(SUM(r.total), 0) AS total
+        `SELECT t.titulo, COUNT(r.id) AS cantidad_reservas,
+                COALESCE(SUM(r.total), 0) AS total,
+                COALESCE(SUM(r.monto_pagado), 0) AS ingresos_netos
          FROM tours t
          LEFT JOIN reservas r ON r.tour_id = t.id
          GROUP BY t.id, t.titulo
@@ -412,6 +417,7 @@ const exportarReporteCSV = async (req, res) => {
 
       const result = await pool.query(
         `SELECT r.id, r.fecha_reserva, r.estado, r.num_personas, r.total,
+               COALESCE(r.monto_pagado, 0) AS ingresos_netos,
                 u.nombre AS cliente, t.titulo AS servicio,
                 uc.nombre AS conductor, v.placa AS vehiculo
          FROM reservas r
@@ -426,13 +432,14 @@ const exportarReporteCSV = async (req, res) => {
         params
       );
       rows = result.rows;
-      headers = ["id", "fecha_reserva", "estado", "num_personas", "total", "cliente", "servicio", "conductor", "vehiculo"];
+      headers = ["id", "fecha_reserva", "estado", "num_personas", "total", "ingresos_netos", "cliente", "servicio", "conductor", "vehiculo"];
       headerLabels = {
         id: "N.º de reserva",
         fecha_reserva: "Fecha de reserva",
         estado: "Estado",
         num_personas: "Número de pasajeros",
         total: "Total (USD)",
+        ingresos_netos: "Cobrado neto (USD)",
         cliente: "Cliente",
         servicio: "Servicio",
         conductor: "Conductor",

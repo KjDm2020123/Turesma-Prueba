@@ -586,8 +586,19 @@ const actualizarSubcontratacion = async (req: any, res: any) => {
   const operationId = Number(req.params.id);
   const body = req.body || {};
   const subcontractingState = String(body.estado || "");
+  const companyId = subcontractingState === "no_requerida"
+    || body.empresa_asociada_id === undefined || body.empresa_asociada_id === null || body.empresa_asociada_id === ""
+    ? null
+    : Number(body.empresa_asociada_id);
+  const associatedVehicleId = subcontractingState === "no_requerida"
+    || body.vehiculo_asociado_id === undefined || body.vehiculo_asociado_id === null || body.vehiculo_asociado_id === ""
+    ? null
+    : Number(body.vehiculo_asociado_id);
   if (!Number.isInteger(operationId) || operationId <= 0
-    || !VALID_SUBCONTRACTING_STATES.includes(subcontractingState)) {
+    || !VALID_SUBCONTRACTING_STATES.includes(subcontractingState)
+    || (companyId !== null && (!Number.isInteger(companyId) || companyId <= 0))
+    || (associatedVehicleId !== null && (!Number.isInteger(associatedVehicleId) || associatedVehicleId <= 0))
+    || (associatedVehicleId !== null && companyId === null)) {
     return res.status(400).json({ success: false, error: "Operación o estado de subcontratación inválidos" });
   }
 
@@ -615,10 +626,13 @@ const actualizarSubcontratacion = async (req: any, res: any) => {
     && (cost === null || !Number.isFinite(cost) || cost < 0 || cost > 99999999.99)) {
     return res.status(400).json({ success: false, error: "El costo de subcontratación debe ser un valor válido y no negativo" });
   }
-  if (subcontractingState === "confirmada"
-    && (!details.empresa || !details.contacto || !details.telefono || !details.vehiculo
-      || !details.placa || !details.conductor || !details.conductorTelefono || cost === null)) {
+  if (subcontractingState === "confirmada" && cost === null) {
     return res.status(400).json({ success: false, error: "Para confirmar registra empresa, contacto, teléfono, vehículo, placa, conductor, teléfono del conductor y costo acordado" });
+  }
+  if (subcontractingState === "confirmada" && companyId === null
+    && (!details.empresa || !details.contacto || !details.telefono || !details.vehiculo
+      || !details.placa || !details.conductor || !details.conductorTelefono)) {
+    return res.status(400).json({ success: false, error: "Completa los datos de la empresa y del vehículo antes de confirmar" });
   }
 
   const client = await pool.connect();
@@ -634,6 +648,73 @@ const actualizarSubcontratacion = async (req: any, res: any) => {
     if (!["programada", "asignada", "incidencia"].includes(current.estado)) {
       await client.query("ROLLBACK");
       return res.status(409).json({ success: false, error: "La operación no permite cambiar la subcontratación en su estado actual" });
+    }
+
+    if (companyId !== null) {
+      const companyResult = await client.query(
+        "SELECT id, nombre, contacto, telefono, activa FROM empresas_asociadas WHERE id = $1 FOR UPDATE",
+        [companyId]
+      );
+      if (!companyResult.rowCount || !companyResult.rows[0].activa) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, error: "La empresa asociada no existe o está inactiva" });
+      }
+      details.empresa = companyResult.rows[0].nombre;
+      details.contacto = companyResult.rows[0].contacto;
+      details.telefono = companyResult.rows[0].telefono;
+    }
+
+    if (associatedVehicleId !== null) {
+      const vehicleResult = await client.query(
+        `SELECT id, empresa_id, placa, modelo, capacidad, conductor, conductor_telefono, activo
+         FROM vehiculos_asociados WHERE id = $1 FOR UPDATE`,
+        [associatedVehicleId]
+      );
+      const partnerVehicle = vehicleResult.rows[0];
+      if (!partnerVehicle || !partnerVehicle.activo || partnerVehicle.empresa_id !== companyId) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, error: "El vehículo no pertenece a la empresa activa seleccionada" });
+      }
+      if (Number(partnerVehicle.capacidad) < Number(current.pasajeros)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, error: "La capacidad del vehículo asociado es insuficiente" });
+      }
+      details.vehiculo = partnerVehicle.modelo;
+      details.placa = partnerVehicle.placa;
+      details.conductor = partnerVehicle.conductor;
+      details.conductorTelefono = partnerVehicle.conductor_telefono;
+    }
+
+    if (subcontractingState === "confirmada" && companyId !== null && associatedVehicleId === null) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ success: false, error: "Selecciona un vehículo registrado de la empresa asociada" });
+    }
+    if (subcontractingState === "confirmada"
+      && (!details.empresa || !details.contacto || !details.telefono || !details.vehiculo
+        || !details.placa || !details.conductor || !details.conductorTelefono)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ success: false, error: "La empresa y el vehículo deben tener todos los datos de contacto operativos" });
+    }
+    if (subcontractingState === "confirmada" && associatedVehicleId !== null) {
+      const endDate = current.fecha_fin_programada || current.fecha_programada;
+      const conflict = await client.query(
+        `SELECT id FROM operaciones
+         WHERE id <> $1 AND vehiculo_asociado_id = $2
+           AND estado = ANY($3::text[])
+           AND fecha_programada <= $5::date
+           AND COALESCE(fecha_fin_programada, fecha_programada) >= $4::date
+           AND (
+             $4::date <> $5::date OR COALESCE(fecha_fin_programada, fecha_programada) <> fecha_programada
+             OR hora_inicio IS NULL OR hora_fin IS NULL OR $6::time IS NULL OR $7::time IS NULL
+             OR (hora_inicio < $7::time AND $6::time < hora_fin)
+           )
+         LIMIT 1`,
+        [operationId, associatedVehicleId, ACTIVE_STATES, current.fecha_programada, endDate, current.hora_inicio, current.hora_fin]
+      );
+      if (conflict.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ success: false, error: "El vehículo asociado ya está asignado a otra operación en ese horario" });
+      }
     }
 
     const nextOperationState = subcontractingState === "confirmada" ? "asignada" : "programada";
@@ -652,7 +733,9 @@ const actualizarSubcontratacion = async (req: any, res: any) => {
            vehiculo_id = NULL,
            conductor_id = NULL,
            estado = $10,
-           actualizado_en = CURRENT_TIMESTAMP
+           actualizado_en = CURRENT_TIMESTAMP,
+           empresa_asociada_id = $12,
+           vehiculo_asociado_id = $13
        WHERE id = $11`,
       [
         subcontractingState,
@@ -666,6 +749,8 @@ const actualizarSubcontratacion = async (req: any, res: any) => {
         clearDetails ? null : cost,
         nextOperationState,
         operationId,
+        clearDetails ? null : companyId,
+        clearDetails ? null : associatedVehicleId,
       ]
     );
 
@@ -683,7 +768,12 @@ const actualizarSubcontratacion = async (req: any, res: any) => {
       "actualizar_subcontratacion",
       current.subcontratacion_estado || "no_requerida",
       subcontractingState,
-      clearDetails ? { accion: "retirada" } : { ...details, costo: cost }
+      clearDetails ? { accion: "retirada" } : {
+        ...details,
+        empresa_asociada_id: companyId,
+        vehiculo_asociado_id: associatedVehicleId,
+        costo: cost,
+      }
     );
     const updated = await getOperation(client, operationId);
     await client.query("COMMIT");

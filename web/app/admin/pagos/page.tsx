@@ -6,6 +6,7 @@ import { useAdminGuard } from "../../../lib/use-admin-guard";
 import { getAuthHeaders } from "../../../lib/session";
 import { useAutoRefresh } from "../../../lib/use-auto-refresh";
 import { descargarArchivo } from "../../../lib/download";
+import { normalizeRole } from "../../../lib/session";
 import {
   CreditCard, Loader2, CheckCircle2, XCircle,
   MapPin, ArrowRight, X, ImageIcon, FileDown,
@@ -20,6 +21,8 @@ type Pago = {
   reserva_total: number; origen: string | null; destino: string | null; reserva_estado: string;
   reserva_monto_pagado: number; reserva_estado_pago: string;
   cliente_nombre: string; cliente_email: string;
+  monto_reembolsado?: number;
+  reembolsos?: Array<{ id: number; monto: number; motivo: string; referencia_externa: string; creado_en: string; procesado_por: string }>;
 };
 
 const ESTADO_BADGE: Record<string, string> = {
@@ -36,7 +39,8 @@ const METODO_LABEL: Record<string, string> = {
 const INPUT = "w-full rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:border-[#E31E24] focus:bg-white";
 
 export default function AdminPagosPage() {
-  const { checkingSession } = useAdminGuard();
+  const { user, checkingSession } = useAdminGuard();
+  const isAdmin = normalizeRole(user?.rol) === "admin";
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState("pendiente");
@@ -47,6 +51,8 @@ export default function AdminPagosPage() {
   const [actingId, setActingId] = useState<number | null>(null);
   const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
+  const [refundPayment, setRefundPayment] = useState<Pago | null>(null);
+  const [refundForm, setRefundForm] = useState({ monto: "", motivo: "", referencia_externa: "" });
 
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
@@ -118,6 +124,40 @@ export default function AdminPagosPage() {
       load();
     } catch (e) { setErr(e instanceof Error ? e.message : "Error inesperado"); }
     finally { setActingId(null); }
+  };
+
+  const abrirReembolso = (pago: Pago) => {
+    setRefundPayment(pago);
+    setRefundForm({
+      monto: Math.max(0, Number(pago.monto) - Number(pago.monto_reembolsado || 0)).toFixed(2),
+      motivo: "",
+      referencia_externa: "",
+    });
+    setErr("");
+  };
+
+  const registrarReembolso = async () => {
+    if (!refundPayment) return;
+    setActingId(refundPayment.id);
+    setErr("");
+    setMsg("");
+    try {
+      const response = await fetch(`${API}/api/admin/pagos/${refundPayment.id}/reembolso`, {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ ...refundForm, monto: Number(refundForm.monto) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo registrar la devolución");
+      setMsg(data.message || "Devolución registrada.");
+      setRefundPayment(null);
+      setRefundForm({ monto: "", motivo: "", referencia_externa: "" });
+      await load();
+    } catch (refundError) {
+      setErr(refundError instanceof Error ? refundError.message : "No se pudo registrar la devolución");
+    } finally {
+      setActingId(null);
+    }
   };
 
   const pendientes = pagos.filter(p => p.estado === "pendiente").length;
@@ -206,6 +246,7 @@ export default function AdminPagosPage() {
               )}
 
               {p.estado === "aprobado" && (
+                <div className="space-y-2">
                 <button
                   type="button"
                   onClick={() => downloadReceipt(p.id)}
@@ -217,6 +258,22 @@ export default function AdminPagosPage() {
                     : <FileDown size={14} />}
                   Descargar factura
                 </button>
+                {isAdmin && Number(p.monto) - Number(p.monto_reembolsado || 0) > 0.01 && (
+                  <button type="button" onClick={() => abrirReembolso(p)} className="w-full rounded-xl bg-amber-50 py-2.5 text-[10px] font-black uppercase tracking-widest text-amber-800 hover:bg-amber-100">
+                    Registrar devolución excepcional
+                  </button>
+                )}
+                {(p.reembolsos || []).length > 0 && (
+                  <div className="space-y-1 rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-900">Devoluciones registradas</p>
+                    {p.reembolsos?.map((refund) => (
+                      <p key={refund.id} className="text-[10px] leading-relaxed text-amber-900">
+                        ${Number(refund.monto).toFixed(2)} · {refund.motivo} · Ref. {refund.referencia_externa} · {refund.procesado_por}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                </div>
               )}
 
               {p.estado === "pendiente" && (
@@ -255,6 +312,37 @@ export default function AdminPagosPage() {
                   {actingId === rechazarId ? "Rechazando..." : "Confirmar rechazo"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {refundPayment && isAdmin && (
+        <div className="fixed inset-0 z-[105] flex items-center justify-center bg-[#0b0f1a]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="text-xs font-black uppercase tracking-widest text-amber-700">Solo administración</p><h2 className="mt-1 text-xl font-black text-slate-950">Registrar devolución</h2></div>
+              <button type="button" onClick={() => setRefundPayment(null)} aria-label="Cerrar formulario de devolución" className="rounded-lg p-2 hover:bg-slate-100"><X size={20} /></button>
+            </div>
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+              Primero realiza la devolución en PayPhone, banco u otro canal y luego registra su referencia aquí. Este sistema solo deja constancia; no transfiere dinero.
+            </p>
+            <p className="text-sm font-bold text-slate-700">Pago #{refundPayment.id} · Reserva #{refundPayment.reserva_id} · Disponible: ${Math.max(0, Number(refundPayment.monto) - Number(refundPayment.monto_reembolsado || 0)).toFixed(2)}</p>
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-500">Monto a devolver
+              <input type="number" min="0.01" max={Math.max(0, Number(refundPayment.monto) - Number(refundPayment.monto_reembolsado || 0)).toFixed(2)} step="0.01" value={refundForm.monto} onChange={(event) => setRefundForm({ ...refundForm, monto: event.target.value })} className={`${INPUT} mt-1`} />
+            </label>
+            {Number(refundForm.monto) >= Number(refundPayment.reserva_monto_pagado || 0) - 0.01 && (
+              <p className="rounded-lg bg-red-50 p-3 text-xs font-semibold text-red-700">Si esta devolución deja en cero el saldo pagado de la reserva, primero debe estar cancelada.</p>
+            )}
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-500">Motivo excepcional
+              <textarea required minLength={5} maxLength={500} rows={3} value={refundForm.motivo} onChange={(event) => setRefundForm({ ...refundForm, motivo: event.target.value })} className={`${INPUT} mt-1 resize-none`} placeholder="Explica el motivo de la devolución" />
+            </label>
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-500">Referencia del reembolso externo
+              <input required minLength={3} maxLength={120} value={refundForm.referencia_externa} onChange={(event) => setRefundForm({ ...refundForm, referencia_externa: event.target.value })} className={`${INPUT} mt-1`} placeholder="Número de transacción o comprobante" />
+            </label>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setRefundPayment(null)} className="flex-1 rounded-xl border-2 border-slate-100 py-3 text-xs font-black uppercase tracking-widest text-slate-500">Cancelar</button>
+              <button type="button" onClick={() => void registrarReembolso()} disabled={actingId === refundPayment.id || !refundForm.motivo.trim() || !refundForm.referencia_externa.trim() || Number(refundForm.monto) <= 0} className="flex-1 rounded-xl bg-amber-600 py-3 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50">{actingId === refundPayment.id ? "Guardando..." : "Registrar devolución"}</button>
             </div>
           </div>
         </div>

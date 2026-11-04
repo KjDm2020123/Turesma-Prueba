@@ -61,6 +61,7 @@ const ESTADO_PAGO_STYLE: Record<string, { label: string; cls: string; icon: Reac
   parcial: { label: "Pago parcial", cls: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
   confirmado: { label: "Pago confirmado", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
   pagado: { label: "Pagado completo", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  reembolsado: { label: "Devuelto", cls: "bg-violet-50 text-violet-700 border-violet-200", icon: CheckCircle2 },
 };
 
 const ESTADO_COMPROBANTE_BADGE: Record<string, string> = {
@@ -487,7 +488,9 @@ export default function ClienteHistorialPage() {
             const pagoConfirmado = ["pagado", "confirmado"].includes(String(r.estado_pago || "").toLowerCase());
             const pagoCompleto = totalReserva > 0 && pagoConfirmado && saldoPendiente <= 0.01;
             const requierePago = totalReserva > 0 && !["cancelada"].includes(r.estado) && !pagoCompleto;
-            const pagoStyle = pagoCompleto
+            const pagoStyle = r.estado_pago === "reembolsado"
+              ? ESTADO_PAGO_STYLE.reembolsado
+              : pagoCompleto
               ? ESTADO_PAGO_STYLE.pagado
               : montoPagado > 0
                 ? ESTADO_PAGO_STYLE.parcial
@@ -522,6 +525,12 @@ export default function ClienteHistorialPage() {
                 </div>
 
                 {/* ESTADO DE PAGO / BOTÓN PARA PAGAR */}
+                {Number(r.total) > 0 && r.estado_pago === "reembolsado" && (
+                  <div className="mt-3 flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-violet-700">
+                    <CheckCircle2 size={12} />
+                    Devolución registrada por administración
+                  </div>
+                )}
                 {Number(r.total) > 0 && !["cancelada"].includes(r.estado) && (
                   <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
                     <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${pagoStyle.cls}`}>

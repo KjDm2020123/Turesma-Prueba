@@ -63,30 +63,69 @@ const confirmarPagoPayphone = async (req: any, res: any) => {
   if (!userId || !Number.isInteger(reservaId) || !paymentId || !clientTransactionId) return res.status(400).json({ error: "Datos de confirmación inválidos" });
   if (!clientTransactionId.startsWith(`turesma-reserva-${reservaId}-`)) return res.status(400).json({ error: "La transacción no corresponde a la reserva" });
   try {
-    const reserva = await getPaymentInfo(reservaId, userId);
-    if (!reserva) return res.status(404).json({ error: "Reserva no encontrada" });
     const payment = await confirmPayphonePayment({ id: paymentId, clientTransactionId });
     const status = String(payment.status || payment.transactionStatus || "").toLowerCase();
-    if (status && !["approved", "completed", "success", "3"].includes(status)) {
+    if (!["approved", "completed", "success", "3"].includes(status)) {
       return res.status(400).json({ error: "PayPhone no confirmó el pago" });
     }
     const monto = Number(payment.amount || payment.amountWithTax || 0) / 100;
     if (!Number.isFinite(monto) || monto <= 0) return res.status(400).json({ error: "PayPhone devolvió un monto inválido" });
-    validarMonto(reserva, monto);
-    const duplicate = await pool.query("SELECT id FROM pagos_reserva WHERE proveedor_id = $1 LIMIT 1", [paymentId]);
-    if (duplicate.rowCount) return res.status(409).json({ error: "Este pago PayPhone ya fue registrado" });
-    const saved = await pool.query(
-      `INSERT INTO pagos_reserva (reserva_id, usuario_id, monto, metodo, proveedor_id, estado, revisado_en)
-       VALUES ($1, $2, $3, 'payphone', $4, 'aprobado', NOW())
-       RETURNING id, monto, estado`, [reservaId, userId, monto, paymentId]
-    );
-    const suma = await pool.query("SELECT COALESCE(SUM(monto), 0) AS total FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'", [reservaId]);
-    const totalPagado = Number(suma.rows[0].total);
-    const estadoPago = totalPagado >= Number(reserva.total) - 0.01 ? "pagado" : "parcial";
-    await pool.query(
-      "UPDATE reservas SET monto_pagado = $1, estado_pago = $2 WHERE id = $3",
-      [totalPagado, estadoPago, reservaId]
-    );
+    const client = await pool.connect();
+    let reserva: any;
+    let saved: any;
+    let estadoPago: string;
+    let totalPagado: number;
+    try {
+      await client.query("BEGIN");
+      const reservaResult = await client.query(
+        `SELECT id, usuario_id, estado, total, COALESCE(monto_pagado, 0) AS monto_pagado
+         FROM reservas WHERE id = $1 AND usuario_id = $2 FOR UPDATE`,
+        [reservaId, userId]
+      );
+      if (!reservaResult.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Reserva no encontrada" });
+      }
+      reserva = reservaResult.rows[0];
+      if (["cancelada", "finalizada"].includes(reserva.estado)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Esta reserva no admite pagos" });
+      }
+      validarMonto(reserva, monto);
+      const duplicate = await client.query("SELECT id FROM pagos_reserva WHERE metodo = 'payphone' AND proveedor_id = $1 LIMIT 1", [paymentId]);
+      if (duplicate.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Este pago PayPhone ya fue registrado" });
+      }
+      saved = await client.query(
+        `INSERT INTO pagos_reserva (reserva_id, usuario_id, monto, metodo, proveedor_id, estado, revisado_en)
+         VALUES ($1, $2, $3, 'payphone', $4, 'aprobado', NOW())
+         RETURNING id, monto, estado`,
+        [reservaId, userId, monto, paymentId]
+      );
+      const suma = await client.query(
+        `SELECT
+           COALESCE((SELECT SUM(monto) FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'), 0)
+           - COALESCE((SELECT SUM(monto) FROM reembolsos_reserva WHERE reserva_id = $1), 0) AS total`,
+        [reservaId]
+      );
+      totalPagado = Number(suma.rows[0].total);
+      estadoPago = totalPagado >= Number(reserva.total) - 0.01
+        ? "pagado"
+        : totalPagado > 0 ? "parcial" : "reembolsado";
+      await client.query(
+        "UPDATE reservas SET monto_pagado = $1, estado_pago = $2 WHERE id = $3",
+        [totalPagado, estadoPago, reservaId]
+      );
+      await client.query("COMMIT");
+    } catch (error: any) {
+      await client.query("ROLLBACK");
+      if (error?.code === "23505") return res.status(409).json({ error: "Este pago PayPhone ya fue registrado" });
+      throw error;
+    } finally {
+      client.release();
+    }
+
     if (estadoPago === "pagado") {
       await pool.query(
         "UPDATE reservas SET estado = 'confirmada' WHERE id = $1 AND estado = 'pendiente_pago'",

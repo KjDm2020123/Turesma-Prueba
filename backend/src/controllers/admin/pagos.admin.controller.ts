@@ -16,18 +16,21 @@ const recalcularEstadoPago = async (reservaId: number, adminId: number | null | 
   const total = Number(reserva?.total) || 0;
 
   const sumaRes = await pool.query(
-    "SELECT COALESCE(SUM(monto), 0) AS suma FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'",
+    `SELECT
+       COALESCE((SELECT SUM(monto) FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'), 0)
+       - COALESCE((SELECT SUM(monto) FROM reembolsos_reserva WHERE reserva_id = $1), 0) AS suma,
+       COALESCE((SELECT SUM(monto) FROM reembolsos_reserva WHERE reserva_id = $1), 0) AS reembolsado`,
     [reservaId]
   );
   const montoPagado = Number(sumaRes.rows[0].suma) || 0;
   const estadoPago = montoPagado <= 0
-    ? "pendiente"
+    ? Number(sumaRes.rows[0].reembolsado) > 0 ? "reembolsado" : "pendiente"
     : montoPagado >= total - 0.01
       ? "pagado"
       : "parcial";
 
   await pool.query(
-    "UPDATE reservas SET monto_pagado = LEAST($1::numeric, total), estado_pago = $2 WHERE id = $3",
+    "UPDATE reservas SET monto_pagado = GREATEST(0, LEAST($1::numeric, total)), estado_pago = $2 WHERE id = $3",
     [montoPagado, estadoPago, reservaId]
   );
 
@@ -75,7 +78,18 @@ const listarPagosAdmin = async (req: any, res: any) => {
       `SELECT p.*,
               r.total AS reserva_total, r.origen, r.destino, r.estado AS reserva_estado,
               r.monto_pagado AS reserva_monto_pagado, r.estado_pago AS reserva_estado_pago,
-              u.nombre AS cliente_nombre, u.email AS cliente_email
+              u.nombre AS cliente_nombre, u.email AS cliente_email,
+              COALESCE((SELECT SUM(rr.monto) FROM reembolsos_reserva rr WHERE rr.pago_id = p.id), 0) AS monto_reembolsado,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'id', rr.id, 'monto', rr.monto, 'motivo', rr.motivo,
+                  'referencia_externa', rr.referencia_externa, 'creado_en', rr.creado_en,
+                  'procesado_por', COALESCE(ua.nombre, 'Usuario eliminado')
+                ) ORDER BY rr.creado_en DESC)
+                FROM reembolsos_reserva rr
+                LEFT JOIN usuarios ua ON ua.id = rr.procesado_por
+                WHERE rr.pago_id = p.id
+              ), '[]'::json) AS reembolsos
        FROM pagos_reserva p
        JOIN reservas r ON r.id = p.reserva_id
        JOIN usuarios u ON u.id = p.usuario_id
@@ -87,6 +101,106 @@ const listarPagosAdmin = async (req: any, res: any) => {
   } catch (error) {
     console.error("Error listando pagos (admin):", error);
     return res.status(500).json({ error: "Error interno del servidor" });
+  }
+};
+
+const registrarReembolso = async (req: any, res: any) => {
+  const pagoId = Number(req.params.id);
+  const monto = Number(req.body?.monto);
+  const motivo = typeof req.body?.motivo === "string" ? req.body.motivo.trim() : "";
+  const referencia = typeof req.body?.referencia_externa === "string" ? req.body.referencia_externa.trim() : "";
+  if (!Number.isInteger(pagoId) || pagoId <= 0 || !Number.isFinite(monto) || monto <= 0
+    || Math.round(monto * 100) !== monto * 100 || motivo.length < 5 || motivo.length > 500
+    || referencia.length < 3 || referencia.length > 120) {
+    return res.status(400).json({ error: "Indica un monto válido, un motivo de al menos 5 caracteres y la referencia de la devolución realizada" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const paymentResult = await client.query(
+      `SELECT p.id, p.reserva_id, p.monto, p.estado, r.total, r.estado AS reserva_estado
+       FROM pagos_reserva p JOIN reservas r ON r.id = p.reserva_id
+       WHERE p.id = $1 FOR UPDATE OF p, r`,
+      [pagoId]
+    );
+    if (!paymentResult.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Pago no encontrado" });
+    }
+    const payment = paymentResult.rows[0];
+    if (payment.estado !== "aprobado") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Solo se pueden registrar devoluciones de pagos aprobados" });
+    }
+    const previousRefunds = await client.query(
+      "SELECT COALESCE(SUM(monto), 0) AS total FROM reembolsos_reserva WHERE pago_id = $1",
+      [pagoId]
+    );
+    const remainingOnPayment = Number(payment.monto) - Number(previousRefunds.rows[0].total);
+    if (monto > remainingOnPayment + 0.001) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: `El pago solo tiene $${Math.max(0, remainingOnPayment).toFixed(2)} disponible para devolver` });
+    }
+    const balance = await client.query(
+      `SELECT
+         COALESCE((SELECT SUM(monto) FROM pagos_reserva WHERE reserva_id = $1 AND estado = 'aprobado'), 0)
+         - COALESCE((SELECT SUM(monto) FROM reembolsos_reserva WHERE reserva_id = $1), 0) AS neto,
+         COALESCE((SELECT SUM(monto) FROM reembolsos_reserva WHERE reserva_id = $1), 0) AS devuelto`,
+      [payment.reserva_id]
+    );
+    const netAfterRefund = Number(balance.rows[0].neto) - monto;
+    if (netAfterRefund < -0.001) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "La devolución supera el monto neto pagado en la reserva" });
+    }
+    if (netAfterRefund <= 0.01 && payment.reserva_estado !== "cancelada") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Para devolver el saldo total pagado, primero debe cancelarse la reserva" });
+    }
+
+    const saved = await client.query(
+      `INSERT INTO reembolsos_reserva (pago_id, reserva_id, monto, motivo, referencia_externa, procesado_por)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, pago_id, reserva_id, monto, motivo, referencia_externa, creado_en`,
+      [pagoId, payment.reserva_id, monto, motivo, referencia, req.user?.id || null]
+    );
+    const remaining = Math.max(0, netAfterRefund);
+    const refunded = Number(balance.rows[0].devuelto) + monto;
+    const paymentState = remaining <= 0.01
+      ? "reembolsado"
+      : remaining >= Number(payment.total) - 0.01
+        ? "pagado"
+        : "parcial";
+    await client.query(
+      "UPDATE reservas SET monto_pagado = $1, estado_pago = $2 WHERE id = $3",
+      [remaining, paymentState, payment.reserva_id]
+    );
+    await client.query(
+      `INSERT INTO reserva_historial (reserva_id, usuario_id, accion, estado_anterior, estado_nuevo, detalle)
+       VALUES ($1, $2, 'reembolso_registrado', $3, $3, $4::jsonb)`,
+      [
+        payment.reserva_id,
+        req.user?.id || null,
+        payment.reserva_estado,
+        JSON.stringify({ pago_id: pagoId, monto, motivo, referencia_externa: referencia }),
+      ]
+    );
+    await client.query("COMMIT");
+    return res.status(201).json({
+      message: "Se registró la devolución efectuada fuera del sistema. No se transfirió dinero desde Turesma.",
+      reembolso: saved.rows[0],
+      monto_pagado_neto: remaining,
+      monto_reembolsado_total: refunded,
+      estado_pago: paymentState,
+    });
+  } catch (error: any) {
+    await client.query("ROLLBACK");
+    if (error?.code === "23505") return res.status(409).json({ error: "La referencia de devolución ya está registrada" });
+    console.error("Error registrando devolución de pago:", error);
+    return res.status(500).json({ error: "No se pudo registrar la devolución" });
+  } finally {
+    client.release();
   }
 };
 
@@ -310,4 +424,5 @@ module.exports = {
   rechazarPago,
   actualizarLinkPago,
   registrarPagoManual,
+  registrarReembolso,
 };

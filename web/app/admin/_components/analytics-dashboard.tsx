@@ -285,16 +285,16 @@ export const AnalyticsDashboard = () => {
       {/* ── KPI PRINCIPAL ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPICard
-          label="Ingresos Totales"
+          label="Ingresos netos"
           value={fmt(kpi.ingresos)}
-          sub="Confirmadas, en curso y finalizadas"
+          sub="Cobros netos tras devoluciones"
           color="border-blue-200 bg-blue-50 text-blue-800"
           icon={DollarSign}
         />
         <KPICard
           label="Ganancias"
           value={fmt(kpi.ganancias)}
-          sub="Ingresos menos gastos"
+          sub="Ingresos netos menos gastos"
           color="border-emerald-200 bg-emerald-50 text-emerald-800"
           icon={TrendingUp}
         />
@@ -348,7 +348,7 @@ export const AnalyticsDashboard = () => {
 
       {/* ── FILA 1: Ingresos & Ganancias | Reservas por Estado ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Ingresos y ganancia neta por mes" description="Ganancia neta calculada como ingresos menos mantenimiento registrado.">
+        <ChartCard title="Ingresos y ganancia neta por mes" description="Cobros netos agrupados por fecha de reserva; la ganancia descuenta el mantenimiento registrado.">
           {mensualChart.length === 0 ? (
             <div className="flex h-52 items-center justify-center text-xs text-slate-300 font-bold">Sin datos mensuales aún</div>
           ) : (

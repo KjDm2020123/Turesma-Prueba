@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, Plus, RefreshCw, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, History, Plus, RefreshCw, Sparkles, X } from "lucide-react";
 import { getAuthHeaders } from "../../../lib/session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -59,6 +59,8 @@ type Operation = {
   vehiculo_placa?: string | null;
   conductor_nombre?: string | null;
   conductor_apellido?: string | null;
+  empresa_asociada_id?: number | null;
+  vehiculo_asociado_id?: number | null;
   subcontratacion_estado?: "no_requerida" | "pendiente" | "confirmada";
   subcontratista_empresa?: string | null;
   subcontratista_contacto?: string | null;
@@ -90,6 +92,24 @@ type ReservationReady = {
 
 type Vehicle = { id: number; placa: string; modelo: string; capacidad: number; estado: string; activo: boolean };
 type Driver = { id: number; nombre: string; apellido?: string; estado: string; activo: boolean };
+type PartnerVehicle = {
+  id: number;
+  empresa_id: number;
+  placa: string;
+  modelo: string;
+  capacidad: number;
+  conductor: string | null;
+  conductor_telefono: string | null;
+  activo: boolean;
+};
+type PartnerCompany = {
+  id: number;
+  nombre: string;
+  contacto: string | null;
+  telefono: string | null;
+  activa: boolean;
+  vehiculos: PartnerVehicle[];
+};
 type AssignmentRecommendation = {
   decisionId: number | null;
   fecha: string;
@@ -114,6 +134,16 @@ type AssignmentRecommendation = {
     advertencias: string[];
     elegible: boolean;
   }>;
+};
+type OperationHistoryEntry = {
+  id: number;
+  accion: string;
+  estado_anterior: string | null;
+  estado_nuevo: string | null;
+  detalle: Record<string, unknown> | string | null;
+  creado_en: string;
+  usuario_nombre: string | null;
+  usuario_apellido: string | null;
 };
 
 const stateLabels: Record<string, string> = {
@@ -143,6 +173,7 @@ export default function OperacionesPage() {
   const [reservations, setReservations] = useState<ReservationReady[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [partnerCompanies, setPartnerCompanies] = useState<PartnerCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -150,8 +181,14 @@ export default function OperacionesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [assignment, setAssignment] = useState<Operation | null>(null);
   const [subcontracting, setSubcontracting] = useState<Operation | null>(null);
+  const [historyOperation, setHistoryOperation] = useState<Operation | null>(null);
+  const [operationHistory, setOperationHistory] = useState<OperationHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [subcontractingForm, setSubcontractingForm] = useState({
     estado: "pendiente" as "no_requerida" | "pendiente" | "confirmada",
+    empresa_asociada_id: "",
+    vehiculo_asociado_id: "",
     empresa: "",
     contacto: "",
     telefono: "",
@@ -181,22 +218,25 @@ export default function OperacionesPage() {
     setError("");
     try {
       const headers = getAuthHeaders();
-      const [operationsRes, reservationsRes, vehiclesRes, driversRes] = await Promise.all([
+      const [operationsRes, reservationsRes, vehiclesRes, driversRes, partnersRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/operaciones`, { headers }),
         fetch(`${API_URL}/api/admin/operaciones/reservas-pendientes`, { headers }),
         fetch(`${API_URL}/api/admin/vehiculos`, { headers }),
         fetch(`${API_URL}/api/admin/conductores`, { headers }),
+        fetch(`${API_URL}/api/admin/empresas-asociadas`, { headers }),
       ]);
-      const [operationsData, reservationsData, vehiclesData, driversData] = await Promise.all([
+      const [operationsData, reservationsData, vehiclesData, driversData, partnersData] = await Promise.all([
         readApiJson<{ data?: Operation[] }>(operationsRes, "/api/admin/operaciones"),
         readApiJson<{ data?: ReservationReady[] }>(reservationsRes, "/api/admin/operaciones/reservas-pendientes"),
         readApiJson<ApiList<Vehicle>>(vehiclesRes, "/api/admin/vehiculos"),
         readApiJson<ApiList<Driver>>(driversRes, "/api/admin/conductores"),
+        readApiJson<{ data?: PartnerCompany[] }>(partnersRes, "/api/admin/empresas-asociadas"),
       ]);
       setOperations(operationsData.data || []);
       setReservations(reservationsData.data || []);
       setVehicles(getApiList(vehiclesData));
       setDrivers(getApiList(driversData));
+      setPartnerCompanies(partnersData.data || []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Error cargando datos operativos");
     } finally {
@@ -211,6 +251,21 @@ export default function OperacionesPage() {
   const request = async (url: string, options: RequestInit) => {
     const response = await fetch(`${API_URL}${url}`, { ...options, headers: { ...getAuthHeaders(), "Content-Type": "application/json" } });
     return readApiJson<Record<string, unknown>>(response, url);
+  };
+
+  const openOperationHistory = async (operation: Operation) => {
+    setHistoryOperation(operation);
+    setOperationHistory([]);
+    setHistoryError("");
+    setHistoryLoading(true);
+    try {
+      const payload = await request(`/api/admin/operaciones/${operation.id}/historial`, { method: "GET" });
+      setOperationHistory(payload.data as OperationHistoryEntry[] || []);
+    } catch (loadError) {
+      setHistoryError(loadError instanceof Error ? loadError.message : "No se pudo cargar el historial");
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const sendReservationToDispatch = async (reservation: ReservationReady) => {
@@ -314,6 +369,8 @@ export default function OperacionesPage() {
       estado: operation.subcontratacion_estado && operation.subcontratacion_estado !== "no_requerida"
         ? operation.subcontratacion_estado
         : "pendiente",
+      empresa_asociada_id: operation.empresa_asociada_id ? String(operation.empresa_asociada_id) : "",
+      vehiculo_asociado_id: operation.vehiculo_asociado_id ? String(operation.vehiculo_asociado_id) : "",
       empresa: operation.subcontratista_empresa || "",
       contacto: operation.subcontratista_contacto || "",
       telefono: operation.subcontratista_telefono || "",
@@ -349,6 +406,9 @@ export default function OperacionesPage() {
       setSaving(false);
     }
   };
+
+  const selectedPartner = partnerCompanies.find((company) => String(company.id) === subcontractingForm.empresa_asociada_id);
+  const partnerVehicles = selectedPartner?.vehiculos.filter((vehicle) => vehicle.activo) || [];
 
   const openAssignment = (operation: Operation) => {
     setAssignment(operation);
@@ -441,10 +501,14 @@ export default function OperacionesPage() {
         ) : (
           <div className="divide-y divide-slate-100">
             {reservations.map((reservation) => (
-              <div key={reservation.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="font-black text-slate-900">Reserva #{reservation.id} · {reservation.cliente_nombre || "Cliente"}</p>
-                  <p className="mt-1 text-sm text-slate-600">{reservation.origen || "Origen pendiente"} → {reservation.destino || "Destino pendiente"}</p>
+              <div key={reservation.id} className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5">
+                <div className="min-w-0 space-y-2">
+                  <p className="font-black leading-snug text-slate-900">Reserva #{reservation.id}<span className="font-semibold text-slate-500"> · {reservation.cliente_nombre || "Cliente"}</span></p>
+                  <p className="break-words rounded-lg bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-700">
+                    <span className="font-semibold">{reservation.origen || "Origen pendiente"}</span>
+                    <span className="px-2 text-slate-400">→</span>
+                    <span className="font-semibold">{reservation.destino || "Destino pendiente"}</span>
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {String(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva).slice(0, 10)}
                     {" · "}{reservation.num_personas} pasajeros
@@ -473,7 +537,18 @@ export default function OperacionesPage() {
           <button onClick={() => void load()} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Actualizar operaciones"><RefreshCw size={17} /></button>
         </div>
         {loading ? <p className="p-8 text-center text-sm font-semibold text-slate-400">Cargando servicios...</p> : operations.length === 0 ? <div className="p-10 text-center"><p className="text-sm font-black text-slate-500">No hay servicios programados</p><p className="mt-1 text-xs text-slate-400">Las reservas confirmadas aparecerán aquí para asignar conductor y vehículo.</p></div> : (
-          <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3">Servicio</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Ruta</th><th className="px-5 py-3">Recursos</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{operations.map((operation) => {
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1240px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[210px]" />
+                <col className="w-[155px]" />
+                <col className="w-[270px]" />
+                <col className="w-[205px]" />
+                <col className="w-[150px]" />
+                <col className="w-[250px]" />
+              </colgroup>
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Servicio</th><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Ruta</th><th className="px-4 py-3">Recursos</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Acciones</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">{operations.map((operation) => {
             const startTime = formatTime(operation.hora_inicio);
             const endTime = formatTime(operation.hora_fin);
             const subcontractState = operation.subcontratacion_estado || "no_requerida";
@@ -484,8 +559,55 @@ export default function OperacionesPage() {
             const serviceTitle = operation.requerimiento_id
               ? `Requerimiento #${operation.requerimiento_id} · Grupo ${operation.grupo_numero} · Unidad ${operation.unidad_numero}`
               : operation.reserva_id ? `Reserva #${operation.reserva_id}` : operation.tipo_servicio;
-            return <tr key={operation.id} className="align-top"><td className="px-5 py-4"><p className="font-black text-slate-900">#{operation.id} · {serviceTitle}</p><p className="mt-1 text-xs text-slate-500">{operation.pasajeros} pasajeros{operation.tipo_vehiculo_solicitado ? ` · ${operation.tipo_vehiculo_solicitado} solicitado` : ""}</p></td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{dateRange}<br /><span className="text-xs">{startTime || "Sin hora"}{endTime ? ` - ${endTime}` : ""}</span></td><td className="max-w-xs px-5 py-4 text-slate-600">{operation.origen}<br /><span className="font-semibold text-slate-900">{operation.destino}</span></td><td className="px-5 py-4 text-xs text-slate-600">{subcontractState !== "no_requerida" ? <><span className="font-bold text-amber-700">{operation.subcontratista_placa || "Proveedor pendiente"}</span><br />{operation.subcontratista_empresa || "Sin proveedor registrado"}<br />{operation.subcontratista_conductor || "Sin conductor registrado"}</> : <>{operation.vehiculo_placa || "Sin vehículo"}<br />{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</>}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span>{subcontractState !== "no_requerida" && <p className={`mt-2 text-xs font-bold ${subcontractState === "confirmada" ? "text-emerald-700" : "text-amber-700"}`}>{subcontractingLabels[subcontractState]}</p>}</td><td className="space-y-2 px-5 py-4"><div className="flex flex-wrap gap-2">{["programada", "asignada"].includes(operation.estado) && subcontractState === "no_requerida" && <button onClick={() => openAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}{canEditSubcontracting && <button onClick={() => openSubcontracting(operation)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">{subcontractState === "no_requerida" ? "Subcontratar" : "Editar proveedor"}</button>}{operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}{operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}{operation.estado === "cancelada" && <button onClick={() => void reopenOperation(operation)} disabled={saving} className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Reabrir unidad</button>}</div></td></tr>;
-          })}</tbody></table></div>
+           return (
+             <tr key={operation.id} className="align-top">
+               <td className="px-4 py-4">
+                 <p className="font-black leading-snug text-slate-900">{serviceTitle}</p>
+                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Operación #{operation.id}</p>
+                 <p className="mt-2 text-xs text-slate-500">{operation.pasajeros} pasajeros{operation.tipo_vehiculo_solicitado ? ` · ${operation.tipo_vehiculo_solicitado} solicitado` : ""}</p>
+               </td>
+               <td className="whitespace-nowrap px-4 py-4 text-slate-700">
+                 <p className="font-semibold">{dateRange}</p>
+                 <p className="mt-1 text-xs text-slate-500">{startTime || "Sin hora"}{endTime ? ` - ${endTime}` : ""}</p>
+               </td>
+               <td className="break-words px-4 py-4 text-xs leading-relaxed text-slate-600">
+                 <p>{operation.origen || "Origen pendiente"}</p>
+                 <p className="my-1 text-[10px] font-bold uppercase text-slate-400">hasta</p>
+                 <p className="font-semibold text-slate-900">{operation.destino || "Destino pendiente"}</p>
+               </td>
+               <td className="break-words px-4 py-4 text-xs leading-relaxed text-slate-600">
+                 {subcontractState !== "no_requerida" ? (
+                   <>
+                     <p className="font-bold text-amber-700">{operation.subcontratista_placa || "Proveedor pendiente"}</p>
+                     <p>{operation.subcontratista_empresa || "Sin proveedor registrado"}</p>
+                     <p>{operation.subcontratista_conductor || "Sin conductor registrado"}</p>
+                   </>
+                 ) : (
+                   <>
+                     <p className="font-bold text-slate-800">{operation.vehiculo_placa || "Sin vehículo"}</p>
+                     <p>{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</p>
+                   </>
+                 )}
+               </td>
+               <td className="px-4 py-4">
+                 <span className="inline-flex whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span>
+                 {subcontractState !== "no_requerida" && <p className={`mt-2 text-xs font-bold ${subcontractState === "confirmada" ? "text-emerald-700" : "text-amber-700"}`}>{subcontractingLabels[subcontractState]}</p>}
+               </td>
+               <td className="px-4 py-4">
+                 <div className="flex flex-wrap gap-2">
+                   <button onClick={() => void openOperationHistory(operation)} className="rounded-lg bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700">Historial</button>
+                   {["programada", "asignada"].includes(operation.estado) && subcontractState === "no_requerida" && <button onClick={() => openAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}
+                   {canEditSubcontracting && <button onClick={() => openSubcontracting(operation)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">{subcontractState === "no_requerida" ? "Subcontratar" : "Editar proveedor"}</button>}
+                   {operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}
+                   {operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}
+                   {operation.estado === "cancelada" && <button onClick={() => void reopenOperation(operation)} disabled={saving} className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Reabrir unidad</button>}
+                 </div>
+               </td>
+             </tr>
+           );
+          })}</tbody>
+           </table>
+          </div>
         )}
       </section>
 
@@ -655,6 +777,62 @@ export default function OperacionesPage() {
             </label>
             {subcontractingForm.estado !== "no_requerida" && (
               <>
+                <div className="grid gap-4 rounded-xl border border-amber-100 bg-amber-50/60 p-4 sm:grid-cols-2">
+                  <label className="text-sm font-bold text-slate-600">Empresa registrada
+                    <select
+                      value={subcontractingForm.empresa_asociada_id}
+                      onChange={(event) => {
+                        const companyId = event.target.value;
+                        const company = partnerCompanies.find((item) => String(item.id) === companyId);
+                        setSubcontractingForm({
+                          ...subcontractingForm,
+                          empresa_asociada_id: companyId,
+                          vehiculo_asociado_id: "",
+                          empresa: company?.nombre || "",
+                          contacto: company?.contacto || "",
+                          telefono: company?.telefono || "",
+                          vehiculo: "",
+                          placa: "",
+                          conductor: "",
+                          conductor_telefono: "",
+                        });
+                      }}
+                      className="mt-1 w-full rounded-xl border bg-white p-3"
+                    >
+                      <option value="">Selecciona empresa (o completa datos históricos abajo)</option>
+                      {partnerCompanies.filter((company) => company.activa).map((company) => (
+                        <option key={company.id} value={company.id}>{company.nombre}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm font-bold text-slate-600">Vehículo registrado
+                    <select
+                      value={subcontractingForm.vehiculo_asociado_id}
+                      onChange={(event) => {
+                        const vehicleId = event.target.value;
+                        const vehicle = partnerVehicles.find((item) => String(item.id) === vehicleId);
+                        setSubcontractingForm({
+                          ...subcontractingForm,
+                          vehiculo_asociado_id: vehicleId,
+                          vehiculo: vehicle?.modelo || "",
+                          placa: vehicle?.placa || "",
+                          conductor: vehicle?.conductor || "",
+                          conductor_telefono: vehicle?.conductor_telefono || "",
+                        });
+                      }}
+                      disabled={!selectedPartner}
+                      className="mt-1 w-full rounded-xl border bg-white p-3 disabled:bg-slate-100"
+                    >
+                      <option value="">Selecciona un vehículo</option>
+                      {partnerVehicles.map((vehicle) => (
+                        <option key={vehicle.id} value={vehicle.id}>{vehicle.placa} · {vehicle.modelo} · {vehicle.capacidad} plazas</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-xs leading-relaxed text-slate-600 sm:col-span-2">
+                    Administra empresas y vehículos en <a href="/admin/empresas-asociadas" className="font-bold text-[#E31E24] underline">Empresas asociadas</a>. Las asignaciones registradas comprueban capacidad y cruces de horario.
+                  </p>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-bold text-slate-600">Empresa proveedora
                     <input maxLength={160} value={subcontractingForm.empresa} onChange={(event) => setSubcontractingForm({ ...subcontractingForm, empresa: event.target.value })} className="mt-1 w-full rounded-xl border p-3" required={subcontractingForm.estado === "confirmada"} />
@@ -697,6 +875,28 @@ export default function OperacionesPage() {
               {saving ? "Guardando..." : "Guardar subcontratación"}
             </button>
           </form>
+        </div>
+      )}
+      {historyOperation && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4">
+          <section className="max-h-[85dvh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="text-xs font-black uppercase tracking-widest text-violet-700">Auditoría del despacho</p><h2 className="mt-1 text-lg font-black text-slate-900">Operación #{historyOperation.id}</h2></div>
+              <button type="button" onClick={() => setHistoryOperation(null)} aria-label="Cerrar historial" className="rounded-lg p-2 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            {historyLoading ? <p className="py-12 text-center text-sm font-bold text-slate-400">Cargando historial...</p>
+              : historyError ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{historyError}</p>
+                : operationHistory.length === 0 ? <p className="mt-5 rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-500">Aún no hay cambios registrados.</p>
+                  : <ol className="mt-5 space-y-3">{operationHistory.map((entry) => (
+                    <li key={entry.id} className="rounded-xl border border-slate-200 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div><p className="font-black capitalize text-slate-800">{entry.accion.replaceAll("_", " ")}</p><p className="mt-1 text-xs text-slate-500">{entry.estado_anterior || "—"} → {entry.estado_nuevo || "—"} · {entry.usuario_nombre || "Usuario eliminado"} {entry.usuario_apellido || ""}</p></div>
+                        <time className="text-xs font-semibold text-slate-400">{new Date(entry.creado_en).toLocaleString("es-EC")}</time>
+                      </div>
+                      {entry.detalle && <pre className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{JSON.stringify(typeof entry.detalle === "string" ? JSON.parse(entry.detalle) : entry.detalle, null, 2)}</pre>}
+                    </li>
+                  ))}</ol>}
+          </section>
         </div>
       )}
     </main>

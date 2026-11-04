@@ -588,6 +588,12 @@ const editarReserva = async (req, res) => {
     const fechaSalida = normalizeTimestampInput(req.body.fecha_salida) || normalizeTimestampInput(current.fecha_salida) || fechaReservaTimestamp;
     const fechaLlegada = normalizeTimestampInput(req.body.fecha_llegada) || normalizeTimestampInput(current.fecha_llegada) || fechaReservaTimestamp;
     const fechaServicio = normalizeTimestampInput(req.body.fecha_servicio) || fechaSalida;
+    const scheduleChanged = [
+      [fechaReservaTimestamp, normalizeTimestampInput(current.fecha_reserva)],
+      [fechaSalida, normalizeTimestampInput(current.fecha_salida) || normalizeTimestampInput(current.fecha_reserva)],
+      [fechaLlegada, normalizeTimestampInput(current.fecha_llegada) || normalizeTimestampInput(current.fecha_reserva)],
+      [fechaServicio, normalizeTimestampInput(current.fecha_servicio) || normalizeTimestampInput(current.fecha_salida) || normalizeTimestampInput(current.fecha_reserva)],
+    ].some(([next, previous]) => next !== previous);
 
     if (!(await isReservaEstadoValido(estadoFinal))) {
       return res.status(400).json({ error: "Estado de viaje inválido" });
@@ -595,6 +601,20 @@ const editarReserva = async (req, res) => {
 
     if (["cancelada", "finalizada"].includes(String(current.estado || "").toLowerCase())) {
       return res.status(400).json({ error: "No puedes reprogramar una reserva cancelada o finalizada" });
+    }
+
+    if (scheduleChanged) {
+      const activeOperations = await pool.query(
+        `SELECT id FROM operaciones
+         WHERE reserva_id = $1 AND estado IN ('programada', 'asignada', 'incidencia')
+         LIMIT 1`,
+        [reservaId]
+      );
+      if (activeOperations.rowCount) {
+        return res.status(409).json({
+          error: "No se puede cambiar la fecha mientras haya operaciones activas. Cancela o reprograma las operaciones desde Despacho primero.",
+        });
+      }
     }
 
     const userResult = await pool.query("SELECT id FROM usuarios WHERE id = $1 LIMIT 1", [usuarioId]);
@@ -720,17 +740,34 @@ const eliminarReserva = async (req, res) => {
     return res.status(400).json({ error: "ID de reserva inválido" });
   }
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query("DELETE FROM reservas WHERE id = $1 RETURNING id", [reservaId]);
-
-    if (result.rowCount === 0) {
+    await client.query("BEGIN");
+    const reservation = await client.query("SELECT id FROM reservas WHERE id = $1 FOR UPDATE", [reservaId]);
+    if (!reservation.rowCount) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Reserva no encontrada" });
     }
-
+    const related = await client.query(
+      `SELECT
+         EXISTS (SELECT 1 FROM pagos_reserva WHERE reserva_id = $1) AS tiene_pagos,
+         EXISTS (SELECT 1 FROM operaciones WHERE reserva_id = $1) AS tiene_operaciones,
+         EXISTS (SELECT 1 FROM reserva_historial WHERE reserva_id = $1) AS tiene_historial`,
+      [reservaId]
+    );
+    if (related.rowCount && (related.rows[0].tiene_pagos || related.rows[0].tiene_operaciones || related.rows[0].tiene_historial)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Esta reserva tiene pagos, operaciones o historial. Cancélala para conservar la trazabilidad; no se puede eliminar." });
+    }
+    await client.query("DELETE FROM reservas WHERE id = $1", [reservaId]);
+    await client.query("COMMIT");
     return res.status(200).json({ message: "Reserva eliminada correctamente" });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Error eliminando reserva:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
+  } finally {
+    client.release();
   }
 };
 
@@ -766,6 +803,14 @@ const verEstadoViaje = async (req, res) => {
 const actualizarEstadoViaje = async (req, res) => {
   const reservaId = parsePositiveInt(req.params.id);
   const { estado } = req.body;
+  const transitions: Record<string, string[]> = {
+    pendiente: ["confirmada", "cancelada"],
+    pendiente_pago: ["confirmada", "cancelada"],
+    confirmada: ["en_curso", "cancelada"],
+    en_curso: ["finalizada"],
+    finalizada: [],
+    cancelada: [],
+  };
 
   if (!reservaId || !estado) {
     return res.status(400).json({ error: "Debes enviar id y estado" });
@@ -775,36 +820,62 @@ const actualizarEstadoViaje = async (req, res) => {
     return res.status(400).json({ error: "Estado de viaje inválido" });
   }
 
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+    const reservaActual = await client.query(
+      "SELECT id, usuario_id, total, estado, estado_pago FROM reservas WHERE id = $1 FOR UPDATE",
+      [reservaId]
+    );
+    if (!reservaActual.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Reserva no encontrada" });
+    }
+    const current = reservaActual.rows[0];
+    if (!transitions[current.estado]?.includes(estado)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: `No se puede cambiar de '${current.estado}' a '${estado}'` });
+    }
     if (["en_curso", "finalizada"].includes(estado)) {
-      const reservaActual = await pool.query(
-        `SELECT total, estado_pago
-         FROM reservas
-         WHERE id = $1
-         LIMIT 1`,
-        [reservaId]
-      );
-
-      if (reservaActual.rowCount === 0) {
-        return res.status(404).json({ error: "Reserva no encontrada" });
-      }
-
-      const { total, estado_pago: estadoPago } = reservaActual.rows[0];
-      if (Number(total) > 0 && estadoPago !== "pagado") {
+      if (Number(current.total) > 0 && current.estado_pago !== "pagado") {
+        await client.query("ROLLBACK");
         return res.status(400).json({
           error: "No puedes iniciar o finalizar un viaje sin el pago completo confirmado",
         });
       }
     }
 
-    const result = await pool.query(
+    const result = await client.query(
       "UPDATE reservas SET estado = $1 WHERE id = $2 RETURNING id, estado",
       [estado, reservaId]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Reserva no encontrada" });
+    if (estado === "cancelada") {
+      const operations = await client.query(
+        `WITH affected AS (
+           SELECT id, estado FROM operaciones
+           WHERE reserva_id = $1 AND estado IN ('programada', 'asignada', 'incidencia')
+           FOR UPDATE
+         )
+         UPDATE operaciones o SET estado = 'cancelada', actualizado_en = CURRENT_TIMESTAMP
+         FROM affected a WHERE o.id = a.id
+         RETURNING o.id, a.estado AS estado_anterior`,
+        [reservaId]
+      );
+      for (const operation of operations.rows) {
+        await client.query(
+          `INSERT INTO operacion_historial (operacion_id, usuario_id, accion, estado_anterior, estado_nuevo, detalle)
+           VALUES ($1, $2, 'cancelacion_reserva_admin', $3, 'cancelada', $4::jsonb)`,
+          [operation.id, req.user?.id || null, operation.estado_anterior, JSON.stringify({ reserva_id: reservaId })]
+        );
+      }
     }
+    await client.query(
+      `INSERT INTO reserva_historial (reserva_id, usuario_id, accion, estado_anterior, estado_nuevo, detalle)
+       VALUES ($1, $2, 'cambio_estado_admin', $3, $4, $5::jsonb)`,
+      [reservaId, req.user?.id || null, current.estado, estado, JSON.stringify({})]
+    );
+    await client.query("COMMIT");
 
     // Avisar al cliente (campanita + correo) si el admin cambia a un estado clave.
     const estadoNuevo = String(result.rows[0].estado || "").toLowerCase();
@@ -817,8 +888,11 @@ const actualizarEstadoViaje = async (req, res) => {
       viaje: result.rows[0],
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Error actualizando estado del viaje:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
+  } finally {
+    client.release();
   }
 };
 

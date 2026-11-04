@@ -349,6 +349,40 @@ const initDatabase = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS empresas_asociadas (
+      id SERIAL PRIMARY KEY,
+      nombre VARCHAR(160) NOT NULL,
+      identificacion VARCHAR(30),
+      contacto VARCHAR(120),
+      telefono VARCHAR(40),
+      email VARCHAR(160),
+      activa BOOLEAN NOT NULL DEFAULT true,
+      notas TEXT,
+      creado_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS empresas_asociadas_nombre_unique
+      ON empresas_asociadas (LOWER(nombre));
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vehiculos_asociados (
+      id SERIAL PRIMARY KEY,
+      empresa_id INT NOT NULL REFERENCES empresas_asociadas(id) ON DELETE RESTRICT,
+      placa VARCHAR(30) NOT NULL,
+      modelo VARCHAR(120) NOT NULL,
+      capacidad INT NOT NULL CHECK (capacidad > 0),
+      conductor VARCHAR(120),
+      conductor_telefono VARCHAR(40),
+      activo BOOLEAN NOT NULL DEFAULT true,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (empresa_id, placa)
+    );
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS operaciones (
       id SERIAL PRIMARY KEY,
       reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL,
@@ -380,6 +414,8 @@ const initDatabase = async () => {
       subcontratista_conductor VARCHAR(120),
       subcontratista_conductor_telefono VARCHAR(40),
       subcontratacion_costo NUMERIC(10, 2),
+      empresa_asociada_id INT REFERENCES empresas_asociadas(id) ON DELETE SET NULL,
+      vehiculo_asociado_id INT REFERENCES vehiculos_asociados(id) ON DELETE SET NULL,
       observaciones TEXT,
       creado_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -402,6 +438,8 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS subcontratista_conductor VARCHAR(120),
     ADD COLUMN IF NOT EXISTS subcontratista_conductor_telefono VARCHAR(40),
     ADD COLUMN IF NOT EXISTS subcontratacion_costo NUMERIC(10, 2),
+    ADD COLUMN IF NOT EXISTS empresa_asociada_id INT REFERENCES empresas_asociadas(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS vehiculo_asociado_id INT REFERENCES vehiculos_asociados(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS requerimiento_id INT,
     ADD COLUMN IF NOT EXISTS grupo_numero INT,
     ADD COLUMN IF NOT EXISTS unidad_numero INT,
@@ -439,6 +477,11 @@ const initDatabase = async () => {
     CREATE INDEX IF NOT EXISTS operaciones_conductor_fecha_idx
     ON operaciones (conductor_id, fecha_programada, hora_inicio, hora_fin);
   `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS operaciones_vehiculo_asociado_fecha_idx
+    ON operaciones (vehiculo_asociado_id, fecha_programada, fecha_fin_programada)
+    WHERE vehiculo_asociado_id IS NOT NULL;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS operacion_historial (
@@ -451,6 +494,21 @@ const initDatabase = async () => {
       detalle JSONB,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reserva_historial (
+      id SERIAL PRIMARY KEY,
+      reserva_id INT NOT NULL REFERENCES reservas(id) ON DELETE CASCADE,
+      usuario_id INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      accion VARCHAR(50) NOT NULL,
+      estado_anterior VARCHAR(30),
+      estado_nuevo VARCHAR(30),
+      detalle JSONB,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS reserva_historial_reserva_idx
+      ON reserva_historial (reserva_id, creado_en DESC);
   `);
 
   await pool.query(`
@@ -737,6 +795,39 @@ const initDatabase = async () => {
   await pool.query(`
     ALTER TABLE pagos_reserva
     ADD COLUMN IF NOT EXISTS proveedor_id VARCHAR(120);
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pagos_reserva
+        WHERE proveedor_id IS NOT NULL
+        GROUP BY metodo, proveedor_id
+        HAVING COUNT(*) > 1
+      ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS pagos_reserva_proveedor_unique
+          ON pagos_reserva (metodo, proveedor_id)
+          WHERE proveedor_id IS NOT NULL;
+      ELSE
+        RAISE NOTICE 'Se omitió el índice único de pagos: hay transacciones de proveedor duplicadas que requieren conciliación.';
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reembolsos_reserva (
+      id SERIAL PRIMARY KEY,
+      pago_id INT NOT NULL REFERENCES pagos_reserva(id) ON DELETE RESTRICT,
+      reserva_id INT NOT NULL REFERENCES reservas(id) ON DELETE RESTRICT,
+      monto NUMERIC(10, 2) NOT NULL CHECK (monto > 0),
+      motivo TEXT NOT NULL,
+      referencia_externa VARCHAR(120) NOT NULL,
+      procesado_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS reembolsos_reserva_referencia_unique
+      ON reembolsos_reserva (LOWER(referencia_externa));
+    CREATE INDEX IF NOT EXISTS reembolsos_reserva_reserva_idx
+      ON reembolsos_reserva (reserva_id, creado_en DESC);
   `);
 
   await pool.query(`

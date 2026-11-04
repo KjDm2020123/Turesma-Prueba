@@ -31,7 +31,7 @@ const getDashboardData = async (req: any, res: any) => {
       await Promise.all([
         pool.query(`
           SELECT
-            COALESCE(SUM(CASE WHEN estado IN ('finalizada','en_curso','confirmada') THEN total ELSE 0 END), 0)::numeric AS ingresos,
+            COALESCE(SUM(monto_pagado), 0)::numeric AS ingresos,
             COUNT(*)::int AS total_reservas,
             COUNT(CASE WHEN estado = 'pendiente' THEN 1 END)::int AS pendientes,
             COUNT(CASE WHEN estado = 'confirmada' THEN 1 END)::int AS confirmadas,
@@ -54,11 +54,11 @@ const getDashboardData = async (req: any, res: any) => {
             v.placa,
             v.modelo,
             v.tipo,
-            COALESCE(SUM(CASE WHEN r.estado IN ('confirmada','en_curso','finalizada') THEN r.total ELSE 0 END), 0)::numeric AS ingresos,
-            COUNT(r.id)::int AS reservas,
+            COALESCE(SUM(r.monto_pagado), 0)::numeric AS ingresos,
+            (COUNT(r.id) FILTER (WHERE r.estado <> 'cancelada'))::int AS reservas,
             COALESCE(SUM(CASE WHEN r.estado IN ('confirmada','en_curso','finalizada') THEN r.num_personas ELSE 0 END), 0)::int AS pasajeros
           FROM vehiculos v
-          LEFT JOIN reservas r ON r.vehiculo_id = v.id AND r.estado NOT IN ('cancelada') ${rangeClause("r.fecha_reserva")}
+          LEFT JOIN reservas r ON r.vehiculo_id = v.id ${rangeClause("r.fecha_reserva")}
           WHERE v.activo = true
           GROUP BY v.id, v.placa, v.modelo, v.tipo
           ORDER BY reservas DESC, ingresos DESC
@@ -110,7 +110,7 @@ const getDashboardData = async (req: any, res: any) => {
       reservas_mes AS (
         SELECT
           date_trunc('month', fecha_reserva)::date AS mes_inicio,
-          COALESCE(SUM(CASE WHEN estado IN ('confirmada','en_curso','finalizada') THEN total ELSE 0 END), 0)::numeric AS ingresos,
+          COALESCE(SUM(monto_pagado), 0)::numeric AS ingresos,
           COUNT(*)::int AS reservas
         FROM reservas
         WHERE ${periodClause("fecha_reserva")}

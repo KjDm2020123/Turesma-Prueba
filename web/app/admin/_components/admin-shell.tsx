@@ -33,7 +33,8 @@ import {
   IdCard,
   Images,
   ImagePlus,
-  Ticket
+  Ticket,
+  Building2,
 } from "lucide-react";
 import { clearStoredUser } from "../../../lib/session";
 import { NotificationBell } from "../../../components/notification-bell";
@@ -73,6 +74,7 @@ const menuGroups: MenuGroup[] = [
   {
     id: "operaciones", label: "Operaciones", icon: Route, items: [
       { href: "/admin/operaciones", label: "Despacho", icon: ClipboardList },
+      { href: "/admin/empresas-asociadas", label: "Empresas asociadas", icon: Building2, adminOnly: true },
       { href: "/admin/calendario-flota", label: "Calendario de flota", icon: CalendarDays, adminOnly: true },
       { href: "/admin/viajes", label: "Viajes publicados", icon: Ticket },
       { href: "/admin/cotizaciones", label: "Cotizaciones", icon: FileText },

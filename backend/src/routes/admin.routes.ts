@@ -70,7 +70,8 @@ const {
 } = require("../controllers/admin/rutas-reportadas.admin.controller");
 const { uploadVehiculoImagen, uploadViajeImagenes } = require("../controllers/admin/uploads.admin.controller");
 const { serveComprobante } = require("../controllers/uploads.controller");
-const { listarPagosAdmin, descargarReciboPagoAdmin, descargarFacturaAdmin, emitirFacturaAdmin, reenviarFacturaAdmin, aprobarPago, rechazarPago, actualizarLinkPago, registrarPagoManual } = require("../controllers/admin/pagos.admin.controller");
+const { listarPagosAdmin, descargarReciboPagoAdmin, descargarFacturaAdmin, emitirFacturaAdmin, reenviarFacturaAdmin, aprobarPago, rechazarPago, actualizarLinkPago, registrarPagoManual, registrarReembolso } = require("../controllers/admin/pagos.admin.controller");
+const { historialReservaAdmin } = require("../controllers/admin/reservas-historial.admin.controller");
 const { getDashboardData } = require("../controllers/admin/dashboard.admin.controller");
 const { getControlOperativo, getAnomalias } = require("../controllers/admin/control-operativo.admin.controller");
 const { getHistorialMensual } = require("../controllers/admin/historial.admin.controller");
@@ -134,6 +135,13 @@ const {
 const { consultarChatbotAdmin } = require("../controllers/admin/chatbot.admin.controller");
 const { getCalendarioFlota } = require("../controllers/admin/calendario-flota.admin.controller");
 const {
+  listarEmpresasAsociadas,
+  crearEmpresaAsociada,
+  actualizarEmpresaAsociada,
+  crearVehiculoAsociado,
+  actualizarVehiculoAsociado,
+} = require("../controllers/admin/empresas-asociadas.admin.controller");
+const {
   getAdminHomeShowcaseImages,
   updateHomeShowcaseImage,
 } = require("../controllers/home-showcase.controller");
@@ -172,6 +180,11 @@ router.patch("/operaciones/:id/subcontratacion", actualizarSubcontratacion);
 router.patch("/operaciones/:id/estado", actualizarEstadoOperacion);
 router.patch("/operaciones/:id/reabrir", reabrirOperacion);
 router.get("/operaciones/:id/historial", historialOperacion);
+router.get("/empresas-asociadas", listarEmpresasAsociadas);
+router.post("/empresas-asociadas", requireRole("admin"), crearEmpresaAsociada);
+router.patch("/empresas-asociadas/:id", requireRole("admin"), actualizarEmpresaAsociada);
+router.post("/empresas-asociadas/:id/vehiculos", requireRole("admin"), crearVehiculoAsociado);
+router.patch("/empresas-asociadas/vehiculos/:id", requireRole("admin"), actualizarVehiculoAsociado);
 router.post("/chatbot", consultarChatbotAdmin);
 router.get("/viajes", listarViajesAdmin);
 router.post("/viajes", crearViajeAdmin);
@@ -242,6 +255,7 @@ router.patch("/usuarios/:id/recuperar-password", recuperarPasswordUsuarioAdmin);
 router.post("/uploads/vehiculo-imagen", uploadVehiculoImagen);
 router.post("/uploads/viaje-imagenes", uploadViajeImagenes);
 router.get("/pagos", listarPagosAdmin);
+router.post("/pagos/:id/reembolso", requireRole("admin"), registrarReembolso);
 router.get("/pagos/:id/recibo", descargarReciboPagoAdmin);
 router.get("/reservas/:id/factura", descargarFacturaAdmin);
 router.post("/reservas/:id/factura/emitir", emitirFacturaAdmin);
@@ -252,6 +266,7 @@ router.patch("/reservas/:id/link-pago", actualizarLinkPago);
 router.post("/reservas/:id/pago-manual", registrarPagoManual);
 
 router.get("/historial", verHistorial);
+router.get("/reservas/:id/historial", historialReservaAdmin);
 router.get("/reportes", verReportes);
 router.get("/reportes/exportar-csv", exportarReporteCSV);
 
