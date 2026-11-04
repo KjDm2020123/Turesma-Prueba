@@ -18,7 +18,7 @@ type NotificationItem = {
   mensaje: string;
   creado_en: string;
   leido: boolean;
-  link_type?: "cotizacion" | "reserva" | null;
+  link_type?: "cotizacion" | "reserva" | "requerimiento" | null;
   link_id?: number | null;
 };
 
@@ -47,6 +47,9 @@ const resolveLinkPath = (portal: Portal | undefined, linkType?: string | null, l
     if (portal === "admin") return "/admin/reservas";
     if (portal === "cliente") return "/cliente/historial";
     if (portal === "vehiculo") return "/vehiculo/activas";
+  }
+  if (linkType === "requerimiento" && portal === "admin") {
+    return linkId ? `/admin/cotizaciones?requerimiento=${linkId}` : "/admin/cotizaciones";
   }
   return null;
 };

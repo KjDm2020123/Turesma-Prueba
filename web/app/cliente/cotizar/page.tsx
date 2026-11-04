@@ -72,6 +72,7 @@ type RequerimientoPersonalizado = {
   detalles: string;
   estado: string;
   respuesta_admin?: string | null;
+  precio_final?: number | null;
   creado_en: string;
 };
 type VehicleRecommendation = {
@@ -516,7 +517,7 @@ export default function ClienteCotizarPage() {
     <LocalizedContent>
     <div className="space-y-6">
 
-      <section className="overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-lg">
+      {false && <section className="overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-lg">
         <button type="button" onClick={() => { setShowCustomRequest(value => !value); setCustomRequestError(""); }}
           aria-expanded={showCustomRequest}
           className="flex w-full items-center justify-between gap-4 bg-[linear-gradient(115deg,#312e81,#6d28d9)] p-5 text-left text-white transition hover:brightness-110 sm:p-6">
@@ -687,6 +688,11 @@ export default function ClienteCotizarPage() {
                       {request.cantidad_vehiculos} vehículo(s)
                       {request.organizacion ? ` · ${request.organizacion}` : ""}
                     </p>
+                    {request.precio_final != null && (
+                      <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-700">
+                        Precio propuesto: ${Number(request.precio_final).toFixed(2)}
+                      </p>
+                    )}
                     {(request.service_groups?.length ? request.service_groups : [{
                       cantidad_vehiculos: request.cantidad_vehiculos,
                       tipo_vehiculo: request.tipo_vehiculo,
@@ -730,7 +736,7 @@ export default function ClienteCotizarPage() {
             )}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* TOGGLE FORM */}
       <button onClick={() => { setShowForm(f => !f); setFormErr(""); setFormMsg(""); }}

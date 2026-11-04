@@ -824,6 +824,7 @@ const initDatabase = async () => {
       estado VARCHAR(50) DEFAULT 'pendiente',
       precio_estimado DECIMAL(10,2),
       precio_final DECIMAL(10,2),
+      reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL,
       respuesta_admin TEXT,
       reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -858,6 +859,7 @@ const initDatabase = async () => {
       detalles TEXT NOT NULL,
       estado VARCHAR(30) NOT NULL DEFAULT 'pendiente'
         CHECK (estado IN ('pendiente', 'en_revision', 'respondido', 'cerrado')),
+      precio_final DECIMAL(10,2),
       respuesta_admin TEXT,
       respondido_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -870,7 +872,9 @@ const initDatabase = async () => {
   `);
   await pool.query(`
     ALTER TABLE requerimientos_personalizados
-    ADD COLUMN IF NOT EXISTS service_groups JSONB NOT NULL DEFAULT '[]'::jsonb;
+    ADD COLUMN IF NOT EXISTS service_groups JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS precio_final DECIMAL(10,2),
+    ADD COLUMN IF NOT EXISTS reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL;
   `);
 
   // Campos extra de cotizaciones (vehículo elegido, valor y duración del servicio)

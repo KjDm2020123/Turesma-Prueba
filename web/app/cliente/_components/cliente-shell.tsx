@@ -32,6 +32,7 @@ type MenuItem = {
 const menuItems: MenuItem[] = [
   { href: "/cliente", label: "Inicio", icon: LayoutDashboard },
   { href: "/cliente/cotizar", label: "Cotizar", icon: FileText },
+  { href: "/cliente/requerimiento-personalizado", label: "Requerimiento especial", icon: FileText },
   { href: "/cliente/historial", label: "Historial", icon: History },
   { href: "/cliente/perfil", label: "Perfil", icon: User },
 ];

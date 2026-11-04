@@ -91,6 +91,7 @@ type RequerimientoPersonalizado = {
   destino?: string | null;
   detalles: string;
   estado: string;
+  precio_final?: number | null;
   respuesta_admin?: string | null;
   creado_en: string;
 };
@@ -123,6 +124,7 @@ function AdminCotizacionesContent() {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<"cotizaciones" | "requerimientos">("cotizaciones");
   const [customResponses, setCustomResponses] = useState<Record<number, string>>({});
+  const [customPrices, setCustomPrices] = useState<Record<number, string>>({});
   const [customStatuses, setCustomStatuses] = useState<Record<number, string>>({});
   const [savingCustomId, setSavingCustomId] = useState<number | null>(null);
   const [filtro, setFiltro] = useState("pendiente");
@@ -148,6 +150,7 @@ function AdminCotizacionesContent() {
         const rows: RequerimientoPersonalizado[] = await customRes.json();
         setCustomRequests(rows);
         setCustomResponses(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? row.respuesta_admin ?? ""])));
+        setCustomPrices(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? (row.precio_final == null ? "" : String(row.precio_final))])));
         setCustomStatuses(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? row.estado])));
       }
     } catch { /* silencio */ }
@@ -325,6 +328,8 @@ function AdminCotizacionesContent() {
   // Si llegamos desde una notificación (?id=123), forzamos el filtro a "todas"
   // para asegurar que la cotización aparezca sin importar su estado.
   useEffect(() => {
+    const requestParam = searchParams.get("requerimiento");
+    if (requestParam) setActiveSection("requerimientos");
     const idParam = searchParams.get("id");
     if (!idParam) return;
     const id = Number(idParam);
@@ -395,6 +400,7 @@ function AdminCotizacionesContent() {
         headers: getAuthHeaders(),
         body: JSON.stringify({
           estado: customStatuses[request.id] || request.estado,
+          precio_final: customPrices[request.id] || null,
           respuesta_admin: customResponses[request.id] || "",
         }),
       });
@@ -681,7 +687,7 @@ function AdminCotizacionesContent() {
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-violet-950">{request.detalles}</p>
                 </div>
                 <div className="space-y-3 sm:col-span-2">
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
                     <div>
                       <label htmlFor={`custom-status-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Estado</label>
                       <select id={`custom-status-${request.id}`} value={customStatuses[request.id] || request.estado}
@@ -692,6 +698,13 @@ function AdminCotizacionesContent() {
                         <option value="respondido">Respondido</option>
                         <option value="cerrado">Cerrado</option>
                       </select>
+                    </div>
+                    <div>
+                      <label htmlFor={`custom-price-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Precio para aprobar ($)</label>
+                      <input id={`custom-price-${request.id}`} type="number" min="0" step="0.01"
+                        value={customPrices[request.id] ?? (request.precio_final == null ? "" : String(request.precio_final))}
+                        onChange={event => setCustomPrices(current => ({ ...current, [request.id]: event.target.value }))}
+                        placeholder="Ej: 1500.00" className={INPUT_CLS} />
                     </div>
                     <div>
                       <label htmlFor={`custom-response-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Respuesta visible para el cliente</label>
@@ -705,7 +718,7 @@ function AdminCotizacionesContent() {
                   <button type="button" onClick={() => void saveCustomRequest(request)} disabled={savingCustomId === request.id}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-violet-900 disabled:opacity-60">
                     {savingCustomId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                    Guardar y notificar al cliente
+                    Guardar precio y notificar al cliente
                   </button>
                 </div>
               </div>
