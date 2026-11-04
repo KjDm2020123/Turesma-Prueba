@@ -100,7 +100,7 @@ const buildProformaData = async (cotizacionId: number) => {
 
 const buildProformaDataDeReserva = async (reservaId: number, usuarioId: number) => {
   const reservationResult = await pool.query(
-    `SELECT r.id, r.origen, r.destino,
+    `SELECT r.id, rp.id AS requerimiento_id, r.origen, r.destino,
             COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva)::text AS fecha_servicio,
             COALESCE(r.hora_salida::text, c.hora_salida) AS hora_salida,
             r.fecha_regreso::text AS fecha_regreso, r.hora_regreso::text AS hora_regreso,
@@ -111,6 +111,8 @@ const buildProformaDataDeReserva = async (reservaId: number, usuarioId: number) 
      FROM reservas r
      JOIN usuarios u ON u.id = r.usuario_id
      LEFT JOIN vehiculos v ON v.id = r.vehiculo_id
+     LEFT JOIN requerimientos_personalizados rp
+       ON rp.reserva_id = r.id AND rp.usuario_id = r.usuario_id
      LEFT JOIN LATERAL (
        SELECT hora_salida FROM cotizaciones
        WHERE reserva_id = r.id AND usuario_id = r.usuario_id
@@ -121,12 +123,16 @@ const buildProformaDataDeReserva = async (reservaId: number, usuarioId: number) 
     [reservaId, usuarioId]
   );
   if (!reservationResult.rowCount) return null;
+  const reservation = reservationResult.rows[0];
+  if (reservation.requerimiento_id) {
+    return buildProformaDataRequerimiento(Number(reservation.requerimiento_id), usuarioId);
+  }
 
   const cotizacionId = await getCotizacionIdDeReserva(reservaId, usuarioId);
   if (cotizacionId) {
     const quoteData = await buildProformaData(cotizacionId);
     if (quoteData) {
-      const currentReservation = reservationResult.rows[0];
+      const currentReservation = reservation;
       quoteData.precio = Number(currentReservation.precio) || 0;
       quoteData.servicio = {
         ...quoteData.servicio,
@@ -144,7 +150,6 @@ const buildProformaDataDeReserva = async (reservaId: number, usuarioId: number) 
     }
   }
 
-  const reservation = reservationResult.rows[0];
   return {
     numero: `RES-${reservation.id}`,
     fecha: new Date().toISOString().slice(0, 10),
@@ -170,8 +175,205 @@ const buildProformaDataDeReserva = async (reservaId: number, usuarioId: number) 
   };
 };
 
+const buildProformaDataRequerimiento = async (requerimientoId: number, usuarioId?: number) => {
+  const ownershipFilter = usuarioId === undefined ? "" : "AND r.usuario_id = $2";
+  const params = usuarioId === undefined ? [requerimientoId] : [requerimientoId, usuarioId];
+  const result = await pool.query(
+    `SELECT r.id, r.organizacion, r.detalles, r.service_groups, r.precio_final,
+            r.estado, u.nombre AS cliente_nombre, u.email AS cliente_email,
+            u.telefono AS cliente_telefono, u.cedula AS cliente_cedula
+     FROM requerimientos_personalizados r
+     JOIN usuarios u ON u.id = r.usuario_id
+     WHERE r.id = $1 ${ownershipFilter}
+       AND r.estado IN ('propuesta_enviada', 'pago_pendiente', 'pagado')
+     LIMIT 1`,
+    params
+  );
+  if (!result.rowCount) return null;
+
+  const request = result.rows[0];
+  const groups = Array.isArray(request.service_groups) ? request.service_groups : [];
+  const items = groups.map((group: Record<string, unknown>, index: number) => {
+    const quantity = Number(group.cantidad_vehiculos) || 1;
+    const total = Number(group.precio_total) || 0;
+    const details = [
+      `Grupo ${index + 1}${group.tipo_vehiculo ? ` · ${group.tipo_vehiculo}` : ""}`,
+      `${group.origen || "Salida por definir"} → ${group.destino || "Destino por definir"}`,
+      `Fecha: ${fmtFecha(group.fecha_servicio)}${group.fecha_fin ? ` al ${fmtFecha(group.fecha_fin)}` : ""}${group.hora_salida ? ` · ${group.hora_salida}` : ""}`,
+      `${quantity} vehículo(s)${group.pasajeros_por_vehiculo ? ` · ${group.pasajeros_por_vehiculo} pasajeros por unidad` : ""}`,
+      group.paradas ? `Paradas: ${group.paradas}` : "",
+      group.detalles ? `Indicaciones: ${group.detalles}` : "",
+    ].filter(Boolean);
+    if (index === 0 && request.detalles) details.push(`Requerimiento: ${request.detalles}`);
+    return {
+      cantidad: quantity,
+      descripcion: details.join("\n"),
+      precio_unitario: total / quantity,
+      total,
+    };
+  });
+  return {
+    numero: `REQ-${request.id}`,
+    fecha: new Date().toISOString().slice(0, 10),
+    empresa: EMPRESA,
+    cliente: {
+      nombre: request.cliente_nombre,
+      email: request.cliente_email,
+      telefono: request.cliente_telefono,
+      cedula: request.cliente_cedula,
+    },
+    servicio: {
+      origen: "Varios grupos de servicio",
+      destino: request.organizacion || "Requerimiento personalizado",
+      fecha_servicio: null,
+      hora_salida: null,
+      fecha_regreso: null,
+      hora_regreso: null,
+      num_personas: null,
+      notas: request.detalles,
+      tipo_vehiculo: "Varios",
+    },
+    precio: Number(request.precio_final) || 0,
+    proformaItems: items,
+  };
+};
+
+const generarProformaMultigrupoPDF = (d: any): Promise<Buffer> => new Promise((resolve, reject) => {
+  try {
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const chunks: any[] = [];
+    doc.on("data", (chunk: any) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const e = d.empresa;
+    const left = 40;
+    const right = 555;
+    const width = right - left;
+    let headerTop = 44;
+    if (LOGO_PATH) {
+      try {
+        const logoW = 180;
+        doc.image(LOGO_PATH, left + (width - logoW) / 2, 30, { width: logoW });
+        headerTop = 30 + logoW * (720 / 2183) + 10;
+      } catch {
+        headerTop = 44;
+      }
+    }
+
+    doc.font("Helvetica-Bold").fontSize(12).text(e.lema, left, headerTop, { width, align: "center" });
+    doc.font("Helvetica-Oblique").fontSize(9.5).text(e.sub1, { width, align: "center" });
+    doc.text(e.sub2, { width, align: "center" });
+    doc.font("Helvetica-Bold").fontSize(10).text(`${e.nombre}   RUC: ${e.ruc}`, { width, align: "center" });
+    doc.font("Helvetica").fontSize(9.5).text(`Razón Social: ${e.razon}`, { width, align: "center" });
+    doc.text(`Dirección: ${e.direccion}`, { width, align: "center" });
+    doc.text(`Teléfono: ${e.telefonos}`, { width, align: "center" });
+    doc.fillColor("#e31e24").text(`Email: ${e.email}`, { width, align: "center" }).fillColor("#000000");
+    doc.moveDown(1.2);
+    const dividerY = doc.y;
+    doc.lineWidth(2).strokeColor("#e31e24").moveTo(left, dividerY).lineTo(right, dividerY).stroke();
+    doc.strokeColor("#0b0f1a").moveDown(0.8);
+
+    const titleY = doc.y;
+    doc.font("Helvetica-Bold").fontSize(11).text(String(d.cliente.nombre || "").toUpperCase(), left, titleY, { width: 300 });
+    doc.text(`PROFORMA. ${d.numero}`, 340, titleY, { width: right - 340, align: "right" });
+    doc.moveDown(0.6);
+    const esRuc = d.cliente.cedula && String(d.cliente.cedula).length === 13;
+    doc.font("Helvetica").fontSize(10).text(`${esRuc ? "RUC" : "CÉDULA"}:   ${d.cliente.cedula || "—"}`, left);
+    doc.text(`FECHA:   ${fmtFecha(d.fecha)}`, left);
+    doc.moveDown(0.8);
+
+    const colW = { cant: 52, desc: 273, uni: 95, tot: 95 };
+    const cols = {
+      cant: left,
+      desc: left + colW.cant,
+      uni: left + colW.cant + colW.desc,
+      tot: left + colW.cant + colW.desc + colW.uni,
+    };
+    const headH = 26;
+    const drawTableHeader = (y: number) => {
+      doc.rect(left, y, width, headH).fill("#0b0f1a");
+      doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
+      doc.text("CANT.", cols.cant, y + 9, { width: colW.cant, align: "center" });
+      doc.text("GRUPO / RUTA / SERVICIO", cols.desc, y + 9, { width: colW.desc, align: "center" });
+      doc.text("P. UNITARIO", cols.uni, y + 9, { width: colW.uni, align: "center" });
+      doc.text("P. TOTAL", cols.tot, y + 9, { width: colW.tot, align: "center" });
+    };
+    const drawColumnLines = (top: number, bottom: number) => {
+      doc.lineWidth(0.7).strokeColor("#cbd5e1");
+      doc.moveTo(left, top).lineTo(left, bottom).stroke();
+      [cols.desc, cols.uni, cols.tot, right].forEach(x => doc.moveTo(x, top).lineTo(x, bottom).stroke());
+    };
+
+    let tableY = doc.y;
+    drawTableHeader(tableY);
+    tableY += headH;
+    for (const item of d.proformaItems) {
+      const description = String(item.descripcion || "");
+      doc.font("Helvetica").fontSize(9);
+      const contentHeight = doc.heightOfString(description, { width: colW.desc - 20, lineGap: 2 });
+      const rowH = Math.max(42, contentHeight + 20);
+      if (tableY + rowH > 690) {
+        doc.addPage();
+        tableY = 40;
+        drawTableHeader(tableY);
+        tableY += headH;
+      }
+      doc.rect(left, tableY, width, rowH).fill("#ffffff");
+      doc.fillColor("#0f172a").font("Helvetica").fontSize(9)
+        .text(description, cols.desc + 10, tableY + 10, { width: colW.desc - 20, lineGap: 2 });
+      doc.font("Helvetica").fontSize(10)
+        .text(String(item.cantidad), cols.cant + 4, tableY + 10, { width: colW.cant - 8, align: "center" })
+        .text(fmtUSD(Number(item.precio_unitario)), cols.uni + 8, tableY + 10, { width: colW.uni - 16, align: "right" })
+        .text(fmtUSD(Number(item.total)), cols.tot + 8, tableY + 10, { width: colW.tot - 16, align: "right" });
+      drawColumnLines(tableY, tableY + rowH);
+      doc.moveTo(left, tableY + rowH).lineTo(right, tableY + rowH).stroke();
+      tableY += rowH;
+    }
+
+    const totH = 28;
+    if (tableY + totH + 125 > 750) {
+      doc.addPage();
+      tableY = 40;
+      drawTableHeader(tableY);
+      tableY += headH;
+    }
+    doc.rect(cols.uni, tableY, colW.uni + colW.tot, totH).fill("#f8fafc");
+    doc.lineWidth(0.7).strokeColor("#cbd5e1").rect(cols.uni, tableY, colW.uni + colW.tot, totH).stroke();
+    doc.moveTo(cols.tot, tableY).lineTo(cols.tot, tableY + totH).stroke();
+    doc.fillColor("#0b0f1a").font("Helvetica-Bold").fontSize(9)
+      .text("TOTAL USD", cols.uni, tableY + 9, { width: colW.uni, align: "center" });
+    doc.fillColor("#e31e24").font("Helvetica-Bold").fontSize(10)
+      .text(fmtUSD(d.precio), cols.tot + 8, tableY + 8, { width: colW.tot - 16, align: "right" });
+
+    const footY = tableY + totH + 30;
+    doc.fillColor("#000000").font("Helvetica-Bold").fontSize(10).text(e.banco.nombre, left, footY);
+    doc.font("Helvetica").fontSize(10);
+    doc.font("Helvetica-Bold").text("Cuenta: ", { continued: true }).font("Helvetica").text(e.banco.tipo);
+    doc.font("Helvetica-Bold").text("Numero: ", { continued: true }).font("Helvetica").text(e.banco.numero);
+    doc.font("Helvetica-Bold").text("Nombre: ", { continued: true }).font("Helvetica").text(e.banco.titular);
+    doc.font("Helvetica-Bold").text("RUC: ", { continued: true }).font("Helvetica").text(e.banco.ruc);
+    doc.font("Helvetica-Oblique").fontSize(8).fillColor("#64748b")
+      .text("Documento informativo: no es factura ni comprobante de pago.", left, footY + 68, { width: 280 });
+    const firmaX = 340;
+    const firmaW = 215;
+    const firmaY = footY + 55;
+    doc.moveTo(firmaX, firmaY).lineTo(firmaX + firmaW, firmaY).stroke();
+    doc.fillColor("#000000").font("Helvetica-Bold").fontSize(10)
+      .text(e.gerente, firmaX, firmaY + 6, { width: firmaW, align: "center" });
+    doc.font("Helvetica").fontSize(9.5).text(e.cargoGerente, firmaX, firmaY + 20, { width: firmaW, align: "center" });
+    doc.end();
+  } catch (error) {
+    reject(error);
+  }
+});
+
 // Genera el PDF de la proforma (Buffer), replicando el formato de la empresa.
 const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, reject) => {
+  if (Array.isArray(d.proformaItems)) {
+    generarProformaMultigrupoPDF(d).then(resolve, reject);
+    return;
+  }
   try {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     const chunks: any[] = [];
@@ -350,4 +552,11 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
   }
 });
 
-module.exports = { EMPRESA, buildProformaData, buildProformaDataDeReserva, generarProformaPDF, getCotizacionIdDeReserva };
+module.exports = {
+  EMPRESA,
+  buildProformaData,
+  buildProformaDataDeReserva,
+  buildProformaDataRequerimiento,
+  generarProformaPDF,
+  getCotizacionIdDeReserva,
+};

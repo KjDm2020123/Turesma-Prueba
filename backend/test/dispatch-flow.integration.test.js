@@ -66,6 +66,8 @@ const state = {
     { id: 502, usuario_id: 302, estado: "disponible", activo: true, fecha_licencia_vencimiento: "2027-12-31" },
   ],
   operations: [],
+  maintenance: [],
+  availability: [],
   decisions: [],
   history: [],
   nextOperationId: 1001,
@@ -103,14 +105,98 @@ const operationView = (operation) => {
 const pool = {
   async query(sql, params = []) {
     const query = sql.replace(/\s+/g, " ").trim().toLowerCase();
+    if (query.startsWith("select coalesce(o.fecha_fin_programada")) {
+      const operation = operationFor(params[0]);
+      const reservation = operation?.reserva_id ? reservationFor(operation.reserva_id) : null;
+      return result(operation ? [{
+        fecha_fin: operation.fecha_fin_programada || reservation?.fecha_fin || reservation?.fecha_regreso || operation.fecha_programada,
+      }] : []);
+    }
+    if (query.startsWith("with vehiculos_evaluados as")) {
+      const [startValue, endValue, passengers, operationId, startTime, endTime] = params;
+      const startDate = asDate(startValue);
+      const endDate = asDate(endValue);
+      const operation = operationFor(operationId);
+      const dates = [];
+      for (let date = new Date(`${startDate}T00:00:00.000Z`); asDate(date) <= endDate; date.setUTCDate(date.getUTCDate() + 1)) {
+        dates.push(asDate(date));
+      }
+      const rows = state.vehicles.map((vehicle) => {
+        const blockers = [];
+        if (!vehicle.activo) blockers.push("Vehículo desactivado");
+        if (vehicle.estado !== "disponible") blockers.push(`Estado del vehículo: ${vehicle.estado}`);
+        if (vehicle.capacidad < Number(passengers)) blockers.push(`Capacidad insuficiente: ${vehicle.capacidad} plazas para ${passengers} pasajeros`);
+        for (const date of dates) {
+          const manual = state.availability.find((entry) => entry.vehiculo_id === vehicle.id && entry.fecha === date);
+          const dayOfWeek = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+          if (manual?.disponible === false) blockers.push(`No disponible según calendario manual el ${date}`);
+          else if (manual?.disponible !== true && vehicle.dias_servicio && !vehicle.dias_servicio.includes(dayOfWeek)) {
+            blockers.push(`No ofrece servicio los días: ${date}`);
+          }
+        }
+        const maintenance = state.maintenance.find((item) =>
+          item.vehiculo_id === vehicle.id
+          && (item.estado === "en_progreso"
+            || (item.estado === "programado" && item.fecha_programada >= startDate && item.fecha_programada <= endDate))
+        );
+        if (maintenance) blockers.push(maintenance.estado === "en_progreso"
+          ? "Mantenimiento en curso"
+          : `Mantenimiento programado el ${maintenance.fecha_programada}`);
+        const reservationConflict = state.reservations.find((reservation) => {
+          const reservationStart = asDate(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva);
+          const reservationEnd = asDate(reservation.fecha_fin || reservation.fecha_regreso || reservation.fecha_llegada || reservationStart);
+          if (reservation.vehiculo_id !== vehicle.id || reservationStart > endDate || reservationEnd < startDate
+            || ["cancelada", "finalizada"].includes(reservation.estado)
+            || reservation.id === operation?.reserva_id) return false;
+          if (startDate !== endDate || reservationStart !== reservationEnd) return true;
+          return intersects(startTime ? asTime(startTime) : null, endTime ? asTime(endTime) : null,
+            reservation.fecha_salida && asTime(reservation.fecha_salida), reservation.fecha_llegada && asTime(reservation.fecha_llegada));
+        });
+        if (reservationConflict) blockers.push(`Conflicto con reserva #${reservationConflict.id}`);
+        const operationConflict = state.operations.find((other) =>
+          other.id !== Number(operationId)
+          && other.vehiculo_id === vehicle.id
+          && other.fecha_programada <= endDate
+          && asDate(other.fecha_fin_programada || other.fecha_programada) >= startDate
+          && ["programada", "asignada", "en_curso", "incidencia"].includes(other.estado)
+        );
+        if (operationConflict) blockers.push(`Conflicto con operación #${operationConflict.id}`);
+        return {
+          vehiculo_id: vehicle.id,
+          placa: vehicle.placa,
+          modelo: vehicle.modelo,
+          tipo: "van",
+          capacidad: vehicle.capacidad,
+          estado: vehicle.estado,
+          activo: vehicle.activo,
+          fecha_proximo_mantenimiento: null,
+          kilometraje: 10000,
+          proximo_km_mantenimiento: null,
+          conductor_id: vehicle.usuario_id,
+          conductor_nombre: `Conductor ${vehicle.usuario_id}`,
+          bloqueos: blockers,
+          advertencias: [],
+        };
+      });
+      return result(rows);
+    }
     if (query.startsWith("with candidatos as")) {
-      const [dateValue, passengers, startValue, endValue, operationId] = params;
+      const [dateValue, passengers, startValue, endValue, operationId, requestedEndDate, eligibleVehicleIds] = params;
       const date = asDate(dateValue);
+      const endDate = asDate(operationFor(operationId)?.fecha_fin_programada || requestedEndDate || dateValue);
       const start = startValue ? asTime(startValue) : null;
       const end = endValue ? asTime(endValue) : null;
       const candidates = state.vehicles
         .filter((vehicle) => vehicle.activo && vehicle.estado === "disponible" && vehicle.capacidad >= passengers)
+        .filter((vehicle) => eligibleVehicleIds.includes(vehicle.id))
         .filter((vehicle) => {
+          const maintenanceConflict = state.maintenance.some((maintenance) =>
+            maintenance.vehiculo_id === vehicle.id
+            && (maintenance.estado === "en_progreso"
+              || (maintenance.estado === "programado"
+                && maintenance.fecha_programada >= date
+                && maintenance.fecha_programada <= endDate))
+          );
           const reservationConflict = state.reservations.some((reservation) => {
             const reservationDate = asDate(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva);
             if (reservation.vehiculo_id !== vehicle.id || reservationDate !== date || ["cancelada", "finalizada"].includes(reservation.estado)) return false;
@@ -124,7 +210,7 @@ const pool = {
             && operation.vehiculo_id === vehicle.id
             && intersects(start, end, operation.hora_inicio, operation.hora_fin)
           );
-          return !reservationConflict && !operationConflict;
+          return !maintenanceConflict && !reservationConflict && !operationConflict;
         })
         .map((vehicle) => {
           const driver = state.drivers.find((row) => row.usuario_id === vehicle.usuario_id);
@@ -212,7 +298,7 @@ const pool = {
           return result(state.operations.filter((operation) => operation.reserva_id === Number(params[0])).map(({ id }) => ({ id })));
         }
         if (query.startsWith("insert into operaciones")) {
-          const [reservationId, , , reservationDate, , origin, destination, passengers, createdBy] = params;
+          const [reservationId, , , reservationDate, , fechaFin, fechaRegreso, origin, destination, passengers, vehicleId, driverId, operationState, createdBy] = params;
           const reservation = reservationFor(reservationId);
           const scheduled = reservation.fecha_salida || reservation.fecha_servicio || reservationDate;
           const start = reservation.fecha_salida ? asTime(reservation.fecha_salida) : null;
@@ -224,14 +310,15 @@ const pool = {
             reserva_id: Number(reservationId),
             tipo_servicio: "reserva",
             fecha_programada: asDate(scheduled),
+            fecha_fin_programada: asDate(fechaFin || fechaRegreso || scheduled),
             hora_inicio: start,
             hora_fin: finish,
             origen: origin,
             destino: destination,
             pasajeros: Number(passengers),
-            estado: "programada",
-            vehiculo_id: null,
-            conductor_id: null,
+            estado: operationState,
+            vehiculo_id: vehicleId,
+            conductor_id: driverId,
             creado_por: createdBy,
           };
           state.operations.push(operation);
@@ -258,24 +345,60 @@ const pool = {
           const vehicle = vehicleFor(params[0]);
           return result(vehicle ? [{ ...vehicle, mantenimiento_vencido: false }] : []);
         }
+        if (query.startsWith("select dia.fecha::date::text as fecha, case when vd.disponible = false then 'bloqueo manual'")) {
+          const [vehicleId, startValue, endValue] = params;
+          const vehicle = vehicleFor(vehicleId);
+          const startDate = asDate(startValue);
+          const endDate = asDate(endValue);
+          for (let date = new Date(`${startDate}T00:00:00.000Z`); asDate(date) <= endDate; date.setUTCDate(date.getUTCDate() + 1)) {
+            const dateValue = asDate(date);
+            const manual = state.availability.find((entry) => entry.vehiculo_id === Number(vehicleId) && entry.fecha === dateValue);
+            const dayOfWeek = new Date(`${dateValue}T00:00:00.000Z`).getUTCDay();
+            if (manual?.disponible === false) return result([{ fecha: dateValue, motivo: "bloqueo manual" }]);
+            if (manual?.disponible !== true && vehicle.dias_servicio && !vehicle.dias_servicio.includes(dayOfWeek)) {
+              return result([{ fecha: dateValue, motivo: "día no laborable" }]);
+            }
+          }
+          return result();
+        }
+        if (query.startsWith("select id, tipo, fecha_programada::text as fecha_programada, estado from mantenimiento_vehiculos")) {
+          const [vehicleId, startDateValue, endDateValue] = params;
+          const startDate = asDate(startDateValue);
+          const endDate = asDate(endDateValue);
+          const maintenance = state.maintenance.find((item) =>
+            item.vehiculo_id === Number(vehicleId)
+            && (item.estado === "en_progreso"
+              || (item.estado === "programado"
+                && item.fecha_programada >= startDate
+                && item.fecha_programada <= endDate))
+          );
+          return result(maintenance ? [{ ...maintenance }] : []);
+        }
         if (query.startsWith("select c.id, c.usuario_id, c.estado")) {
           const driver = driverForUser(params[0]);
           return result(driver ? [{ ...driver }] : []);
         }
-        if (query.startsWith("select fecha_regreso::text as fecha_regreso from reservas")) {
+        if (query.startsWith("select fecha_fin::text as fecha_fin, fecha_regreso::text as fecha_regreso from reservas")) {
           const reservation = reservationFor(params[0]);
-          return result(reservation ? [{ fecha_regreso: reservation.fecha_regreso || null }] : []);
+          return result(reservation ? [{
+            fecha_fin: reservation.fecha_fin || null,
+            fecha_regreso: reservation.fecha_regreso || null,
+          }] : []);
         }
         if (query.startsWith("select o.id, o.vehiculo_id, o.conductor_id")) {
-          const [operationId, date, startValue, endValue, activeStates, vehicleId, driverId] = params;
+          const [operationId, startDateValue, endDateValue, startValue, endValue, activeStates, vehicleId, driverUserId, driverId] = params;
+          const startDate = asDate(startDateValue);
+          const endDate = asDate(endDateValue);
           const start = startValue ? asTime(startValue) : null;
           const end = endValue ? asTime(endValue) : null;
           const conflict = state.operations.find((operation) =>
             operation.id !== Number(operationId)
-            && operation.fecha_programada === asDate(date)
+            && operation.fecha_programada <= endDate
+            && asDate(operation.fecha_fin_programada || operation.fecha_programada) >= startDate
             && activeStates.includes(operation.estado)
-            && (operation.vehiculo_id === Number(vehicleId) || operation.conductor_id === driverForUser(driverId)?.id)
-            && intersects(start, end, operation.hora_inicio, operation.hora_fin)
+            && (operation.vehiculo_id === Number(vehicleId) || operation.conductor_id === driverForUser(driverUserId)?.id)
+            && (startDate !== endDate || operation.fecha_programada !== asDate(operation.fecha_fin_programada || operation.fecha_programada)
+              || intersects(start, end, operation.hora_inicio, operation.hora_fin))
           );
           return result(conflict ? [{
             ...conflict,
@@ -284,20 +407,22 @@ const pool = {
           }] : []);
         }
         if (query.startsWith("select r.id as reserva_id, r.vehiculo_id, v.placa")) {
-          const [operationId, dateValue, startValue, endValue, vehicleId, driverUserId, driverId] = params;
+          const [operationId, startDateValue, endDateValue, startValue, endValue, , vehicleId, driverUserId, driverId] = params;
           const operation = operationFor(operationId);
-          const date = asDate(dateValue);
+          const startDate = asDate(startDateValue);
+          const endDate = asDate(endDateValue);
           const start = startValue ? asTime(startValue) : null;
           const end = endValue ? asTime(endValue) : null;
           const conflict = state.reservations.find((reservation) => {
             const reservationDate = asDate(reservation.fecha_salida || reservation.fecha_servicio || reservation.fecha_reserva);
+            const reservationEndDate = asDate(reservation.fecha_fin || reservation.fecha_regreso || reservationDate);
             if (reservation.id === operation?.reserva_id
-              || (reservationDate !== date && asDate(reservation.fecha_regreso || "") !== date)
+              || reservationDate > endDate || reservationEndDate < startDate
               || ["cancelada", "finalizada"].includes(reservation.estado)) return false;
             const conductorOcupado = reservation.conductor_id === Number(driverUserId)
               || reservation.conductor_id === Number(driverId);
             if (reservation.vehiculo_id !== Number(vehicleId) && !conductorOcupado) return false;
-            return intersects(
+            return startDate !== endDate || reservationDate !== reservationEndDate || intersects(
               start,
               end,
               reservation.fecha_salida && asTime(reservation.fecha_salida),
@@ -354,11 +479,12 @@ const pool = {
           return result();
         }
         if (query.startsWith("update decisiones_sistema")) {
-          const [decisionId, vehicleId, confirmedBy, reason, operationId, date, passengers, start, end] = params;
+          const [decisionId, vehicleId, confirmedBy, reason, operationId, date, passengers, start, end, endDate] = params;
           const decision = state.decisions.find((row) => row.id === Number(decisionId));
           if (!decision || decision.resultado !== null
             || decision.recomendacion.operacion_id !== Number(operationId)
             || decision.recomendacion.fecha !== asDate(date)
+            || decision.recomendacion.fecha_fin !== asDate(endDate)
             || decision.recomendacion.pasajeros !== Number(passengers)
             || decision.recomendacion.hora_inicio !== (start ? asTime(start).slice(0, 5) : null)
             || decision.recomendacion.hora_fin !== (end ? asTime(end).slice(0, 5) : null)) return result();
@@ -460,6 +586,31 @@ test("despacha, recomienda, asigna, sincroniza estados y reabre usando HTTP con 
 
     const duplicate = await request("/api/admin/operaciones/reservas/801/despachar", { method: "POST", body: {} });
     assert.equal(duplicate.status, 409);
+
+    state.maintenance.push({ id: 1, vehiculo_id: 702, tipo: "Preventivo", fecha_programada: "2026-10-23", estado: "programado" });
+    const maintenanceRecommendation = await request(`/api/admin/inteligencia/asignacion-recomendada?fecha=2026-10-21&fecha_fin=2026-10-23&pasajeros=8&hora_inicio=09%3A00&hora_fin=11%3A00&operacion_id=${operationId}`);
+    assert.equal(maintenanceRecommendation.status, 200);
+    assert.equal(maintenanceRecommendation.body.data.vehiculo, null);
+    assert.match(maintenanceRecommendation.body.data.excluidos.find((vehicle) => vehicle.vehiculo_id === 702).bloqueos[0], /mantenimiento programado/i);
+    const maintenanceAssignment = await request(`/api/admin/operaciones/${operationId}/asignar`, {
+      method: "PATCH",
+      body: { vehiculo_id: 702, conductor_id: 302 },
+    });
+    assert.equal(maintenanceAssignment.status, 409);
+    assert.match(maintenanceAssignment.body.error, /mantenimiento programado/i);
+    state.maintenance.length = 0;
+
+    state.availability.push({ vehiculo_id: 702, fecha: "2026-10-21", disponible: false });
+    const manualBlockRecommendation = await request(`/api/admin/inteligencia/asignacion-recomendada?fecha=2026-10-21&fecha_fin=2026-10-23&pasajeros=8&hora_inicio=09%3A00&hora_fin=11%3A00&operacion_id=${operationId}`);
+    assert.equal(manualBlockRecommendation.body.data.vehiculo, null);
+    assert.match(manualBlockRecommendation.body.data.excluidos.find((vehicle) => vehicle.vehiculo_id === 702).bloqueos[0], /calendario manual/i);
+    const manualBlockAssignment = await request(`/api/admin/operaciones/${operationId}/asignar`, {
+      method: "PATCH",
+      body: { vehiculo_id: 702, conductor_id: 302 },
+    });
+    assert.equal(manualBlockAssignment.status, 409);
+    assert.match(manualBlockAssignment.body.error, /bloqueado manualmente/i);
+    state.availability.length = 0;
 
     const unavailableVehicle = await request(`/api/admin/operaciones/${operationId}/asignar`, {
       method: "PATCH",

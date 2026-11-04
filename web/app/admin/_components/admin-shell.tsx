@@ -115,6 +115,7 @@ const menuItems: MenuItem[] = menuGroups.flatMap((g) => g.items);
 
 export const AdminShell = ({ children }: AdminShellProps) => {
   const pathname = usePathname();
+  const isFleetCalendar = pathname === "/admin/calendario-flota";
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLElement | null>(null);
   const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -395,18 +396,20 @@ export const AdminShell = ({ children }: AdminShellProps) => {
         </header>
 
         {/* SECTION CONTENT */}
-        <section className="min-w-0 min-h-0 overflow-x-hidden p-3 md:p-10 flex-1 overflow-y-auto">
-          <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 space-y-8">
+        <section className={`min-w-0 min-h-0 overflow-x-hidden flex-1 overflow-y-auto ${isFleetCalendar ? "p-2 sm:p-3 lg:p-4" : "p-3 md:p-10"}`}>
+          <div className={`w-full mx-auto ${isFleetCalendar ? "max-w-none space-y-4" : "max-w-7xl px-2 sm:px-4 space-y-8"}`}>
             
             {/* TÍTULO SECCIÓN CON INDICADOR ROJO */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-l-4 border-[#E31E24] pl-6">
-              <div>
-                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#1a1a1a] tracking-tighter uppercase italic">{currentSection}</h1>
+            {!isFleetCalendar && (
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-l-4 border-[#E31E24] pl-6">
+                <div>
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-[#1a1a1a] tracking-tighter uppercase italic">{currentSection}</h1>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* CONTENEDOR PRINCIPAL - DISEÑO LIMPIO Y MODERNO */}
-            <div className="min-w-0 bg-white rounded-lg md:rounded-[2.5rem] border border-gray-200 shadow-sm md:shadow-2xl min-h-[420px] md:min-h-[600px] overflow-hidden p-4 md:p-8 border-b-4 md:border-b-8 border-[#E31E24] w-full">
+            <div className={`min-w-0 w-full ${isFleetCalendar ? "min-h-0 overflow-visible" : "bg-white rounded-lg md:rounded-[2.5rem] border border-gray-200 shadow-sm md:shadow-2xl min-h-[420px] md:min-h-[600px] overflow-hidden p-4 md:p-8 border-b-4 md:border-b-8 border-[#E31E24]"}`}>
               {children}
             </div>
             <AdminChatbot />

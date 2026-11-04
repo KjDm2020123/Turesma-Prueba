@@ -2,6 +2,8 @@ export {};
 
 const pool = require("../config/db");
 const { crearNotificacion, notificarAdmins } = require("../config/notificaciones");
+const { buildProformaDataRequerimiento, generarProformaPDF } = require("../config/proforma");
+const { prepararDespachoRequerimiento } = require("../config/requerimientosDespacho");
 
 const optionalText = (value: unknown, maxLength: number): string | null | undefined => {
   if (value === undefined || value === null) return null;
@@ -125,12 +127,29 @@ const listarMisRequerimientos = async (req: any, res: any) => {
   }
   try {
     const result = await pool.query(
-      `SELECT id, organizacion, cantidad_vehiculos, tipo_vehiculo, pasajeros_por_vehiculo, service_groups,
-              fecha_servicio, fecha_fin, hora_salida, origen, destino, detalles, estado,
-              precio_final, reserva_id, respuesta_admin, creado_en, actualizado_en
-       FROM requerimientos_personalizados
-       WHERE usuario_id = $1
-       ORDER BY creado_en DESC
+      `SELECT r.id, r.organizacion, r.cantidad_vehiculos, r.tipo_vehiculo, r.pasajeros_por_vehiculo, r.service_groups,
+              r.fecha_servicio, r.fecha_fin, r.hora_salida, r.origen, r.destino, r.detalles, r.estado,
+              r.precio_final, r.reserva_id, r.respuesta_admin, r.estado_despacho,
+              r.aceptado_en,
+              b.estado_pago AS reserva_estado_pago,
+              COALESCE((
+                SELECT json_agg(json_build_object(
+                  'grupo_numero', o.grupo_numero,
+                  'unidad_numero', o.unidad_numero,
+                  'estado', o.estado,
+                  'fecha_programada', o.fecha_programada,
+                  'fecha_fin_programada', o.fecha_fin_programada,
+                  'vehiculo_placa', v.placa
+                ) ORDER BY o.grupo_numero, o.unidad_numero)
+                FROM operaciones o
+                LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
+                WHERE o.requerimiento_id = r.id
+              ), '[]'::json) AS unidades_despacho,
+              r.creado_en, r.actualizado_en
+       FROM requerimientos_personalizados r
+       LEFT JOIN reservas b ON b.id = r.reserva_id
+       WHERE r.usuario_id = $1
+       ORDER BY r.creado_en DESC
        LIMIT 100`,
       [usuarioId]
     );
@@ -163,26 +182,95 @@ const actualizarRequerimientoAdmin = async (req: any, res: any) => {
   const usuarioAdminId = Number(req.user?.id);
   const estado = String(req.body?.estado || "").trim();
   const respuesta = String(req.body?.respuesta_admin || "").trim();
-  const precioRaw = req.body?.precio_final;
-  const precio = precioRaw === "" || precioRaw === null || precioRaw === undefined ? null : Number(precioRaw);
-  const estadosValidos = ["pendiente", "en_revision", "respondido", "cerrado"];
+  const estadosValidos = ["pendiente", "en_revision", "respondido", "propuesta_enviada", "cerrado", "rechazado"];
 
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Requerimiento inválido" });
   if (!estadosValidos.includes(estado)) return res.status(400).json({ error: "Selecciona un estado válido" });
   if (respuesta.length > 5000) return res.status(400).json({ error: "La respuesta no puede superar 5000 caracteres" });
-  if (precio !== null && (!Number.isFinite(precio) || precio < 0 || precio > 100000000)) {
-    return res.status(400).json({ error: "Ingresa un precio válido" });
-  }
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      `UPDATE requerimientos_personalizados
-       SET estado = $1, precio_final = $2, respuesta_admin = $3, respondido_por = $4, actualizado_en = NOW()
-       WHERE id = $5
-       RETURNING id, usuario_id, estado, precio_final, respuesta_admin, actualizado_en`,
-      [estado, precio, respuesta || null, Number.isInteger(usuarioAdminId) ? usuarioAdminId : null, id]
+    await client.query("BEGIN");
+    const currentResult = await client.query(
+      "SELECT * FROM requerimientos_personalizados WHERE id = $1 FOR UPDATE",
+      [id]
     );
-    if (!result.rowCount) return res.status(404).json({ error: "No se encontró el requerimiento" });
+    if (!currentResult.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "No se encontró el requerimiento" });
+    }
+    const current = currentResult.rows[0];
+    if (current.reserva_id) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "La propuesta ya fue aceptada y no puede modificarse" });
+    }
+
+    const groups = Array.isArray(current.service_groups) ? current.service_groups : [];
+    let updatedGroups = groups;
+    if (req.body?.grupos_servicio !== undefined) {
+      const normalizedGroups = normalizeServiceGroups(req.body.grupos_servicio);
+      if (!normalizedGroups || normalizedGroups.length !== groups.length) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Los grupos del servicio no son válidos o no coinciden con la solicitud original" });
+      }
+      updatedGroups = normalizedGroups.map((group: Record<string, unknown>, index: number) => ({
+        ...group,
+        ...(groups[index].precio_total === undefined ? {} : { precio_total: groups[index].precio_total }),
+      }));
+    }
+    let price: number | null = current.precio_final == null ? null : Number(current.precio_final);
+    if (req.body?.precios_grupo !== undefined) {
+      const prices: unknown[] = req.body.precios_grupo;
+      if (!Array.isArray(prices) || prices.length !== updatedGroups.length) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Asigna un precio válido a cada grupo de servicio" });
+      }
+      const parsedPrices = prices.map(value => typeof value === "string" && value.trim() === "" ? NaN : Number(value));
+      if (parsedPrices.some(value => !Number.isFinite(value) || value <= 0 || value > 100000000)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Cada grupo debe tener un precio mayor a cero" });
+      }
+      const sum = parsedPrices.reduce((total, value) => total + Math.round(value * 100) / 100, 0);
+      if (sum > 100000000) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "El total de la propuesta supera el límite permitido" });
+      }
+      updatedGroups = updatedGroups.map((group: Record<string, unknown>, index: number) => ({
+        ...group,
+        precio_total: Math.round(parsedPrices[index] * 100) / 100,
+      }));
+      price = Math.round(sum * 100) / 100;
+    }
+    if (estado === "propuesta_enviada") {
+      if (price === null || !updatedGroups.length || updatedGroups.some((group: Record<string, unknown>) => {
+        const startDate = validDate(group.fecha_servicio);
+        const endDate = validDate(group.fecha_fin);
+        return Number(group.precio_total) <= 0
+          || !Number.isInteger(Number(group.cantidad_vehiculos)) || Number(group.cantidad_vehiculos) < 1
+          || !Number.isInteger(Number(group.pasajeros_por_vehiculo)) || Number(group.pasajeros_por_vehiculo) < 1
+          || !startDate || !optionalText(group.origen, 300) || !optionalText(group.destino, 300)
+          || endDate === undefined || Boolean(endDate && startDate && endDate < startDate);
+      })) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Completa un precio y los datos de ruta, fecha y pasajeros de cada grupo antes de enviar la propuesta" });
+      }
+    }
+    const result = await client.query(
+      `UPDATE requerimientos_personalizados
+       SET estado = $1, precio_final = $2, service_groups = $3::jsonb,
+           respuesta_admin = $4, respondido_por = $5, actualizado_en = NOW()
+       WHERE id = $6
+       RETURNING id, usuario_id, estado, precio_final, service_groups, respuesta_admin, actualizado_en`,
+      [
+        estado,
+        price,
+        JSON.stringify(updatedGroups),
+        respuesta || null,
+        Number.isInteger(usuarioAdminId) ? usuarioAdminId : null,
+        id,
+      ]
+    );
+    await client.query("COMMIT");
     const updated = result.rows[0];
     await crearNotificacion(
       usuarioAdminId,
@@ -194,12 +282,15 @@ const actualizarRequerimientoAdmin = async (req: any, res: any) => {
     );
     return res.json(updated);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Error actualizando requerimiento personalizado:", error);
     return res.status(500).json({ error: "No se pudo guardar la respuesta. Intenta nuevamente." });
+  } finally {
+    client.release();
   }
 };
 
-const pagarRequerimiento = async (req: any, res: any) => {
+const aceptarPropuestaRequerimiento = async (req: any, res: any) => {
   const requerimientoId = Number(req.params.id);
   const usuarioId = Number(req.user?.id);
   if (!Number.isInteger(requerimientoId) || requerimientoId <= 0) {
@@ -222,52 +313,75 @@ const pagarRequerimiento = async (req: any, res: any) => {
     const request = result.rows[0];
     if (request.reserva_id) {
       await client.query("COMMIT");
-      return res.json({ reserva_id: Number(request.reserva_id), message: "Este requerimiento ya está listo para pago." });
+      return res.json({ reserva_id: Number(request.reserva_id), message: "La propuesta ya fue aceptada." });
+    }
+    if (request.estado !== "propuesta_enviada") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "No hay una propuesta disponible para aceptar" });
     }
     const precio = Number(request.precio_final);
     if (!Number.isFinite(precio) || precio <= 0) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: "El requerimiento todavía no tiene un precio aprobado" });
+      return res.status(400).json({ error: "La propuesta todavía no tiene un precio válido" });
     }
     const groups = Array.isArray(request.service_groups) ? request.service_groups : [];
-    const group = groups[0] || {};
-    const fechaServicio = validDate(group.fecha_servicio) || new Date().toISOString().slice(0, 10);
-    const fechaFin = validDate(group.fecha_fin);
+    if (!groups.length || groups.some((group: Record<string, unknown>) =>
+      !Number.isFinite(Number(group.precio_total)) || Number(group.precio_total) <= 0
+    )) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "La propuesta no contiene precios válidos para todos los grupos" });
+    }
+    const fechaServicio = groups.map((group: Record<string, unknown>) => validDate(group.fecha_servicio))
+      .filter(Boolean).sort()[0] || new Date().toISOString().slice(0, 10);
+    const fechaFin = groups.map((group: Record<string, unknown>) => validDate(group.fecha_fin) || validDate(group.fecha_servicio))
+      .filter(Boolean).sort().at(-1) || fechaServicio;
+    const pasajerosTotal = groups.reduce((total: number, group: Record<string, unknown>) =>
+      total + Number(group.cantidad_vehiculos || 0) * Number(group.pasajeros_por_vehiculo || 1), 0);
+    const firstGroup = groups[0];
+    const firstGroupDate = validDate(firstGroup.fecha_servicio) || fechaServicio;
+    const salida = firstGroup.hora_salida ? `${firstGroupDate} ${firstGroup.hora_salida}` : null;
+    const groupPriceTotal = groups.reduce((sum: number, group: Record<string, unknown>) =>
+      sum + Math.round(Number(group.precio_total) * 100), 0);
+    if (Math.abs(groupPriceTotal - Math.round(precio * 100)) > 1) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "El total de la propuesta no coincide con los subtotales" });
+    }
     const notas = [
       `Requerimiento personalizado #${requerimientoId}`,
       request.detalles,
-      groups.length > 1 ? `Grupos de servicio: ${JSON.stringify(groups)}` : "",
+      "Pago único por el requerimiento completo. Las unidades se prepararán individualmente en Despacho tras confirmar el pago.",
     ].filter(Boolean).join("\n\n");
     const reservation = await client.query(
       `INSERT INTO reservas
-         (usuario_id, fecha_reserva, fecha_fin, num_personas, total, estado,
-          origen, destino, tipo_vehiculo, notas, monto_pagado, estado_pago, hora_salida)
-       VALUES ($1, $2, $3, $4, $5, 'pendiente_pago', $6, $7, $8, $9, 0, 'pendiente', $10)
+         (usuario_id, fecha_reserva, fecha_fin, fecha_regreso, num_personas, total, estado,
+          origen, destino, tipo_vehiculo, notas, monto_pagado, estado_pago, fecha_servicio, fecha_salida)
+       VALUES ($1, $2, $3, $3, $4, $5, 'pendiente_pago', $6, $7, 'Varios', $8, 0, 'pendiente', $2, $9::timestamp)
        RETURNING id`,
       [
         usuarioId,
         fechaServicio,
         fechaFin,
-        Number(group.pasajeros_por_vehiculo) || 1,
+        pasajerosTotal,
         precio,
-        group.origen || "Por definir",
-        group.destino || "Por definir",
-        group.tipo_vehiculo || null,
+        "Ver grupos de servicio",
+        "Ver grupos de servicio",
         notas,
-        group.hora_salida || null,
+        salida,
       ]
     );
     const reservaId = Number(reservation.rows[0].id);
     await client.query(
       `UPDATE requerimientos_personalizados
-       SET reserva_id = $1, actualizado_en = NOW()
+       SET reserva_id = $1, estado = 'pago_pendiente',
+           estado_despacho = 'pendiente', error_despacho = NULL,
+           aceptado_en = COALESCE(aceptado_en, NOW()), actualizado_en = NOW()
        WHERE id = $2`,
       [reservaId, requerimientoId]
     );
     await client.query("COMMIT");
-    await notificarAdmins(usuarioId, `El cliente solicitó pagar el requerimiento personalizado #${requerimientoId}. Reserva #${reservaId} pendiente de pago.`, "reserva", reservaId);
+    await notificarAdmins(usuarioId, `El cliente aceptó la propuesta del requerimiento personalizado #${requerimientoId}. Reserva #${reservaId} pendiente de pago.`, "reserva", reservaId);
     return res.status(201).json({
-      message: "Reserva creada. Continúa con el pago.",
+      message: "Propuesta aceptada. Continúa con el pago del servicio completo.",
       reserva_id: reservaId,
     });
   } catch (error) {
@@ -279,10 +393,72 @@ const pagarRequerimiento = async (req: any, res: any) => {
   }
 };
 
+const descargarProformaRequerimiento = async (req: any, res: any) => {
+  const id = Number(req.params.id);
+  const usuarioId = Number(req.user?.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Requerimiento inválido" });
+  try {
+    const data = await buildProformaDataRequerimiento(id, usuarioId);
+    if (!data) return res.status(404).json({ error: "No se encontró una propuesta para este requerimiento" });
+    const pdf = await generarProformaPDF(data);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="proforma_requerimiento_${id}.pdf"`,
+      "Content-Length": String(pdf.length),
+    });
+    return res.send(pdf);
+  } catch (error) {
+    console.error("Error generando proforma del requerimiento:", error);
+    return res.status(500).json({ error: "No se pudo generar la proforma" });
+  }
+};
+
+const descargarProformaRequerimientoAdmin = async (req: any, res: any) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Requerimiento inválido" });
+  try {
+    const data = await buildProformaDataRequerimiento(id);
+    if (!data) return res.status(404).json({ error: "No se encontró una propuesta para este requerimiento" });
+    const pdf = await generarProformaPDF(data);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="proforma_requerimiento_${id}.pdf"`,
+      "Content-Length": String(pdf.length),
+    });
+    return res.send(pdf);
+  } catch (error) {
+    console.error("Error generando proforma del requerimiento para administración:", error);
+    return res.status(500).json({ error: "No se pudo generar la proforma" });
+  }
+};
+
+const reintentarDespachoRequerimiento = async (req: any, res: any) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Requerimiento inválido" });
+  try {
+    const result = await pool.query(
+      "SELECT reserva_id FROM requerimientos_personalizados WHERE id = $1",
+      [id]
+    );
+    if (!result.rowCount || !result.rows[0].reserva_id) {
+      return res.status(409).json({ error: "El requerimiento todavía no tiene una reserva pagada" });
+    }
+    const dispatch = await prepararDespachoRequerimiento(Number(result.rows[0].reserva_id), Number(req.user?.id));
+    return res.json(dispatch);
+  } catch (error) {
+    console.error(`Error preparando despacho del requerimiento #${id}:`, error);
+    return res.status(500).json({ error: "No se pudo generar el despacho. Revisa los datos de servicio y vuelve a intentar." });
+  }
+};
+
 module.exports = {
   crearRequerimiento,
   listarMisRequerimientos,
   listarRequerimientosAdmin,
   actualizarRequerimientoAdmin,
-  pagarRequerimiento,
+  aceptarPropuestaRequerimiento,
+  pagarRequerimiento: aceptarPropuestaRequerimiento,
+  descargarProformaRequerimiento,
+  descargarProformaRequerimientoAdmin,
+  reintentarDespachoRequerimiento,
 };

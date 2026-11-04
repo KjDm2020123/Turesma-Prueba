@@ -40,8 +40,13 @@ const readApiJson = async <T,>(response: Response, path: string): Promise<T> => 
 type Operation = {
   id: number;
   reserva_id?: number | null;
+  requerimiento_id?: number | null;
+  grupo_numero?: number | null;
+  unidad_numero?: number | null;
   tipo_servicio: string;
+  tipo_vehiculo_solicitado?: string | null;
   fecha_programada: string;
+  fecha_fin_programada?: string | null;
   hora_inicio?: string | null;
   hora_fin?: string | null;
   origen: string;
@@ -86,9 +91,29 @@ type ReservationReady = {
 type Vehicle = { id: number; placa: string; modelo: string; capacidad: number; estado: string; activo: boolean };
 type Driver = { id: number; nombre: string; apellido?: string; estado: string; activo: boolean };
 type AssignmentRecommendation = {
-  decisionId: number;
-  vehiculo: { vehiculo_id: number; conductor_id?: number | null; placa: string; puntaje: number; razones: string[] };
+  decisionId: number | null;
+  fecha: string;
+  fecha_fin: string;
+  vehiculo: { vehiculo_id: number; conductor_id?: number | null; placa: string; puntaje: number; razones: string[] } | null;
   alternativas: Array<{ vehiculo_id: number; placa: string }>;
+  evaluados: Array<{
+    vehiculo_id: number;
+    placa: string;
+    modelo: string;
+    capacidad: number;
+    bloqueos: string[];
+    advertencias: string[];
+    elegible: boolean;
+  }>;
+  excluidos: Array<{
+    vehiculo_id: number;
+    placa: string;
+    modelo: string;
+    capacidad: number;
+    bloqueos: string[];
+    advertencias: string[];
+    elegible: boolean;
+  }>;
 };
 
 const stateLabels: Record<string, string> = {
@@ -213,6 +238,24 @@ export default function OperacionesPage() {
     }
   };
 
+  const reopenOperation = async (operation: Operation) => {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await request(`/api/admin/operaciones/${operation.id}/reabrir`, {
+        method: "PATCH",
+        body: JSON.stringify({}),
+      });
+      setMessage(`Se reabrió la unidad ${operation.unidad_numero || ""} del requerimiento #${operation.requerimiento_id || ""}.`);
+      await load();
+    } catch (reopenError) {
+      setError(reopenError instanceof Error ? reopenError.message : "No se pudo reabrir la operación");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const createOperation = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -235,7 +278,7 @@ export default function OperacionesPage() {
     const selectedVehicle = Number(selectedVehicleId);
     const selectedDriver = Number(selectedDriverId);
     const selectingAlternative = assignmentRecommendation !== null
-      && selectedVehicle !== assignmentRecommendation.vehiculo.vehiculo_id;
+      && selectedVehicle !== assignmentRecommendation.vehiculo?.vehiculo_id;
     if (selectingAlternative && !decisionReason.trim()) {
       setError("Indica por qué se eligió una alternativa a la recomendación.");
       return;
@@ -324,6 +367,7 @@ export default function OperacionesPage() {
     try {
       const query = new URLSearchParams({
         fecha: assignment.fecha_programada,
+        fecha_fin: assignment.fecha_fin_programada || assignment.fecha_programada,
         pasajeros: String(assignment.pasajeros),
         operacion_id: String(assignment.id),
       });
@@ -332,8 +376,8 @@ export default function OperacionesPage() {
       const payload = await request(`/api/admin/inteligencia/asignacion-recomendada?${query}`, { method: "GET" });
       const recommendation = payload.data as AssignmentRecommendation;
       setAssignmentRecommendation(recommendation);
-      setSelectedVehicleId(String(recommendation.vehiculo.vehiculo_id));
-      if (recommendation.vehiculo.conductor_id) {
+      setSelectedVehicleId(recommendation.vehiculo ? String(recommendation.vehiculo.vehiculo_id) : "");
+      if (recommendation.vehiculo?.conductor_id) {
         setSelectedDriverId(String(recommendation.vehiculo.conductor_id));
       }
       setDecisionReason("");
@@ -434,7 +478,13 @@ export default function OperacionesPage() {
             const endTime = formatTime(operation.hora_fin);
             const subcontractState = operation.subcontratacion_estado || "no_requerida";
             const canEditSubcontracting = ["programada", "asignada", "incidencia"].includes(operation.estado);
-            return <tr key={operation.id} className="align-top"><td className="px-5 py-4"><p className="font-black text-slate-900">#{operation.id} · {operation.reserva_id ? `Reserva #${operation.reserva_id}` : operation.tipo_servicio}</p><p className="mt-1 text-xs text-slate-500">{operation.pasajeros} pasajeros</p></td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{formatDate(operation.fecha_programada)}<br /><span className="text-xs">{startTime || "Sin hora"}{endTime ? ` - ${endTime}` : ""}</span></td><td className="max-w-xs px-5 py-4 text-slate-600">{operation.origen}<br /><span className="font-semibold text-slate-900">{operation.destino}</span></td><td className="px-5 py-4 text-xs text-slate-600">{subcontractState !== "no_requerida" ? <><span className="font-bold text-amber-700">{operation.subcontratista_placa || "Proveedor pendiente"}</span><br />{operation.subcontratista_empresa || "Sin proveedor registrado"}<br />{operation.subcontratista_conductor || "Sin conductor registrado"}</> : <>{operation.vehiculo_placa || "Sin vehículo"}<br />{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</>}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span>{subcontractState !== "no_requerida" && <p className={`mt-2 text-xs font-bold ${subcontractState === "confirmada" ? "text-emerald-700" : "text-amber-700"}`}>{subcontractingLabels[subcontractState]}</p>}</td><td className="space-y-2 px-5 py-4"><div className="flex flex-wrap gap-2">{["programada", "asignada"].includes(operation.estado) && subcontractState === "no_requerida" && <button onClick={() => openAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}{canEditSubcontracting && <button onClick={() => openSubcontracting(operation)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">{subcontractState === "no_requerida" ? "Subcontratar" : "Editar proveedor"}</button>}{operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}{operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}</div></td></tr>;
+            const dateRange = operation.fecha_fin_programada && operation.fecha_fin_programada.slice(0, 10) !== operation.fecha_programada.slice(0, 10)
+              ? `${formatDate(operation.fecha_programada)} - ${formatDate(operation.fecha_fin_programada)}`
+              : formatDate(operation.fecha_programada);
+            const serviceTitle = operation.requerimiento_id
+              ? `Requerimiento #${operation.requerimiento_id} · Grupo ${operation.grupo_numero} · Unidad ${operation.unidad_numero}`
+              : operation.reserva_id ? `Reserva #${operation.reserva_id}` : operation.tipo_servicio;
+            return <tr key={operation.id} className="align-top"><td className="px-5 py-4"><p className="font-black text-slate-900">#{operation.id} · {serviceTitle}</p><p className="mt-1 text-xs text-slate-500">{operation.pasajeros} pasajeros{operation.tipo_vehiculo_solicitado ? ` · ${operation.tipo_vehiculo_solicitado} solicitado` : ""}</p></td><td className="whitespace-nowrap px-5 py-4 text-slate-600">{dateRange}<br /><span className="text-xs">{startTime || "Sin hora"}{endTime ? ` - ${endTime}` : ""}</span></td><td className="max-w-xs px-5 py-4 text-slate-600">{operation.origen}<br /><span className="font-semibold text-slate-900">{operation.destino}</span></td><td className="px-5 py-4 text-xs text-slate-600">{subcontractState !== "no_requerida" ? <><span className="font-bold text-amber-700">{operation.subcontratista_placa || "Proveedor pendiente"}</span><br />{operation.subcontratista_empresa || "Sin proveedor registrado"}<br />{operation.subcontratista_conductor || "Sin conductor registrado"}</> : <>{operation.vehiculo_placa || "Sin vehículo"}<br />{operation.conductor_nombre ? `${operation.conductor_nombre} ${operation.conductor_apellido || ""}` : "Sin conductor"}</>}</td><td className="px-5 py-4"><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">{stateLabels[operation.estado] || operation.estado}</span>{subcontractState !== "no_requerida" && <p className={`mt-2 text-xs font-bold ${subcontractState === "confirmada" ? "text-emerald-700" : "text-amber-700"}`}>{subcontractingLabels[subcontractState]}</p>}</td><td className="space-y-2 px-5 py-4"><div className="flex flex-wrap gap-2">{["programada", "asignada"].includes(operation.estado) && subcontractState === "no_requerida" && <button onClick={() => openAssignment(operation)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{operation.vehiculo_id ? "Reasignar" : "Asignar"}</button>}{canEditSubcontracting && <button onClick={() => openSubcontracting(operation)} className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">{subcontractState === "no_requerida" ? "Subcontratar" : "Editar proveedor"}</button>}{operation.estado === "asignada" && <button onClick={() => void changeState(operation, "en_curso")} disabled={saving} className="rounded-lg bg-cyan-50 px-3 py-2 text-xs font-bold text-cyan-700">Iniciar</button>}{operation.estado === "en_curso" && <button onClick={() => void changeState(operation, "completada")} disabled={saving} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Finalizar</button>}{operation.estado === "cancelada" && <button onClick={() => void reopenOperation(operation)} disabled={saving} className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">Reabrir unidad</button>}</div></td></tr>;
           })}</tbody></table></div>
         )}
       </section>
@@ -468,11 +518,52 @@ export default function OperacionesPage() {
               {recommendationLoading ? "Evaluando disponibilidad..." : assignmentRecommendation ? "Actualizar recomendación" : "Sugerir vehículo"}
             </button>
             {assignmentRecommendation && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                <p className="font-black">Sugerido: {assignmentRecommendation.vehiculo.placa} · puntaje {assignmentRecommendation.vehiculo.puntaje}/100</p>
-                <ul className="mt-1 list-inside list-disc">
-                  {assignmentRecommendation.vehiculo.razones.map((reason) => <li key={reason}>{reason}</li>)}
-                </ul>
+              <div className="space-y-3">
+                {assignmentRecommendation.vehiculo ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <p className="font-black">Sugerido: {assignmentRecommendation.vehiculo.placa} · puntaje {assignmentRecommendation.vehiculo.puntaje}/100</p>
+                    <ul className="mt-1 list-inside list-disc">
+                      {assignmentRecommendation.vehiculo.razones.map((reason) => <li key={reason}>{reason}</li>)}
+                    </ul>
+                  </div>
+                ) : (
+                  <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+                    No hay vehículos elegibles para todo el período. Revisa los motivos antes de continuar.
+                  </div>
+                )}
+                {assignmentRecommendation.excluidos.length > 0 && (
+                  <details open className="rounded-xl border border-slate-200 bg-white">
+                    <summary className="cursor-pointer px-3 py-2.5 text-xs font-black text-slate-700">
+                      Vehículos no elegibles ({assignmentRecommendation.excluidos.length})
+                    </summary>
+                    <ul className="max-h-52 space-y-2 overflow-y-auto border-t border-slate-100 p-3">
+                      {assignmentRecommendation.excluidos.map((vehicle) => (
+                        <li key={vehicle.vehiculo_id} className="rounded-lg border border-red-100 bg-red-50/70 p-2.5">
+                          <p className="text-xs font-black text-slate-800">{vehicle.placa} · {vehicle.modelo} · {vehicle.capacidad} plazas</p>
+                          <ul className="mt-1 list-inside list-disc space-y-0.5 text-[11px] text-red-800">
+                            {vehicle.bloqueos.map((reason) => <li key={reason}>{reason}</li>)}
+                          </ul>
+                          {vehicle.advertencias.length > 0 && (
+                            <ul className="mt-1 list-inside list-disc space-y-0.5 text-[11px] text-amber-800">
+                              {vehicle.advertencias.map((warning) => <li key={warning}>{warning}</li>)}
+                            </ul>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {assignmentRecommendation.vehiculo
+                  && (assignmentRecommendation.evaluados.find((vehicle) => vehicle.vehiculo_id === assignmentRecommendation.vehiculo?.vehiculo_id)?.advertencias.length || 0) > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <p className="font-black">Advertencias de la opción sugerida</p>
+                    <ul className="mt-1 list-inside list-disc">
+                        {assignmentRecommendation.evaluados
+                        .find((vehicle) => vehicle.vehiculo_id === assignmentRecommendation.vehiculo?.vehiculo_id)
+                        ?.advertencias.map((warning) => <li key={warning}>{warning}</li>)}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             <label className="block text-sm font-bold text-slate-600">
@@ -482,18 +573,18 @@ export default function OperacionesPage() {
                 value={selectedVehicleId}
                 onChange={(event) => {
                   setSelectedVehicleId(event.target.value);
-                  if (event.target.value === String(assignmentRecommendation?.vehiculo.vehiculo_id)) setDecisionReason("");
+                  if (event.target.value === String(assignmentRecommendation?.vehiculo?.vehiculo_id)) setDecisionReason("");
                 }}
                 className="mt-1 w-full rounded-xl border p-3"
                 required
               >
                 <option value="">Selecciona un vehículo</option>
-                {vehicles.filter((vehicle) => vehicle.activo && !["mantenimiento", "inactivo"].includes(vehicle.estado) && (!assignmentRecommendation || vehicle.id === assignmentRecommendation.vehiculo.vehiculo_id || assignmentRecommendation.alternativas.some((option) => option.vehiculo_id === vehicle.id))).map((vehicle) => (
+                {vehicles.filter((vehicle) => vehicle.activo && vehicle.estado === "disponible" && (!assignmentRecommendation || vehicle.id === assignmentRecommendation.vehiculo?.vehiculo_id || assignmentRecommendation.alternativas.some((option) => option.vehiculo_id === vehicle.id))).map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.id}>{vehicle.placa} · {vehicle.modelo} · {vehicle.capacidad} pax</option>
                 ))}
               </select>
             </label>
-            {assignmentRecommendation && selectedVehicleId !== String(assignmentRecommendation.vehiculo.vehiculo_id) && (
+            {assignmentRecommendation && selectedVehicleId !== String(assignmentRecommendation.vehiculo?.vehiculo_id) && (
               <label className="block text-sm font-bold text-slate-600">
                 Motivo para elegir otra opción
                 <textarea

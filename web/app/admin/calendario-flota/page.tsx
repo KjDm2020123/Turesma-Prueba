@@ -301,8 +301,8 @@ export default function CalendarioFlotaPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6">
-      <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+    <div className="w-full min-w-0 space-y-4">
+      <header className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-start gap-4">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-50 text-[#E31E24]">
             <CalendarDays size={24} />
@@ -336,7 +336,7 @@ export default function CalendarioFlotaPage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
         {[
           { label: `Disponibles · ${formatDate(selectedDate)}`, value: availableCount, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Vehículos ocupados", value: occupiedCount, icon: Bus, color: "text-blue-600", bg: "bg-blue-50" },
@@ -350,8 +350,8 @@ export default function CalendarioFlotaPage() {
         ))}
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
           <div>
             <h2 className="text-lg font-black capitalize text-slate-900">
               {viewMode === "week"
@@ -385,16 +385,16 @@ export default function CalendarioFlotaPage() {
           </div>
         </div>
 
-        <div className="hidden max-h-[70vh] overflow-auto lg:block">
-          <table className={`w-full border-collapse text-center ${viewMode === "month" ? "min-w-[1360px]" : "min-w-[860px]"}`}>
+        <div className="hidden max-h-[72vh] overflow-auto lg:block">
+          <table className={`w-full border-collapse text-center ${viewMode === "month" ? "min-w-[1640px]" : "min-w-[1000px]"}`}>
             <thead>
               <tr className="bg-slate-50">
-                <th scope="col" className="sticky left-0 top-0 z-30 min-w-48 border-b border-r border-slate-200 bg-slate-50 px-4 py-3 text-left text-[10px] font-black uppercase tracking-wide text-slate-500">Vehículo</th>
+                <th scope="col" className="sticky left-0 top-0 z-30 min-w-[220px] border-b border-r border-slate-200 bg-slate-50 px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide text-slate-500">Vehículo</th>
                 {days.map((day, index) => (
-                  <th key={day || `blank-${index}`} scope="col" className={`sticky top-0 z-20 border-b border-slate-200 bg-slate-50 px-1 py-2 ${viewMode === "week" ? "min-w-[88px]" : "min-w-[42px]"}`}>
+                  <th key={day || `blank-${index}`} scope="col" className={`sticky top-0 z-20 border-b border-l border-slate-200 bg-slate-50 px-1 py-2 ${viewMode === "week" ? "min-w-[112px]" : "min-w-[48px]"}`}>
                     {day && (
-                      <button type="button" onClick={() => { setSelectedDate(day); setSelectedItemKey(null); }} aria-label={`Ver disponibilidad del ${formatDate(day)}`} aria-pressed={selectedDate === day} className={`flex w-full flex-col items-center rounded-lg py-1.5 text-[10px] font-bold ${selectedDate === day ? "bg-[#E31E24] text-white" : day === asIsoDate(new Date()) ? "bg-red-50 text-[#E31E24]" : "text-slate-500 hover:bg-slate-100"}`}>
-                        <span className="capitalize">{fromIsoDate(day).toLocaleDateString("es-EC", { weekday: "short" }).replace(".", "")}</span><span className="mt-0.5 text-xs">{Number(day.slice(8, 10))}</span>
+                      <button type="button" onClick={() => { setSelectedDate(day); setSelectedItemKey(null); }} aria-label={`Ver disponibilidad del ${formatDate(day)}`} aria-pressed={selectedDate === day} className={`flex w-full flex-col items-center rounded-lg py-2 text-[11px] font-bold ${selectedDate === day ? "bg-[#E31E24] text-white" : day === asIsoDate(new Date()) ? "bg-red-50 text-[#E31E24]" : "text-slate-600 hover:bg-slate-100"}`}>
+                        <span className="capitalize">{fromIsoDate(day).toLocaleDateString("es-EC", { weekday: "short" }).replace(".", "")}</span><span className="mt-0.5 text-sm font-black">{Number(day.slice(8, 10))}</span>
                       </button>
                     )}
                   </th>
@@ -408,7 +408,7 @@ export default function CalendarioFlotaPage() {
                 <tr><td colSpan={days.length + 1} className="py-12 text-center text-sm font-medium text-slate-500">No hay vehículos activos para mostrar.</td></tr>
               ) : filteredVehicles.map((vehicle) => (
                 <tr key={vehicle.id} className="hover:bg-slate-50/60">
-                  <th scope="row" className="sticky left-0 z-[1] min-w-48 border-b border-r border-slate-100 bg-white px-4 py-2 text-left">
+                  <th scope="row" className="sticky left-0 z-[1] min-w-[220px] border-b border-r border-slate-200 bg-white px-4 py-2 text-left">
                     <div className="flex items-center gap-2.5">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600"><Car size={17} /></span>
                       <span className="min-w-0">
@@ -426,9 +426,9 @@ export default function CalendarioFlotaPage() {
                         <div
                           className="grid gap-x-1 gap-y-1 py-1"
                           style={{
-                            gridTemplateColumns: `repeat(${days.length}, minmax(${viewMode === "week" ? "88px" : "42px"}, 1fr))`,
-                            gridTemplateRows: `18px repeat(${laneCount}, 24px)`,
-                            minWidth: `${days.length * (viewMode === "week" ? 89 : 43)}px`,
+                            gridTemplateColumns: `repeat(${days.length}, minmax(${viewMode === "week" ? "112px" : "48px"}, 1fr))`,
+                            gridTemplateRows: `22px repeat(${laneCount}, ${viewMode === "week" ? "44px" : "26px"})`,
+                            minWidth: `${days.length * (viewMode === "week" ? 113 : 49)}px`,
                           }}
                         >
                           {days.map((day, index) => day ? (
@@ -439,7 +439,7 @@ export default function CalendarioFlotaPage() {
                               aria-label={`Ver disponibilidad del ${formatDate(day)}`}
                               aria-pressed={selectedDate === day}
                               style={{ gridColumn: index + 1, gridRow: 1 }}
-                              className={`rounded-md text-[9px] ${selectedDate === day ? "bg-red-50 ring-1 ring-inset ring-red-200" : "hover:bg-slate-50"}`}
+                              className={`rounded-md border-l border-slate-100 text-[9px] ${selectedDate === day ? "bg-red-50 ring-1 ring-inset ring-red-200" : "hover:bg-slate-50"}`}
                             />
                           ) : <span key={`blank-${index}`} style={{ gridColumn: index + 1, gridRow: 1 }} />)}
                           {vehicleEvents.map((event) => {
@@ -459,10 +459,20 @@ export default function CalendarioFlotaPage() {
                                   gridColumn: `${event.gridStart + 1} / ${event.gridEnd + 2}`,
                                   gridRow: event.lane + 2,
                                 }}
-                                className={`z-[1] min-w-0 truncate rounded-lg border px-2 text-left text-[10px] font-black leading-5 transition hover:brightness-95 ${eventStyle(event)} ${selectedItemKey === itemKey ? "ring-2 ring-[#E31E24] ring-offset-1" : ""}`}
+                                className={`z-[1] flex min-w-0 flex-col justify-center overflow-hidden rounded-lg border px-2 text-left transition hover:brightness-95 ${viewMode === "week" ? "gap-0.5 py-1 text-[10px]" : "truncate text-[9px]"} ${eventStyle(event)} ${selectedItemKey === itemKey ? "ring-2 ring-[#E31E24] ring-offset-1" : ""}`}
                               >
-                                {event.tipo === "mantenimiento" ? "Mantenimiento" : eventName(event)}
-                                {event.hora_inicio && <span className="ml-1 font-semibold opacity-75">{event.hora_inicio.slice(0, 5)}</span>}
+                                <span className="flex min-w-0 items-center justify-between gap-1">
+                                  <span className="truncate font-black">{event.tipo === "mantenimiento" ? "Mantenimiento" : eventName(event)}</span>
+                                  {event.hora_inicio && <span className="shrink-0 font-bold opacity-80">{event.hora_inicio.slice(0, 5)}</span>}
+                                </span>
+                                {viewMode === "week" && (
+                                  <>
+                                    <span className="block truncate text-[9px] font-semibold opacity-80">
+                                      {[event.origen, event.destino].filter(Boolean).join(" → ") || eventStatusLabel(event)}
+                                    </span>
+                                    <span className="block truncate text-[9px] font-bold opacity-75">{eventStatusLabel(event)}</span>
+                                  </>
+                                )}
                               </button>
                             );
                           })}

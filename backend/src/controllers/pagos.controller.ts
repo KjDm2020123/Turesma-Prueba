@@ -7,6 +7,7 @@ const { obtenerPagoAprobado, enviarReciboPago } = require("../config/reciboPago"
 const { obtenerFactura } = require("../config/sriFacturacion");
 const { emitirFacturaPorReserva } = require("../config/sriFacturacion");
 const { buildProformaDataDeReserva, generarProformaPDF } = require("../config/proforma");
+const { prepararDespachoRequerimiento } = require("../config/requerimientosDespacho");
 
 const METODOS_VALIDOS = ["transferencia", "link_pago", "payphone"];
 
@@ -97,8 +98,17 @@ const confirmarPagoPayphone = async (req: any, res: any) => {
         console.error(`Error emitiendo factura SRI para reserva #${reservaId}:`, error?.message || error);
       }
     }
+    let despacho = null;
+    if (estadoPago === "pagado") {
+      try {
+        despacho = await prepararDespachoRequerimiento(reservaId, userId);
+      } catch (error) {
+        console.error(`Error preparando despacho del requerimiento para reserva #${reservaId}:`, error);
+        despacho = { pendiente: true };
+      }
+    }
     await notificarAdmins(userId, `Pago PayPhone confirmado para la reserva #${reservaId} ($${monto.toFixed(2)}).`, "reserva", reservaId);
-    return res.json({ message: "Pago PayPhone confirmado", pago: saved.rows[0], estado_pago: estadoPago });
+    return res.json({ message: "Pago PayPhone confirmado", pago: saved.rows[0], estado_pago: estadoPago, despacho });
   } catch (error: any) {
     console.error("Error confirmando pago PayPhone:", error);
     return res.status(400).json({ error: error.message || "No se pudo confirmar el pago PayPhone" });

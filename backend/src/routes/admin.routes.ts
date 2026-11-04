@@ -96,6 +96,8 @@ const { obtenerUbicacionesActuales } = require("../controllers/admin/ubicaciones
 const {
   listarRequerimientosAdmin,
   actualizarRequerimientoAdmin,
+  descargarProformaRequerimientoAdmin,
+  reintentarDespachoRequerimiento,
 } = require("../controllers/requerimientos-personalizados.controller");
 const {
   listarVerificaciones,
@@ -283,6 +285,8 @@ router.post("/cotizaciones/:id/proforma/enviar", enviarProformaCotizacion);
 router.get("/cotizaciones/cliente/:usuario_id", listarMisCotizaciones);
 router.get("/requerimientos-personalizados", listarRequerimientosAdmin);
 router.patch("/requerimientos-personalizados/:id", actualizarRequerimientoAdmin);
+router.get("/requerimientos-personalizados/:id/proforma", descargarProformaRequerimientoAdmin);
+router.post("/requerimientos-personalizados/:id/preparar-despacho", requireRole("admin"), reintentarDespachoRequerimiento);
 
 // ============ UBICACIÓN EN VIVO DE VEHÍCULOS ============
 router.get("/ubicaciones", obtenerUbicacionesActuales);

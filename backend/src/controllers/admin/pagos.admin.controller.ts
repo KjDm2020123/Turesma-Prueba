@@ -4,6 +4,7 @@ const pool = require("../../config/db");
 const { crearNotificacion, usuarioIdDeConductor } = require("../../config/notificaciones");
 const { notificarClienteReserva } = require("../../config/reservaMailer");
 const { emitirFacturaPorReserva, obtenerFactura, reenviarFacturaPorReserva } = require("../../config/sriFacturacion");
+const { prepararDespachoRequerimiento } = require("../../config/requerimientosDespacho");
 
 // Recalcula monto_pagado y estado_pago de una reserva a partir de sus pagos
 // APROBADOS. La reserva solo se confirma cuando el total está pagado. Cuando
@@ -50,7 +51,17 @@ const recalcularEstadoPago = async (reservaId: number, adminId: number | null | 
     }
   }
 
-  return { montoPagado, estadoPago, total, reservaConfirmada };
+  let despacho = null;
+  if (estadoPago === "pagado") {
+    try {
+      despacho = await prepararDespachoRequerimiento(reservaId, adminId);
+    } catch (error) {
+      console.error(`Error preparando despacho del requerimiento para reserva #${reservaId}:`, error);
+      despacho = { pendiente: true };
+    }
+  }
+
+  return { montoPagado, estadoPago, total, reservaConfirmada, despacho };
 };
 
 // ── Admin: lista todos los comprobantes de pago (filtrable por estado) ───────

@@ -352,8 +352,13 @@ const initDatabase = async () => {
     CREATE TABLE IF NOT EXISTS operaciones (
       id SERIAL PRIMARY KEY,
       reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL,
+      requerimiento_id INT,
+      grupo_numero INT,
+      unidad_numero INT,
       tipo_servicio VARCHAR(80) NOT NULL DEFAULT 'viaje',
+      tipo_vehiculo_solicitado VARCHAR(100),
       fecha_programada DATE NOT NULL,
+      fecha_fin_programada DATE,
       hora_inicio TIME,
       hora_fin TIME,
       origen VARCHAR(300) NOT NULL,
@@ -396,7 +401,12 @@ const initDatabase = async () => {
     ADD COLUMN IF NOT EXISTS subcontratista_placa VARCHAR(30),
     ADD COLUMN IF NOT EXISTS subcontratista_conductor VARCHAR(120),
     ADD COLUMN IF NOT EXISTS subcontratista_conductor_telefono VARCHAR(40),
-    ADD COLUMN IF NOT EXISTS subcontratacion_costo NUMERIC(10, 2);
+    ADD COLUMN IF NOT EXISTS subcontratacion_costo NUMERIC(10, 2),
+    ADD COLUMN IF NOT EXISTS requerimiento_id INT,
+    ADD COLUMN IF NOT EXISTS grupo_numero INT,
+    ADD COLUMN IF NOT EXISTS unidad_numero INT,
+    ADD COLUMN IF NOT EXISTS tipo_vehiculo_solicitado VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS fecha_fin_programada DATE;
   `);
 
   await pool.query(`
@@ -858,10 +868,13 @@ const initDatabase = async () => {
       destino VARCHAR(300),
       detalles TEXT NOT NULL,
       estado VARCHAR(30) NOT NULL DEFAULT 'pendiente'
-        CHECK (estado IN ('pendiente', 'en_revision', 'respondido', 'cerrado')),
+        CHECK (estado IN ('pendiente', 'en_revision', 'respondido', 'propuesta_enviada', 'pago_pendiente', 'pagado', 'cerrado', 'rechazado')),
       precio_final DECIMAL(10,2),
       respuesta_admin TEXT,
       respondido_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      estado_despacho VARCHAR(20) NOT NULL DEFAULT 'no_aplica',
+      error_despacho TEXT,
+      aceptado_en TIMESTAMP,
       creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -874,7 +887,44 @@ const initDatabase = async () => {
     ALTER TABLE requerimientos_personalizados
     ADD COLUMN IF NOT EXISTS service_groups JSONB NOT NULL DEFAULT '[]'::jsonb,
     ADD COLUMN IF NOT EXISTS precio_final DECIMAL(10,2),
-    ADD COLUMN IF NOT EXISTS reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS reserva_id INT REFERENCES reservas(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS estado_despacho VARCHAR(20) NOT NULL DEFAULT 'no_aplica',
+    ADD COLUMN IF NOT EXISTS error_despacho TEXT,
+    ADD COLUMN IF NOT EXISTS aceptado_en TIMESTAMP;
+    UPDATE requerimientos_personalizados
+    SET service_groups = jsonb_build_array(jsonb_build_object(
+      'cantidad_vehiculos', cantidad_vehiculos,
+      'tipo_vehiculo', tipo_vehiculo,
+      'pasajeros_por_vehiculo', pasajeros_por_vehiculo,
+      'fecha_servicio', fecha_servicio,
+      'fecha_fin', fecha_fin,
+      'hora_salida', hora_salida,
+      'origen', origen,
+      'destino', destino,
+      'paradas', NULL,
+      'detalles', NULL,
+      'simultaneo', false
+    ))
+    WHERE service_groups = '[]'::jsonb;
+    ALTER TABLE requerimientos_personalizados
+    DROP CONSTRAINT IF EXISTS requerimientos_personalizados_estado_check;
+    ALTER TABLE requerimientos_personalizados
+    ADD CONSTRAINT requerimientos_personalizados_estado_check
+      CHECK (estado IN ('pendiente', 'en_revision', 'respondido', 'propuesta_enviada', 'pago_pendiente', 'pagado', 'cerrado', 'rechazado'));
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'operaciones_requerimiento_id_fkey') THEN
+        ALTER TABLE operaciones
+        ADD CONSTRAINT operaciones_requerimiento_id_fkey
+          FOREIGN KEY (requerimiento_id) REFERENCES requerimientos_personalizados(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
+    CREATE UNIQUE INDEX IF NOT EXISTS operaciones_requerimiento_unidad_idx
+      ON operaciones (requerimiento_id, grupo_numero, unidad_numero)
+      WHERE requerimiento_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS requerimientos_personalizados_reserva_idx
+      ON requerimientos_personalizados (reserva_id)
+      WHERE reserva_id IS NOT NULL;
   `);
 
   // Campos extra de cotizaciones (vehículo elegido, valor y duración del servicio)

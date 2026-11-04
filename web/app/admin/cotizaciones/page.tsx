@@ -12,7 +12,7 @@ import {
   FileText, Check, X, Eye, Loader2,
   MapPin, Users, Calendar, DollarSign, Clock, Car,
   MessageSquare, TrendingUp, CheckCircle2, XCircle,
-  Printer, Send
+  Printer, Send, Download, RefreshCw
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -83,6 +83,7 @@ type RequerimientoPersonalizado = {
     paradas?: string | null;
     detalles?: string | null;
     simultaneo?: boolean;
+    precio_total?: number | null;
   }>;
   fecha_servicio?: string | null;
   fecha_fin?: string | null;
@@ -92,6 +93,9 @@ type RequerimientoPersonalizado = {
   detalles: string;
   estado: string;
   precio_final?: number | null;
+  reserva_id?: number | null;
+  estado_despacho?: string | null;
+  error_despacho?: string | null;
   respuesta_admin?: string | null;
   creado_en: string;
 };
@@ -124,7 +128,8 @@ function AdminCotizacionesContent() {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<"cotizaciones" | "requerimientos">("cotizaciones");
   const [customResponses, setCustomResponses] = useState<Record<number, string>>({});
-  const [customPrices, setCustomPrices] = useState<Record<number, string>>({});
+  const [customGroupPrices, setCustomGroupPrices] = useState<Record<number, string[]>>({});
+  const [customServiceGroups, setCustomServiceGroups] = useState<Record<number, NonNullable<RequerimientoPersonalizado["service_groups"]>>>({});
   const [customStatuses, setCustomStatuses] = useState<Record<number, string>>({});
   const [savingCustomId, setSavingCustomId] = useState<number | null>(null);
   const [filtro, setFiltro] = useState("pendiente");
@@ -150,7 +155,14 @@ function AdminCotizacionesContent() {
         const rows: RequerimientoPersonalizado[] = await customRes.json();
         setCustomRequests(rows);
         setCustomResponses(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? row.respuesta_admin ?? ""])));
-        setCustomPrices(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? (row.precio_final == null ? "" : String(row.precio_final))])));
+        setCustomGroupPrices(current => Object.fromEntries(rows.map(row => [
+          row.id,
+          current[row.id] ?? (row.service_groups || []).map(group => group.precio_total == null ? "" : String(group.precio_total)),
+        ])));
+        setCustomServiceGroups(current => Object.fromEntries(rows.map(row => [
+          row.id,
+          current[row.id] ?? row.service_groups ?? [],
+        ])));
         setCustomStatuses(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? row.estado])));
       }
     } catch { /* silencio */ }
@@ -395,12 +407,20 @@ function AdminCotizacionesContent() {
     setErr("");
     setMsg("");
     try {
+      const nextStatus = customStatuses[request.id] || request.estado;
+      const storedGroupPrices = request.service_groups?.map(group =>
+        group.precio_total == null ? "" : String(group.precio_total)
+      ) || [];
+      const groupPrices = customGroupPrices[request.id] || storedGroupPrices;
       const res = await fetch(`${API_URL}/api/admin/requerimientos-personalizados/${request.id}`, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          estado: customStatuses[request.id] || request.estado,
-          precio_final: customPrices[request.id] || null,
+          estado: nextStatus,
+          ...(customServiceGroups[request.id] ? { grupos_servicio: customServiceGroups[request.id] } : {}),
+          ...((nextStatus === "propuesta_enviada" || customGroupPrices[request.id])
+            ? { precios_grupo: groupPrices }
+            : {}),
           respuesta_admin: customResponses[request.id] || "",
         }),
       });
@@ -410,6 +430,61 @@ function AdminCotizacionesContent() {
       await load(true);
     } catch (error) {
       setErr(error instanceof Error ? error.message : "No se pudo actualizar el requerimiento");
+    } finally {
+      setSavingCustomId(null);
+    }
+  };
+
+  const updateCustomServiceGroup = (
+    request: RequerimientoPersonalizado,
+    groupIndex: number,
+    patch: Partial<NonNullable<RequerimientoPersonalizado["service_groups"]>[number]>
+  ) => setCustomServiceGroups(current => {
+    const groups = current[request.id] || request.service_groups || [];
+    return {
+      ...current,
+      [request.id]: groups.map((group, index) => index === groupIndex ? { ...group, ...patch } : group),
+    };
+  });
+
+  const downloadCustomProforma = async (request: RequerimientoPersonalizado) => {
+    setSavingCustomId(request.id);
+    setErr("");
+    try {
+      const response = await fetch(`${API_URL}/api/admin/requerimientos-personalizados/${request.id}/proforma`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "No se pudo descargar la proforma");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `proforma_requerimiento_${request.id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "No se pudo descargar la proforma");
+    } finally {
+      setSavingCustomId(null);
+    }
+  };
+
+  const retryCustomDispatch = async (request: RequerimientoPersonalizado) => {
+    setSavingCustomId(request.id);
+    setErr("");
+    try {
+      const response = await fetch(`${API_URL}/api/admin/requerimientos-personalizados/${request.id}/preparar-despacho`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se pudo preparar el despacho");
+      setMsg(`Despacho del requerimiento #${request.id} preparado: ${data.total} unidad(es).`);
+      await load(true);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "No se pudo preparar el despacho");
     } finally {
       setSavingCustomId(null);
     }
@@ -642,12 +717,21 @@ function AdminCotizacionesContent() {
                   </p>
                 </div>
                 <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase ${
-                  request.estado === "respondido" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : request.estado === "cerrado" ? "border-slate-200 bg-slate-50 text-slate-500"
+                  ["propuesta_enviada", "pago_pendiente", "pagado"].includes(request.estado) ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : ["cerrado", "rechazado"].includes(request.estado) ? "border-slate-200 bg-slate-50 text-slate-500"
                       : request.estado === "en_revision" ? "border-blue-200 bg-blue-50 text-blue-700"
                         : "border-amber-200 bg-amber-50 text-amber-700"
                 }`}>
-                  {request.estado === "en_revision" ? "En revisión" : request.estado === "respondido" ? "Respondido" : request.estado === "cerrado" ? "Cerrado" : "Pendiente"}
+                  {({
+                    pendiente: "Pendiente",
+                    en_revision: "En revisión",
+                    respondido: "Respondido",
+                    propuesta_enviada: "Propuesta enviada",
+                    pago_pendiente: "Pago pendiente",
+                    pagado: "Pagado",
+                    cerrado: "Cerrado",
+                    rechazado: "Rechazado",
+                  } as Record<string, string>)[request.estado] || request.estado}
                 </span>
               </div>
               <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
@@ -663,6 +747,7 @@ function AdminCotizacionesContent() {
                   paradas: null,
                   detalles: null,
                   simultaneo: false,
+                  precio_total: request.precio_final,
                 }]).map((group, groupIndex) => (
                   <div key={groupIndex} className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
                     <p className="text-[9px] font-black uppercase tracking-widest text-violet-700">Grupo {groupIndex + 1}</p>
@@ -677,9 +762,58 @@ function AdminCotizacionesContent() {
                       {group.fecha_fin ? ` — ${new Date(`${String(group.fecha_fin).slice(0, 10)}T00:00:00`).toLocaleDateString("es-EC")}` : ""}
                       {group.hora_salida ? ` · ${group.hora_salida}` : ""}
                     </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Tipo solicitado
+                        <input maxLength={100} disabled={Boolean(request.reserva_id)}
+                          value={customServiceGroups[request.id]?.[groupIndex]?.tipo_vehiculo ?? group.tipo_vehiculo ?? ""}
+                          onChange={event => updateCustomServiceGroup(request, groupIndex, { tipo_vehiculo: event.target.value })}
+                          className={`${INPUT_CLS} mt-1`} />
+                      </label>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Fecha de servicio
+                        <input type="date" disabled={Boolean(request.reserva_id)}
+                          value={customServiceGroups[request.id]?.[groupIndex]?.fecha_servicio ?? group.fecha_servicio?.slice(0, 10) ?? ""}
+                          onChange={event => updateCustomServiceGroup(request, groupIndex, { fecha_servicio: event.target.value || null })}
+                          className={`${INPUT_CLS} mt-1`} />
+                      </label>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Pasajeros por unidad
+                        <input type="number" min="1" disabled={Boolean(request.reserva_id)}
+                          value={customServiceGroups[request.id]?.[groupIndex]?.pasajeros_por_vehiculo ?? group.pasajeros_por_vehiculo ?? ""}
+                          onChange={event => updateCustomServiceGroup(request, groupIndex, {
+                            pasajeros_por_vehiculo: event.target.value ? Number(event.target.value) : null,
+                          })}
+                          className={`${INPUT_CLS} mt-1`} />
+                      </label>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Origen
+                        <input maxLength={300} disabled={Boolean(request.reserva_id)}
+                          value={customServiceGroups[request.id]?.[groupIndex]?.origen ?? group.origen ?? ""}
+                          onChange={event => updateCustomServiceGroup(request, groupIndex, { origen: event.target.value })}
+                          className={`${INPUT_CLS} mt-1`} />
+                      </label>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Destino
+                        <input maxLength={300} disabled={Boolean(request.reserva_id)}
+                          value={customServiceGroups[request.id]?.[groupIndex]?.destino ?? group.destino ?? ""}
+                          onChange={event => updateCustomServiceGroup(request, groupIndex, { destino: event.target.value })}
+                          className={`${INPUT_CLS} mt-1`} />
+                      </label>
+                    </div>
                     {group.paradas && <p className="mt-1 text-xs text-slate-600"><b>Paradas:</b> {group.paradas}</p>}
                     {group.detalles && <p className="mt-1 whitespace-pre-line text-xs text-slate-600"><b>Indicaciones:</b> {group.detalles}</p>}
                     {group.simultaneo && <p className="mt-1 text-[10px] font-black text-violet-700">Operación simultánea solicitada</p>}
+                    <label className="mt-3 block max-w-xs text-[9px] font-black uppercase tracking-widest text-slate-500">
+                      Precio total del grupo ($)
+                      <input type="number" min="0.01" step="0.01" disabled={Boolean(request.reserva_id)}
+                        value={customGroupPrices[request.id]?.[groupIndex] ?? (group.precio_total == null ? "" : String(group.precio_total))}
+                        onChange={event => setCustomGroupPrices(current => {
+                          const base = request.service_groups?.length
+                            ? request.service_groups.map(item => item.precio_total == null ? "" : String(item.precio_total))
+                            : [group.precio_total == null ? "" : String(group.precio_total)];
+                          const existing = current[request.id]?.length === base.length ? current[request.id] : base;
+                          const next = [...existing];
+                          next[groupIndex] = event.target.value;
+                          return { ...current, [request.id]: next };
+                        })}
+                        placeholder="Ej: 1500.00" className={`${INPUT_CLS} mt-1`} />
+                    </label>
                   </div>
                 ))}
                 <div className="rounded-xl border border-violet-100 bg-violet-50 p-3 sm:col-span-2">
@@ -687,39 +821,48 @@ function AdminCotizacionesContent() {
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-violet-950">{request.detalles}</p>
                 </div>
                 <div className="space-y-3 sm:col-span-2">
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
+                  {request.error_despacho && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700">No se pudo preparar el despacho: {request.error_despacho}</p>}
+                  {request.reserva_id && <p className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-xs font-bold text-cyan-800">
+                    Reserva de pago #{request.reserva_id} · Despacho: {request.estado_despacho || "pendiente"}
+                  </p>}
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                     <div>
                       <label htmlFor={`custom-status-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Estado</label>
                       <select id={`custom-status-${request.id}`} value={customStatuses[request.id] || request.estado}
+                        disabled={Boolean(request.reserva_id)}
                         onChange={event => setCustomStatuses(current => ({ ...current, [request.id]: event.target.value }))}
                         className={INPUT_CLS}>
                         <option value="pendiente">Pendiente</option>
                         <option value="en_revision">En revisión</option>
                         <option value="respondido">Respondido</option>
+                        <option value="propuesta_enviada">Enviar propuesta</option>
                         <option value="cerrado">Cerrado</option>
+                        <option value="rechazado">Rechazado</option>
                       </select>
-                    </div>
-                    <div>
-                      <label htmlFor={`custom-price-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Precio para aprobar ($)</label>
-                      <input id={`custom-price-${request.id}`} type="number" min="0" step="0.01"
-                        value={customPrices[request.id] ?? (request.precio_final == null ? "" : String(request.precio_final))}
-                        onChange={event => setCustomPrices(current => ({ ...current, [request.id]: event.target.value }))}
-                        placeholder="Ej: 1500.00" className={INPUT_CLS} />
                     </div>
                     <div>
                       <label htmlFor={`custom-response-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Respuesta visible para el cliente</label>
                       <textarea id={`custom-response-${request.id}`} rows={3} maxLength={5000}
+                        disabled={Boolean(request.reserva_id)}
                         value={customResponses[request.id] ?? request.respuesta_admin ?? ""}
                         onChange={event => setCustomResponses(current => ({ ...current, [request.id]: event.target.value }))}
                         placeholder="Indica disponibilidad, preguntas para aclarar o próximos pasos para preparar una propuesta."
                         className={INPUT_CLS + " resize-y"} />
                     </div>
                   </div>
-                  <button type="button" onClick={() => void saveCustomRequest(request)} disabled={savingCustomId === request.id}
+                  <button type="button" onClick={() => void saveCustomRequest(request)} disabled={savingCustomId === request.id || Boolean(request.reserva_id)}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-violet-900 disabled:opacity-60">
                     {savingCustomId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                    Guardar precio y notificar al cliente
+                    Guardar y notificar al cliente
                   </button>
+                  {["propuesta_enviada", "pago_pendiente", "pagado"].includes(request.estado) && <button type="button" onClick={() => void downloadCustomProforma(request)} disabled={savingCustomId === request.id}
+                    className="ml-2 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 disabled:opacity-60">
+                    <Download size={14} /> Descargar proforma
+                  </button>}
+                  {request.estado_despacho === "error" && <button type="button" onClick={() => void retryCustomDispatch(request)} disabled={savingCustomId === request.id}
+                    className="ml-2 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-60">
+                    <RefreshCw size={14} /> Reintentar despacho
+                  </button>}
                 </div>
               </div>
             </article>

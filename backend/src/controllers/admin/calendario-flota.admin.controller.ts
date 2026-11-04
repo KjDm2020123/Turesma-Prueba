@@ -28,12 +28,20 @@ const getCalendarioFlota = async (req: any, res: any) => {
          ORDER BY tipo ASC NULLS LAST, placa ASC`
       ),
       pool.query(
-        `SELECT o.id, o.vehiculo_id, o.fecha_programada::text AS fecha_inicio,
-                o.fecha_programada::text AS fecha_fin, o.estado, o.tipo_servicio,
+        `SELECT o.id, o.vehiculo_id,
+                GREATEST(o.fecha_programada, $1::date)::text AS fecha_inicio,
+                LEAST(COALESCE(o.fecha_fin_programada, o.fecha_programada), $2::date)::text AS fecha_fin,
+                o.estado,
+                CASE WHEN o.requerimiento_id IS NOT NULL
+                  THEN 'Requerimiento #' || o.requerimiento_id || ' - Grupo ' || o.grupo_numero || ' - Unidad ' || o.unidad_numero
+                       || COALESCE(' - ' || o.tipo_vehiculo_solicitado, '')
+                  ELSE o.tipo_servicio
+                END AS tipo_servicio,
                 o.hora_inicio::text AS hora_inicio, o.hora_fin::text AS hora_fin,
                 o.origen, o.destino, o.reserva_id
          FROM operaciones o
-         WHERE o.fecha_programada BETWEEN $1::date AND $2::date
+         WHERE o.fecha_programada <= $2::date
+           AND COALESCE(o.fecha_fin_programada, o.fecha_programada) >= $1::date
            AND o.estado <> 'cancelada'
            AND o.vehiculo_id IS NOT NULL
          ORDER BY o.fecha_programada, o.hora_inicio NULLS LAST`,
@@ -100,6 +108,9 @@ const getCalendarioFlota = async (req: any, res: any) => {
            LIMIT 1
          ) o ON true
          WHERE r.estado = 'confirmada'
+           AND NOT EXISTS (
+             SELECT 1 FROM requerimientos_personalizados rp WHERE rp.reserva_id = r.id
+           )
            AND (
              (
                COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva) <= $2::date

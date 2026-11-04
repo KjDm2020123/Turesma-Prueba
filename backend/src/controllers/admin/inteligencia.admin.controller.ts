@@ -559,12 +559,18 @@ const getAnaliticaInteligente = async (_req: any, res: any) => {
 
 const recomendarAsignacion = async (req: any, res: any) => {
   const fecha = typeof req.query.fecha === "string" ? req.query.fecha : new Date().toISOString().slice(0, 10);
+  let fechaFin = typeof req.query.fecha_fin === "string" ? req.query.fecha_fin : fecha;
   const pasajeros = Number(req.query.pasajeros || 1);
   const horaInicio = typeof req.query.hora_inicio === "string" ? req.query.hora_inicio : null;
   const horaFin = typeof req.query.hora_fin === "string" ? req.query.hora_fin : null;
   const operationId = req.query.operacion_id === undefined ? null : Number(req.query.operacion_id);
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)
+  const isValidDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  if (!isValidDate(fecha) || !isValidDate(fechaFin) || fechaFin < fecha
     || !Number.isInteger(pasajeros) || pasajeros <= 0
     || (operationId !== null && (!Number.isInteger(operationId) || operationId <= 0))
     || (horaInicio !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(horaInicio))
@@ -574,6 +580,128 @@ const recomendarAsignacion = async (req: any, res: any) => {
   }
 
   try {
+    if (operationId !== null) {
+      const period = await pool.query(
+        `SELECT COALESCE(o.fecha_fin_programada, r.fecha_fin, r.fecha_regreso, o.fecha_programada)::date::text AS fecha_fin
+         FROM operaciones o
+         LEFT JOIN reservas r ON r.id = o.reserva_id
+         WHERE o.id = $1`,
+        [operationId]
+      );
+      if (!period.rowCount) {
+        return res.status(404).json({ success: false, error: "Operación no encontrada" });
+      }
+      fechaFin = period.rows[0].fecha_fin || fechaFin;
+      if (!isValidDate(fechaFin) || fechaFin < fecha) {
+        return res.status(400).json({ success: false, error: "El rango de fechas de la operación no es válido" });
+      }
+    }
+
+    const evaluatedResult = await pool.query(`
+      WITH vehiculos_evaluados AS (
+        SELECT v.id AS vehiculo_id, v.placa, v.modelo, v.tipo, v.capacidad,
+               v.estado, v.activo, v.fecha_proximo_mantenimiento,
+               COALESCE(v.kilometraje, 0)::int AS kilometraje,
+               v.proximo_km_mantenimiento,
+               u.id AS conductor_id, u.nombre AS conductor_nombre,
+               ARRAY_REMOVE(ARRAY[
+                 CASE WHEN NOT v.activo THEN 'Vehículo desactivado' END,
+                 CASE WHEN v.estado <> 'disponible' THEN 'Estado del vehículo: ' || COALESCE(v.estado, 'sin estado') END,
+                 CASE WHEN v.capacidad < $3 THEN 'Capacidad insuficiente: ' || COALESCE(v.capacidad, 0) || ' plazas para ' || $3 || ' pasajeros' END,
+                 CASE WHEN v.fecha_proximo_mantenimiento <= CURRENT_DATE
+                   OR v.proximo_km_mantenimiento <= COALESCE(v.kilometraje, 0)
+                   THEN 'Mantenimiento vencido por fecha o kilometraje' END,
+                 (
+                   SELECT 'Mantenimiento ' || string_agg(
+                     CASE WHEN m.estado = 'en_progreso' THEN 'en curso'
+                       ELSE 'programado el ' || to_char(m.fecha_programada, 'DD/MM/YYYY') END,
+                     ', ' ORDER BY m.fecha_programada
+                   )
+                   FROM mantenimiento_vehiculos m
+                   WHERE m.vehiculo_id = v.id
+                     AND (m.estado = 'en_progreso'
+                       OR (m.estado = 'programado' AND m.fecha_programada BETWEEN $1::date AND $2::date))
+                 ),
+                 (
+                   SELECT 'No disponible según calendario manual el ' || string_agg(to_char(dia.fecha, 'DD/MM'), ', ' ORDER BY dia.fecha)
+                   FROM generate_series($1::date, $2::date, INTERVAL '1 day') AS dia(fecha)
+                   LEFT JOIN vehiculo_disponibilidad vd
+                     ON vd.vehiculo_id = v.id AND vd.fecha = dia.fecha
+                   WHERE vd.disponible = false
+                 ),
+                 (
+                   SELECT 'No ofrece servicio los días: ' || string_agg(
+                     to_char(dia.fecha, 'DD/MM'), ', ' ORDER BY dia.fecha
+                   )
+                   FROM generate_series($1::date, $2::date, INTERVAL '1 day') AS dia(fecha)
+                   LEFT JOIN vehiculo_disponibilidad vd
+                     ON vd.vehiculo_id = v.id AND vd.fecha = dia.fecha
+                   WHERE vd.disponible IS NULL
+                     AND NOT (EXTRACT(DOW FROM dia.fecha)::int = ANY(COALESCE(v.dias_servicio, ARRAY[0,1,2,3,4,5,6])))
+                 ),
+                 (
+                   SELECT 'Conflicto con reserva #' || r.id || ' (' ||
+                     to_char(COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date), 'DD/MM/YYYY') || ')'
+                   FROM reservas r
+                   WHERE r.vehiculo_id = v.id
+                     AND COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date) <= $2::date
+                     AND COALESCE(r.fecha_fin, r.fecha_regreso, r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date) >= $1::date
+                     AND r.estado NOT IN ('cancelada', 'finalizada')
+                     AND NOT EXISTS (
+                       SELECT 1 FROM operaciones propia
+                       WHERE propia.id = $4::int AND propia.reserva_id = r.id
+                     )
+                     AND (
+                       $1::date <> $2::date
+                       OR COALESCE(r.fecha_fin, r.fecha_regreso, r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date)
+                            <> COALESCE(r.fecha_salida::date, r.fecha_servicio::date, r.fecha_reserva::date)
+                       OR $5::time IS NULL OR $6::time IS NULL OR r.fecha_salida IS NULL OR r.fecha_llegada IS NULL
+                       OR (r.fecha_salida::time < $6::time AND $5::time < r.fecha_llegada::time)
+                     )
+                   ORDER BY r.id
+                   LIMIT 1
+                 ),
+                 (
+                   SELECT CASE WHEN o.vehiculo_id = v.id
+                     THEN 'Conflicto con vehículo en operación #'
+                     ELSE 'Conductor asociado ocupado en operación #' END
+                     || o.id || ' (' || to_char(o.fecha_programada, 'DD/MM/YYYY') || ')'
+                   FROM operaciones o
+                   LEFT JOIN conductores conductor_operacion ON conductor_operacion.id = o.conductor_id
+                   WHERE (o.vehiculo_id = v.id OR conductor_operacion.usuario_id = u.id)
+                     AND o.fecha_programada <= $2::date
+                     AND COALESCE(o.fecha_fin_programada, o.fecha_programada) >= $1::date
+                     AND o.id <> COALESCE($4::int, -1)
+                     AND o.estado IN ('programada', 'asignada', 'en_curso', 'incidencia')
+                     AND (
+                       $1::date <> $2::date
+                       OR COALESCE(o.fecha_fin_programada, o.fecha_programada) <> o.fecha_programada
+                       OR $5::time IS NULL OR $6::time IS NULL OR o.hora_inicio IS NULL OR o.hora_fin IS NULL
+                       OR (o.hora_inicio < $6::time AND $5::time < o.hora_fin)
+                     )
+                   ORDER BY o.id
+                   LIMIT 1
+                 )
+               ], NULL) AS bloqueos,
+               ARRAY_REMOVE(ARRAY[
+                 CASE WHEN u.id IS NULL THEN 'Sin conductor asociado; deberá seleccionarse uno al asignar' END,
+                 CASE WHEN v.fecha_proximo_mantenimiento > CURRENT_DATE
+                   AND (v.fecha_proximo_mantenimiento BETWEEN $1::date AND $2::date
+                     OR v.fecha_proximo_mantenimiento <= $1::date + INTERVAL '7 days')
+                   THEN 'Próximo mantenimiento: ' || to_char(v.fecha_proximo_mantenimiento, 'DD/MM/YYYY') END,
+                 CASE WHEN v.proximo_km_mantenimiento IS NOT NULL
+                   AND v.proximo_km_mantenimiento > COALESCE(v.kilometraje, 0)
+                   AND v.proximo_km_mantenimiento - COALESCE(v.kilometraje, 0) <= 1500
+                   THEN 'Próximo mantenimiento por kilometraje (' ||
+                     (v.proximo_km_mantenimiento - COALESCE(v.kilometraje, 0)) || ' km restantes)' END
+               ], NULL) AS advertencias
+        FROM vehiculos v
+        LEFT JOIN usuarios u ON u.id = v.usuario_id
+      )
+      SELECT * FROM vehiculos_evaluados
+      ORDER BY cardinality(bloqueos), placa
+    `, [fecha, fechaFin, pasajeros, operationId, horaInicio, horaFin]);
+
     const result = await pool.query(`
       WITH candidatos AS (
         SELECT
@@ -599,12 +727,19 @@ const recomendarAsignacion = async (req: any, res: any) => {
         WHERE v.activo = true
           AND v.estado = 'disponible'
           AND v.capacidad >= $2
+          AND v.id = ANY($7::int[])
           AND NOT EXISTS (
             SELECT 1 FROM reservas ocupada
             WHERE ocupada.vehiculo_id = v.id
-              AND COALESCE(ocupada.fecha_salida::date, ocupada.fecha_servicio::date, ocupada.fecha_reserva::date) = $1::date
+              AND COALESCE(ocupada.fecha_salida::date, ocupada.fecha_servicio::date, ocupada.fecha_reserva::date)
+                    <= COALESCE((SELECT fecha_fin_programada FROM operaciones WHERE id = $5::int), $6::date, $1::date)
+              AND COALESCE(ocupada.fecha_fin, ocupada.fecha_regreso, ocupada.fecha_salida::date, ocupada.fecha_servicio::date, ocupada.fecha_reserva::date) >= $1::date
               AND ocupada.estado NOT IN ('cancelada', 'finalizada')
               AND (
+                $1::date <> COALESCE((SELECT fecha_fin_programada FROM operaciones WHERE id = $5::int), $6::date, $1::date)
+                OR COALESCE(ocupada.fecha_fin, ocupada.fecha_regreso, ocupada.fecha_salida::date, ocupada.fecha_servicio::date, ocupada.fecha_reserva::date)
+                     <> COALESCE(ocupada.fecha_salida::date, ocupada.fecha_servicio::date, ocupada.fecha_reserva::date)
+                OR
                 $3::time IS NULL OR $4::time IS NULL OR ocupada.fecha_salida IS NULL OR ocupada.fecha_llegada IS NULL
                 OR (ocupada.fecha_salida::time < $4::time AND $3::time < ocupada.fecha_llegada::time)
               )
@@ -617,13 +752,31 @@ const recomendarAsignacion = async (req: any, res: any) => {
             SELECT 1
             FROM operaciones o
             LEFT JOIN conductores conductor_operacion ON conductor_operacion.id = o.conductor_id
-            WHERE o.fecha_programada = $1::date
+            WHERE o.fecha_programada <= COALESCE((SELECT fecha_fin_programada FROM operaciones WHERE id = $5::int), $6::date, $1::date)
+              AND COALESCE(o.fecha_fin_programada, o.fecha_programada) >= $1::date
               AND o.id <> COALESCE($5::int, -1)
               AND o.estado IN ('programada', 'asignada', 'en_curso', 'incidencia')
               AND (o.vehiculo_id = v.id OR conductor_operacion.usuario_id = u.id)
               AND (
+                $1::date <> COALESCE((SELECT fecha_fin_programada FROM operaciones WHERE id = $5::int), $6::date, $1::date)
+                OR COALESCE(o.fecha_fin_programada, o.fecha_programada) <> o.fecha_programada
+                OR
                 $3::time IS NULL OR o.hora_inicio IS NULL OR $4::time IS NULL OR o.hora_fin IS NULL
                 OR (o.hora_inicio < $4::time AND $3::time < o.hora_fin)
+              )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM mantenimiento_vehiculos m
+            WHERE m.vehiculo_id = v.id
+              AND (
+                m.estado = 'en_progreso'
+                OR (m.estado = 'programado'
+                    AND m.fecha_programada BETWEEN $1::date
+                      AND COALESCE(
+                        (SELECT fecha_fin_programada FROM operaciones WHERE id = $5::int),
+                        $6::date
+                      ))
               )
           )
         GROUP BY v.id, u.id, u.nombre, c.rating_promedio
@@ -642,13 +795,36 @@ const recomendarAsignacion = async (req: any, res: any) => {
       FROM candidatos
       ORDER BY puntaje DESC, carga_30_dias ASC, kilometraje ASC
       LIMIT 5
-    `, [fecha, pasajeros, horaInicio, horaFin, operationId]);
+    `, [fecha, pasajeros, horaInicio, horaFin, operationId, fechaFin,
+      evaluatedResult.rows.filter((vehicle: any) => vehicle.bloqueos.length === 0).map((vehicle: any) => vehicle.vehiculo_id)]);
 
     const opciones = result.rows;
+    const evaluados = evaluatedResult.rows.map((vehicle: any) => ({
+      vehiculo_id: vehicle.vehiculo_id,
+      placa: vehicle.placa,
+      modelo: vehicle.modelo,
+      tipo: vehicle.tipo,
+      capacidad: vehicle.capacidad,
+      conductor_id: vehicle.conductor_id,
+      conductor_nombre: vehicle.conductor_nombre,
+      bloqueos: vehicle.bloqueos,
+      advertencias: vehicle.advertencias,
+      elegible: vehicle.bloqueos.length === 0,
+    }));
     if (!opciones.length) {
-      return res.status(404).json({
-        success: false,
-        error: "No hay vehículos disponibles que cumplan la capacidad y fecha solicitadas",
+      return res.json({
+        success: true,
+        data: {
+          fecha,
+          fecha_fin: fechaFin,
+          pasajeros,
+          operacion_id: operationId,
+          vehiculo: null,
+          alternativas: [],
+          evaluados,
+          excluidos: evaluados.filter((vehicle: any) => !vehicle.elegible),
+          decisionId: null,
+        },
       });
     }
 
@@ -678,17 +854,21 @@ const recomendarAsignacion = async (req: any, res: any) => {
 
     const recomendacion = {
       fecha,
+      fecha_fin: fechaFin,
       pasajeros,
       hora_inicio: horaInicio,
       hora_fin: horaFin,
       operacion_id: operationId,
       vehiculo: opcionesExplicadas[0],
       alternativas: opcionesExplicadas.slice(1),
+      evaluados,
+      excluidos: evaluados.filter((vehicle: any) => !vehicle.elegible),
       filtrosAplicados: [
         "Vehículo activo y disponible",
         "Capacidad suficiente para los pasajeros",
         "Sin solapamiento con reservas existentes en el horario seleccionado",
         "Sin conflicto de horario con otra operación activa",
+        "Sin mantenimiento programado durante las fechas del servicio",
       ],
       criterios: ["capacidad", "disponibilidad", "mantenimiento", "calificación", "carga operativa"],
     };

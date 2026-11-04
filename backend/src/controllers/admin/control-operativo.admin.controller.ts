@@ -18,7 +18,8 @@ const getControlOperativo = async (_req: any, res: any) => {
         LEFT JOIN vehiculos v ON v.id = o.vehiculo_id
         LEFT JOIN conductores c ON c.id = o.conductor_id
         LEFT JOIN usuarios u ON u.id = c.usuario_id
-        WHERE o.fecha_programada = CURRENT_DATE
+        WHERE o.fecha_programada <= CURRENT_DATE
+          AND COALESCE(o.fecha_fin_programada, o.fecha_programada) >= CURRENT_DATE
         ORDER BY o.hora_inicio NULLS LAST, o.id
         LIMIT 100
       `),
