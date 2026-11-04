@@ -61,6 +61,40 @@ type Resumen = {
   ingresos_generados: number;
 };
 
+type RequerimientoPersonalizado = {
+  id: number;
+  usuario_id: number;
+  cliente_nombre: string;
+  cliente_email: string;
+  cliente_telefono?: string | null;
+  organizacion?: string | null;
+  cantidad_vehiculos: number;
+  tipo_vehiculo?: string | null;
+  pasajeros_por_vehiculo?: number | null;
+  service_groups?: Array<{
+    cantidad_vehiculos: number;
+    tipo_vehiculo?: string | null;
+    pasajeros_por_vehiculo?: number | null;
+    fecha_servicio?: string | null;
+    fecha_fin?: string | null;
+    hora_salida?: string | null;
+    origen?: string | null;
+    destino?: string | null;
+    paradas?: string | null;
+    detalles?: string | null;
+    simultaneo?: boolean;
+  }>;
+  fecha_servicio?: string | null;
+  fecha_fin?: string | null;
+  hora_salida?: string | null;
+  origen?: string | null;
+  destino?: string | null;
+  detalles: string;
+  estado: string;
+  respuesta_admin?: string | null;
+  creado_en: string;
+};
+
 const ESTADO_BADGE: Record<string, string> = {
   pendiente:   "bg-amber-100 text-amber-700 border-amber-200",
   aprobada:    "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -84,8 +118,13 @@ function AdminCotizacionesContent() {
   const searchParams = useSearchParams();
   const pendingFocusId = useRef<number | null>(null);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
+  const [customRequests, setCustomRequests] = useState<RequerimientoPersonalizado[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState<"cotizaciones" | "requerimientos">("cotizaciones");
+  const [customResponses, setCustomResponses] = useState<Record<number, string>>({});
+  const [customStatuses, setCustomStatuses] = useState<Record<number, string>>({});
+  const [savingCustomId, setSavingCustomId] = useState<number | null>(null);
   const [filtro, setFiltro] = useState("pendiente");
   const [selected, setSelected] = useState<Cotizacion | null>(null);
   const [modalMode, setModalMode] = useState<"view" | "aprobar" | "rechazar">("view");
@@ -98,12 +137,19 @@ function AdminCotizacionesContent() {
   const load = async (silencioso = false) => {
     if (!silencioso) setLoading(true);
     try {
-      const [cotRes, resRes] = await Promise.all([
+      const [cotRes, resRes, customRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/cotizaciones?estado=${filtro}`, { headers: getAuthHeaders() }),
         fetch(`${API_URL}/api/admin/cotizaciones/resumen`, { headers: getAuthHeaders() }),
+        fetch(`${API_URL}/api/admin/requerimientos-personalizados`, { headers: getAuthHeaders() }),
       ]);
       if (cotRes.ok) setCotizaciones(await cotRes.json());
       if (resRes.ok) setResumen(await resRes.json());
+      if (customRes.ok) {
+        const rows: RequerimientoPersonalizado[] = await customRes.json();
+        setCustomRequests(rows);
+        setCustomResponses(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? row.respuesta_admin ?? ""])));
+        setCustomStatuses(current => Object.fromEntries(rows.map(row => [row.id, current[row.id] ?? row.estado])));
+      }
     } catch { /* silencio */ }
     finally { setLoading(false); }
   };
@@ -339,6 +385,30 @@ function AdminCotizacionesContent() {
     finally { setSaving(false); }
   };
 
+  const saveCustomRequest = async (request: RequerimientoPersonalizado) => {
+    setSavingCustomId(request.id);
+    setErr("");
+    setMsg("");
+    try {
+      const res = await fetch(`${API_URL}/api/admin/requerimientos-personalizados/${request.id}`, {
+        method: "PATCH",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          estado: customStatuses[request.id] || request.estado,
+          respuesta_admin: customResponses[request.id] || "",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo actualizar el requerimiento");
+      setMsg(`Requerimiento #${request.id} actualizado.`);
+      await load(true);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "No se pudo actualizar el requerimiento");
+    } finally {
+      setSavingCustomId(null);
+    }
+  };
+
   if (checkingSession) return (
     <div className="flex h-64 items-center justify-center">
       <Loader2 className="animate-spin text-[#E31E24]" size={36} />
@@ -349,8 +419,21 @@ function AdminCotizacionesContent() {
     <div className="space-y-6 animate-in fade-in duration-500">
 
       {/* HEADER */}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setActiveSection("cotizaciones")}
+          className={`rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition ${activeSection === "cotizaciones" ? "bg-[#E31E24] text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
+          Cotizaciones
+        </button>
+        <button type="button" onClick={() => setActiveSection("requerimientos")}
+          className={`rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition ${activeSection === "requerimientos" ? "bg-violet-700 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
+          Requerimientos personalizados {customRequests.filter(request => request.estado === "pendiente" || request.estado === "en_revision").length > 0
+            ? `(${customRequests.filter(request => request.estado === "pendiente" || request.estado === "en_revision").length})`
+            : ""}
+        </button>
+      </div>
+
       {/* KPI CARDS */}
-      {resumen && (
+      {activeSection === "cotizaciones" && resumen && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {[
             { label: "Pendientes", val: resumen.pendientes, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200", icon: Clock },
@@ -374,17 +457,17 @@ function AdminCotizacionesContent() {
       {err && <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-bold rounded-r-xl">{err}</div>}
 
       {/* FILTRO TABS */}
-      <div className="flex gap-2 flex-wrap">
+      {activeSection === "cotizaciones" && <div className="flex gap-2 flex-wrap">
         {["pendiente", "aprobada", "rechazada", "todas"].map(f => (
           <button key={f} onClick={() => setFiltro(f)}
             className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filtro === f ? "bg-[#E31E24] text-white shadow-sm" : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"}`}>
             {f === "todas" ? "Todas" : ESTADO_LABEL[f]}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* TABLA */}
-      <div className="bg-white rounded-2xl md:rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden border-b-8 border-b-[#E31E24]">
+      {activeSection === "cotizaciones" && <div className="bg-white rounded-2xl md:rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden border-b-8 border-b-[#E31E24]">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="animate-spin text-[#E31E24]" size={36} />
@@ -523,7 +606,113 @@ function AdminCotizacionesContent() {
             </div>
           </>
         )}
-      </div>
+      </div>}
+
+      {activeSection === "requerimientos" && (
+        <section className="space-y-4">
+          <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+            <h2 className="text-sm font-black text-violet-950">Solicitudes que requieren coordinación especial</h2>
+            <p className="mt-1 text-xs leading-relaxed text-violet-800">Revisa la necesidad completa, evalúa disponibilidad propia o externa y deja una respuesta para que el cliente pueda verla en su cuenta.</p>
+          </div>
+          {loading ? (
+            <div className="flex h-48 items-center justify-center rounded-2xl border border-slate-200 bg-white">
+              <Loader2 className="animate-spin text-violet-700" size={32} />
+            </div>
+          ) : customRequests.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white text-slate-400">
+              <FileText size={36} className="text-slate-200" />
+              <p className="text-xs font-black uppercase tracking-widest">No hay requerimientos personalizados</p>
+            </div>
+          ) : customRequests.map(request => (
+            <article key={request.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-4 sm:p-5">
+                <div>
+                  <p className="text-sm font-black text-slate-900">
+                    Requerimiento #{request.id}{request.organizacion ? ` · ${request.organizacion}` : ""}
+                  </p>
+                  <p className="mt-1 text-xs font-bold text-slate-600">{request.cliente_nombre}</p>
+                  <p className="text-[11px] text-slate-400">
+                    {request.cliente_email}{request.cliente_telefono ? ` · ${request.cliente_telefono}` : ""}
+                  </p>
+                </div>
+                <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase ${
+                  request.estado === "respondido" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : request.estado === "cerrado" ? "border-slate-200 bg-slate-50 text-slate-500"
+                      : request.estado === "en_revision" ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                }`}>
+                  {request.estado === "en_revision" ? "En revisión" : request.estado === "respondido" ? "Respondido" : request.estado === "cerrado" ? "Cerrado" : "Pendiente"}
+                </span>
+              </div>
+              <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                {(request.service_groups?.length ? request.service_groups : [{
+                  cantidad_vehiculos: request.cantidad_vehiculos,
+                  tipo_vehiculo: request.tipo_vehiculo,
+                  pasajeros_por_vehiculo: request.pasajeros_por_vehiculo,
+                  fecha_servicio: request.fecha_servicio,
+                  fecha_fin: request.fecha_fin,
+                  hora_salida: request.hora_salida,
+                  origen: request.origen,
+                  destino: request.destino,
+                  paradas: null,
+                  detalles: null,
+                  simultaneo: false,
+                }]).map((group, groupIndex) => (
+                  <div key={groupIndex} className="rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-violet-700">Grupo {groupIndex + 1}</p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">
+                      {group.cantidad_vehiculos} vehículo(s)
+                      {group.tipo_vehiculo ? ` · ${group.tipo_vehiculo}` : ""}
+                      {group.pasajeros_por_vehiculo ? ` · ${group.pasajeros_por_vehiculo} pasajeros por unidad` : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      {group.origen || "Salida por definir"} → {group.destino || "Destino(s) por definir"}
+                      {group.fecha_servicio ? ` · ${new Date(`${String(group.fecha_servicio).slice(0, 10)}T00:00:00`).toLocaleDateString("es-EC")}` : ""}
+                      {group.fecha_fin ? ` — ${new Date(`${String(group.fecha_fin).slice(0, 10)}T00:00:00`).toLocaleDateString("es-EC")}` : ""}
+                      {group.hora_salida ? ` · ${group.hora_salida}` : ""}
+                    </p>
+                    {group.paradas && <p className="mt-1 text-xs text-slate-600"><b>Paradas:</b> {group.paradas}</p>}
+                    {group.detalles && <p className="mt-1 whitespace-pre-line text-xs text-slate-600"><b>Indicaciones:</b> {group.detalles}</p>}
+                    {group.simultaneo && <p className="mt-1 text-[10px] font-black text-violet-700">Operación simultánea solicitada</p>}
+                  </div>
+                ))}
+                <div className="rounded-xl border border-violet-100 bg-violet-50 p-3 sm:col-span-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-violet-700">Detalle enviado por el cliente</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-violet-950">{request.detalles}</p>
+                </div>
+                <div className="space-y-3 sm:col-span-2">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                    <div>
+                      <label htmlFor={`custom-status-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Estado</label>
+                      <select id={`custom-status-${request.id}`} value={customStatuses[request.id] || request.estado}
+                        onChange={event => setCustomStatuses(current => ({ ...current, [request.id]: event.target.value }))}
+                        className={INPUT_CLS}>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="en_revision">En revisión</option>
+                        <option value="respondido">Respondido</option>
+                        <option value="cerrado">Cerrado</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor={`custom-response-${request.id}`} className="mb-1.5 block text-[9px] font-black uppercase tracking-widest text-slate-500">Respuesta visible para el cliente</label>
+                      <textarea id={`custom-response-${request.id}`} rows={3} maxLength={5000}
+                        value={customResponses[request.id] ?? request.respuesta_admin ?? ""}
+                        onChange={event => setCustomResponses(current => ({ ...current, [request.id]: event.target.value }))}
+                        placeholder="Indica disponibilidad, preguntas para aclarar o próximos pasos para preparar una propuesta."
+                        className={INPUT_CLS + " resize-y"} />
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => void saveCustomRequest(request)} disabled={savingCustomId === request.id}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition hover:bg-violet-900 disabled:opacity-60">
+                    {savingCustomId === request.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    Guardar y notificar al cliente
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {/* MODAL */}
       {selected && (

@@ -224,64 +224,106 @@ const generarProformaPDF = (d: any): Promise<Buffer> => new Promise((resolve, re
     doc.moveDown(0.8);
 
     // ── Tabla ──
-    const cols = { cant: left, desc: left + 65, uni: left + 350, tot: left + 445 };
-    const colW = { cant: 65, desc: 285, uni: 95, tot: 95 };
+    const colW = { cant: 58, desc: 267, uni: 95, tot: 95 };
+    const cols = {
+      cant: left,
+      desc: left + colW.cant,
+      uni: left + colW.cant + colW.desc,
+      tot: left + colW.cant + colW.desc + colW.uni,
+    };
     const headY = doc.y;
-    const headH = 22;
-    // Cabecera con fondo oscuro
-    doc.rect(left, headY, width, headH).fill("#0b0f1a");
-    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
-    doc.text("CANTIDAD", cols.cant, headY + 7, { width: colW.cant, align: "center" });
-    doc.text("DESCRIPCION", cols.desc, headY + 7, { width: colW.desc, align: "center" });
-    doc.text("P. UNITARIO", cols.uni, headY + 7, { width: colW.uni, align: "center" });
-    doc.text("P. TOTAL", cols.tot, headY + 7, { width: colW.tot, align: "center" });
-    doc.fillColor("#000000");
-
-    // Fila del ítem (alta)
+    const headH = 26;
     const rowY = headY + headH;
-    const rowH = 240;
-    doc.font("Helvetica").fontSize(10);
-    doc.text("1", cols.cant, rowY + 10, { width: colW.cant, align: "center" });
-    // Descripción con formato
-    let dy = rowY + 10;
-    doc.font("Helvetica").fontSize(10).text("Servicio de Transporte", cols.desc + 6, dy, { width: colW.desc - 12 });
-    dy = doc.y + 6;
-    doc.font("Helvetica-Bold").text("Ruta: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
-    doc.font("Helvetica").text(`${d.servicio.origen} → ${d.servicio.destino}`);
-    dy = doc.y + 2;
-    doc.font("Helvetica-Bold").text("Salida: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
-    doc.font("Helvetica").text(`${fmtFecha(d.servicio.fecha_servicio)}${d.servicio.hora_salida ? " · " + d.servicio.hora_salida : ""} · ${d.servicio.num_personas} pasajero(s)`);
-    if (d.servicio.fecha_regreso) {
-      dy = doc.y + 2;
-      doc.font("Helvetica-Bold").text("Regreso: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
-      doc.font("Helvetica").text(`${fmtFecha(d.servicio.fecha_regreso)}${d.servicio.hora_regreso ? " · recogida " + d.servicio.hora_regreso : ""} · ${d.servicio.destino} → ${d.servicio.origen}`);
-    }
-    if (d.servicio.tipo_vehiculo) {
-      dy = doc.y + 2;
-      doc.font("Helvetica-Bold").text("Categoría solicitada: ", cols.desc + 6, dy, { continued: true, width: colW.desc - 12 });
-      doc.font("Helvetica").text(String(d.servicio.tipo_vehiculo));
-    }
-    dy = doc.y + 10;
-    doc.font("Helvetica").text(d.servicio.notas || "Servicio de transporte para traslado de personal.", cols.desc + 6, dy, { width: colW.desc - 12 });
-    // Precios
-    doc.font("Helvetica").fontSize(10).text(fmtUSD(d.precio), cols.uni, rowY + 10, { width: colW.uni - 6, align: "right" });
-    doc.text(fmtUSD(d.precio), cols.tot, rowY + 10, { width: colW.tot - 6, align: "right" });
+    const cellPadding = 10;
+    const labelWidth = 94;
+    const valueX = cols.desc + cellPadding + labelWidth;
+    const valueWidth = colW.desc - cellPadding * 2 - labelWidth;
+    const detailRows = [
+      { label: "Punto de salida", value: d.servicio.origen },
+      { label: "Destino", value: d.servicio.destino },
+      {
+        label: "Fecha y hora salida",
+        value: `${fmtFecha(d.servicio.fecha_servicio)}${d.servicio.hora_salida ? ` · ${d.servicio.hora_salida}` : ""}`,
+      },
+      { label: "Pasajeros", value: `${d.servicio.num_personas} pasajero(s)` },
+      ...(d.servicio.fecha_regreso ? [{
+        label: "Recogida de regreso",
+        value: d.servicio.destino,
+      }, {
+        label: "Fecha y hora regreso",
+        value: `${fmtFecha(d.servicio.fecha_regreso)}${d.servicio.hora_regreso ? ` · ${d.servicio.hora_regreso}` : ""}`,
+      }, {
+        label: "Destino regreso",
+        value: d.servicio.origen,
+      }] : []),
+      ...(d.servicio.tipo_vehiculo ? [{ label: "Categoría", value: String(d.servicio.tipo_vehiculo) }] : []),
+    ];
+    const notes = String(d.servicio.notas || "Servicio de transporte para traslado de personal.");
+    const detailHeights = detailRows.map(({ value }) => doc.heightOfString(value, {
+      width: valueWidth,
+      font: "Helvetica",
+      fontSize: 9,
+      lineGap: 2,
+    }));
+    const notesHeight = doc.heightOfString(notes, {
+      width: colW.desc - cellPadding * 2,
+      font: "Helvetica",
+      fontSize: 9,
+      lineGap: 2,
+    });
+    const titleHeight = 14;
+    const rowGaps = 5;
+    const contentHeight = titleHeight + detailHeights.reduce((total, height) => total + height, 0)
+      + rowGaps * (detailRows.length + 1) + notesHeight;
+    const rowH = Math.max(82, contentHeight + cellPadding * 2);
 
-    // Bordes de la tabla
-    doc.lineWidth(1).strokeColor("#000000");
+    doc.rect(left, headY, width, headH).fill("#0b0f1a");
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(8);
+    doc.text("CANT.", cols.cant, headY + 9, { width: colW.cant, align: "center" });
+    doc.text("DESCRIPCIÓN DEL SERVICIO", cols.desc, headY + 9, { width: colW.desc, align: "center" });
+    doc.text("P. UNITARIO", cols.uni, headY + 9, { width: colW.uni, align: "center" });
+    doc.text("P. TOTAL", cols.tot, headY + 9, { width: colW.tot, align: "center" });
+
+    doc.rect(left, rowY, width, rowH).fill("#ffffff");
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(9);
+    doc.text("1", cols.cant, rowY + cellPadding, { width: colW.cant, align: "center" });
+    doc.text("Servicio de transporte", cols.desc + cellPadding, rowY + cellPadding, {
+      width: colW.desc - cellPadding * 2,
+      lineBreak: false,
+    });
+
+    let detailY = rowY + cellPadding + titleHeight + 4;
+    detailRows.forEach(({ label, value }, index) => {
+      doc.fillColor("#475569").font("Helvetica-Bold").fontSize(8.5)
+        .text(`${label}:`, cols.desc + cellPadding, detailY, { width: labelWidth - 4, lineBreak: false });
+      doc.fillColor("#334155").font("Helvetica").fontSize(9)
+        .text(value, valueX, detailY, { width: valueWidth, lineGap: 2 });
+      detailY += detailHeights[index] + rowGaps;
+    });
+    doc.fillColor("#334155").font("Helvetica").fontSize(9)
+      .text(notes, cols.desc + cellPadding, detailY, { width: colW.desc - cellPadding * 2, lineGap: 2 });
+
+    doc.fillColor("#0f172a").font("Helvetica").fontSize(10)
+      .text(fmtUSD(d.precio), cols.uni + 8, rowY + cellPadding, { width: colW.uni - 16, align: "right" })
+      .text(fmtUSD(d.precio), cols.tot + 8, rowY + cellPadding, { width: colW.tot - 16, align: "right" });
+
+    const rowBottom = rowY + rowH;
+    doc.lineWidth(0.7).strokeColor("#cbd5e1");
     doc.rect(left, headY, width, headH + rowH).stroke();
-    // líneas verticales
-    [cols.desc, cols.uni, cols.tot].forEach((x) => doc.moveTo(x, headY).lineTo(x, rowY + rowH).stroke());
-    // línea bajo la cabecera
+    [cols.desc, cols.uni, cols.tot].forEach((x) => doc.moveTo(x, headY).lineTo(x, rowBottom).stroke());
     doc.moveTo(left, rowY).lineTo(right, rowY).stroke();
 
-    // Fila TOTAL
-    const totY = rowY + rowH;
-    const totH = 24;
-    doc.rect(cols.uni, totY, colW.uni + colW.tot, totH).stroke();
+    const totY = rowBottom;
+    const totH = 28;
+    doc.rect(cols.uni, totY, colW.uni + colW.tot, totH).fill("#f8fafc");
+    doc.lineWidth(0.7).strokeColor("#cbd5e1")
+      .rect(cols.uni, totY, colW.uni + colW.tot, totH).stroke();
     doc.moveTo(cols.tot, totY).lineTo(cols.tot, totY + totH).stroke();
-    doc.font("Helvetica-Bold").fontSize(10).text("TOTAL USD", cols.uni, totY + 7, { width: colW.uni, align: "center" });
-    doc.text(fmtUSD(d.precio), cols.tot, totY + 7, { width: colW.tot - 6, align: "right" });
+    doc.fillColor("#0b0f1a").font("Helvetica-Bold").fontSize(9)
+      .text("TOTAL USD", cols.uni, totY + 9, { width: colW.uni, align: "center" });
+    doc.fillColor("#e31e24").font("Helvetica-Bold").fontSize(10)
+      .text(fmtUSD(d.precio), cols.tot + 8, totY + 8, { width: colW.tot - 16, align: "right" });
+    doc.fillColor("#000000");
 
     // ── Banco + firma ──
     const footY = totY + totH + 30;

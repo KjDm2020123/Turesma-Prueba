@@ -218,6 +218,56 @@ const translations: Record<string, string> = {
   "Ir a mi historial": "Go to my history",
   "Pasos de la solicitud": "Request steps",
   "Progreso de solicitud": "Request progress",
+  "Requerimiento personalizado": "Custom request",
+  "¿Necesitas varios vehículos o un servicio especial? Cuéntanos todos los detalles.": "Need several vehicles or a special service? Tell us all the details.",
+  "Describe aquí solicitudes que requieren coordinación especial, por ejemplo, grupos grandes, varios buses, más de una ruta, horarios escalonados, paradas o servicios para una empresa. Enviar el requerimiento no confirma disponibilidad ni reserva unidades.": "Use this form for requests that need special coordination, such as large groups, multiple buses or routes, staggered schedules, stops, or company services. Sending a request does not confirm availability or reserve vehicles.",
+  "Empresa u organización (opcional)": "Company or organization (optional)",
+  "Nombre de la empresa": "Company name",
+  "Cantidad de vehículos *": "Number of vehicles *",
+  "Tipo de vehículo preferido": "Preferred vehicle type",
+  "Ej: bus de 40 pasajeros": "e.g., 40-passenger bus",
+  "Pasajeros por vehículo": "Passengers per vehicle",
+  "Fecha de inicio": "Start date",
+  "Fecha final (opcional)": "End date (optional)",
+  "Hora de inicio (opcional)": "Start time (optional)",
+  "Punto de salida (opcional)": "Pickup point (optional)",
+  "Ciudad, dirección o lugar de encuentro": "City, address, or meeting point",
+  "Destino o destinos (opcional)": "Destination(s) (optional)",
+  "Puedes incluir varios destinos": "You can include multiple destinations",
+  "Cuéntanos qué necesitas *": "Tell us what you need *",
+  "Incluye todo lo importante: cantidad y tipo de vehículos, horarios de cada grupo, rutas, paradas, duración, equipaje, necesidades especiales y cualquier otro detalle para preparar la propuesta.": "Include everything important: vehicle count and type, each group's schedule, routes, stops, duration, luggage, special needs, and any other details needed to prepare a proposal.",
+  "Enviando requerimiento...": "Sending request...",
+  "Enviar requerimiento": "Send request",
+  "Mis requerimientos personalizados": "My custom requests",
+  "Grupos de servicio": "Service groups",
+  "Cada grupo reúne vehículos que comparten tipo, ruta y horario. Agrega otro grupo si cambia alguno de esos datos.": "Each group combines vehicles that share a type, route, and schedule. Add another group if any of those details differ.",
+  "Agregar grupo": "Add group",
+  "Copiar ruta y horario anterior": "Copy previous route and schedule",
+  "Quitar": "Remove",
+  "Indicaciones para este grupo": "Instructions for this group",
+  "Horarios escalonados, equipaje, necesidades especiales...": "Staggered schedules, luggage, special needs...",
+  "Los vehículos de este grupo deben operar simultáneamente": "Vehicles in this group must operate simultaneously",
+  "Operación simultánea solicitada": "Simultaneous operation requested",
+  "Paradas": "Stops",
+  "Destino por definir": "Destination to be determined",
+  "Respondido": "Replied",
+  "Cerrado": "Closed",
+  "Solicitudes que requieren coordinación especial": "Requests that need special coordination",
+  "Revisa la necesidad completa, evalúa disponibilidad propia o externa y deja una respuesta para que el cliente pueda verla en su cuenta.": "Review the full request, check in-house or external availability, and reply for the customer to see in their account.",
+  "No hay requerimientos personalizados": "There are no custom requests",
+  "Flota solicitada": "Requested fleet",
+  "vehículo(s)": "vehicle(s)",
+  "pasajeros por unidad": "passengers per vehicle",
+  "Fechas y horario": "Dates and time",
+  "Por definir": "To be determined",
+  "Recorrido": "Route",
+  "Salida por definir": "Pickup to be determined",
+  "Destino(s) por definir": "Destination(s) to be determined",
+  "Detalle enviado por el cliente": "Details from the customer",
+  "Estado": "Status",
+  "Respuesta visible para el cliente": "Response visible to the customer",
+  "Indica disponibilidad, preguntas para aclarar o próximos pasos para preparar una propuesta.": "Share availability, questions, or next steps to prepare a proposal.",
+  "Guardar y notificar al cliente": "Save and notify customer",
   "Asistente inteligente": "Smart assistant",
   "Cuéntame qué necesitas y te sugiero el vehículo ideal": "Tell me what you need and I will suggest the right vehicle",
   "Usaré pasajeros, fechas y tus preferencias para sugerirte una categoría con capacidad suficiente. Despacho asignará la unidad específica después de confirmar el pago.": "I will use your passenger count, dates, and preferences to suggest a vehicle category with enough capacity. Dispatch will assign the specific vehicle after payment is confirmed.",
@@ -705,6 +755,8 @@ const translate = (value: string, language: Language) => {
   const maxServiceDays = content.match(/^El servicio no puede superar los (\d+) días seguidos\.$/);
   const bookingMessage = content.match(/^Solicitud de reserva creada(?: por (\$[\d,.]+))?\. Ve a Historial para pagar el anticipo indicado; administración verificará el pago antes de confirmar la reserva y asignar el vehículo\.$/);
   const newBooking = content.match(/^Reserva #(\d+) creada — pendiente de pago$/);
+  const customRequestSent = content.match(/^Requerimiento #(\d+) enviado\. El equipo revisará los detalles y responderá desde aquí\.$/);
+  const customRequestId = content.match(/^Requerimiento #(\d+)$/);
   const dailyOffer = content.match(/^Oferta del día: (.+)$/);
   const relativeTime = content.match(/^Hace (\d+) (min|h|d)$/);
   const translated = translations[content]
@@ -730,6 +782,8 @@ const translate = (value: string, language: Language) => {
     ?? (maxServiceDays ? `The service cannot exceed ${maxServiceDays[1]} consecutive days.` : undefined)
     ?? (bookingMessage ? `Booking request created${bookingMessage[1] ? ` for ${bookingMessage[1]}` : ""}. Go to History to pay the requested deposit; the administrator will verify your payment before confirming the booking and assigning a vehicle.` : undefined)
     ?? (newBooking ? `Booking #${newBooking[1]} created — payment pending` : undefined)
+    ?? (customRequestSent ? `Request #${customRequestSent[1]} sent. The team will review the details and reply here.` : undefined)
+    ?? (customRequestId ? `Request #${customRequestId[1]}` : undefined)
     ?? (dailyOffer ? `Today's offer: ${dailyOffer[1]}` : undefined)
     ?? (relativeTime ? `${relativeTime[1]} ${relativeTime[2] === "h" ? "hr" : relativeTime[2]} ago` : content);
   return `${leading}${translated}${trailing}`;

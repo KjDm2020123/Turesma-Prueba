@@ -59,6 +59,19 @@ En las reservas originadas por una cotización, Administración aprueba el preci
 sin asignar unidades. La categoría solicitada se conserva como preferencia; una
 vez confirmado el pago total, la reserva aparece en la cola de Despacho para que
 el equipo asigne el vehículo y el conductor.
+
+Para grupos grandes o servicios que requieren coordinar varias unidades, el
+cliente puede enviar un requerimiento personalizado desde Cotizar. El formulario
+recopila organización y una descripción general, además de uno o más grupos de
+servicio. Cada grupo reúne vehículos que comparten tipo, ruta y horario, e
+incluye cantidad, pasajeros por unidad, fechas, paradas, indicaciones y si las
+unidades deben operar simultáneamente. Se puede copiar la ruta y el horario de
+un grupo anterior para agilizar grupos similares. El envío no confirma
+disponibilidad ni crea una reserva. Administración revisa estos
+requerimientos en una bandeja separada de Cotizaciones, actualiza su estado y
+puede responder al cliente desde allí. El cliente consulta la respuesta en la
+misma sección de su solicitud.
+
 Al preparar una reserva se crea una operación vinculada, evitando registrar el
 mismo servicio dos veces. En la asignación, el administrador puede pedir una
 recomendación calculada para la fecha, horario y número de pasajeros. La

@@ -31,6 +31,49 @@ type Cotizacion = {
   vehiculo_placa?: string | null; vehiculo_modelo?: string | null;
   num_viajes?: number | null; distancia_km?: number | null; precio_desglose?: any;
 };
+type CustomServiceGroup = {
+  cantidad_vehiculos: string;
+  tipo_vehiculo: string;
+  pasajeros_por_vehiculo: string;
+  fecha_servicio: string;
+  fecha_fin: string;
+  hora_salida: string;
+  origen: string;
+  destino: string;
+  paradas: string;
+  detalles: string;
+  simultaneo: boolean;
+};
+type ServiceGroupView = {
+  cantidad_vehiculos: number;
+  tipo_vehiculo?: string | null;
+  pasajeros_por_vehiculo?: number | null;
+  fecha_servicio?: string | null;
+  fecha_fin?: string | null;
+  hora_salida?: string | null;
+  origen?: string | null;
+  destino?: string | null;
+  paradas?: string | null;
+  detalles?: string | null;
+  simultaneo?: boolean;
+};
+type RequerimientoPersonalizado = {
+  id: number;
+  organizacion?: string | null;
+  cantidad_vehiculos: number;
+  tipo_vehiculo?: string | null;
+  pasajeros_por_vehiculo?: number | null;
+  service_groups?: ServiceGroupView[];
+  fecha_servicio?: string | null;
+  fecha_fin?: string | null;
+  hora_salida?: string | null;
+  origen?: string | null;
+  destino?: string | null;
+  detalles: string;
+  estado: string;
+  respuesta_admin?: string | null;
+  creado_en: string;
+};
 type VehicleRecommendation = {
   id: number; placa: string; tipo: string; modelo?: string | null; capacidad: number;
   imagen_url?: string | null; descripcion?: string | null;
@@ -46,6 +89,19 @@ const INPUT = "w-full rounded-2xl border-2 border-slate-100 bg-slate-50 px-4 py-
 
 // Tope de días seguidos que puede reservar el cliente en un solo servicio.
 const MAX_DIAS = 365;
+const createEmptyServiceGroup = (): CustomServiceGroup => ({
+  cantidad_vehiculos: "1",
+  tipo_vehiculo: "",
+  pasajeros_por_vehiculo: "",
+  fecha_servicio: "",
+  fecha_fin: "",
+  hora_salida: "",
+  origen: "",
+  destino: "",
+  paradas: "",
+  detalles: "",
+  simultaneo: false,
+});
 const WIZARD_STEPS = [
   { label: "Ruta", title: "¿A dónde necesitas viajar?", guidance: "Indica tu punto de salida y destino. Puedes buscar una dirección o ajustar el marcador en el mapa." },
   { label: "Fechas", title: "¿Cuándo será tu viaje?", guidance: "Elige la fecha, horario y pasajeros. Si necesitas varios días o regresar después, selecciona la opción correspondiente." },
@@ -113,6 +169,16 @@ export default function ClienteCotizarPage() {
     fecha_servicio: "", fecha_fin: "", fecha_regreso: "", hora_regreso: "", num_personas: "1",
     num_viajes: "1", tipo_vehiculo: "van", hora_salida: "", notas: "", modalidad_servicio: "dia", duracion_horas: "2",
   });
+  const [customRequest, setCustomRequest] = useState({
+    organizacion: "",
+    detalles: "",
+    grupos_servicio: [createEmptyServiceGroup()],
+  });
+  const [customRequests, setCustomRequests] = useState<RequerimientoPersonalizado[]>([]);
+  const [showCustomRequest, setShowCustomRequest] = useState(false);
+  const [sendingCustomRequest, setSendingCustomRequest] = useState(false);
+  const [customRequestError, setCustomRequestError] = useState("");
+  const [customRequestMessage, setCustomRequestMessage] = useState("");
   const [wizardStep, setWizardStep] = useState(1);
   const wizardHeaderRef = useRef<HTMLDivElement>(null);
   // false = servicio de un solo día · true = reserva de varios días (rango)
@@ -192,6 +258,80 @@ export default function ClienteCotizarPage() {
     } catch { /* silencio */ }
   };
 
+  const loadCustomRequests = async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API}/api/requerimientos-personalizados/mios`, { headers: getAuthHeaders() });
+      if (handleUnauthorized(res.status)) return;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudieron cargar los requerimientos");
+      setCustomRequests(Array.isArray(data) ? data : []);
+      setCustomRequestError("");
+    } catch (error) {
+      setCustomRequestError(error instanceof Error ? error.message : "No se pudieron cargar los requerimientos");
+    }
+  };
+
+  const submitCustomRequest = async (event: FormEvent) => {
+    event.preventDefault();
+    setSendingCustomRequest(true);
+    setCustomRequestError("");
+    setCustomRequestMessage("");
+    try {
+      const res = await fetch(`${API}/api/requerimientos-personalizados`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          ...customRequest,
+          grupos_servicio: customRequest.grupos_servicio.map(group => ({
+            ...group,
+            cantidad_vehiculos: Number(group.cantidad_vehiculos),
+            pasajeros_por_vehiculo: group.pasajeros_por_vehiculo
+              ? Number(group.pasajeros_por_vehiculo)
+              : null,
+          })),
+        }),
+      });
+      if (handleUnauthorized(res.status)) return;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo enviar el requerimiento");
+      setCustomRequestMessage(`Requerimiento #${data.id} enviado. El equipo revisará los detalles y responderá desde aquí.`);
+      setCustomRequest({
+        organizacion: "",
+        detalles: "",
+        grupos_servicio: [createEmptyServiceGroup()],
+      });
+      await loadCustomRequests();
+    } catch (error) {
+      setCustomRequestError(error instanceof Error ? error.message : "No se pudo enviar el requerimiento");
+    } finally {
+      setSendingCustomRequest(false);
+    }
+  };
+
+  const updateCustomServiceGroup = (index: number, patch: Partial<CustomServiceGroup>) => {
+    setCustomRequest(current => ({
+      ...current,
+      grupos_servicio: current.grupos_servicio.map((group, groupIndex) =>
+        groupIndex === index ? { ...group, ...patch } : group
+      ),
+    }));
+  };
+
+  const copyPreviousServiceGroup = (index: number) => {
+    if (index < 1) return;
+    const previous = customRequest.grupos_servicio[index - 1];
+    updateCustomServiceGroup(index, {
+      fecha_servicio: previous.fecha_servicio,
+      fecha_fin: previous.fecha_fin,
+      hora_salida: previous.hora_salida,
+      origen: previous.origen,
+      destino: previous.destino,
+      paradas: previous.paradas,
+      simultaneo: previous.simultaneo,
+    });
+  };
+
   const askVehicleAssistant = async () => {
     setAssistantLoading(true); setAssistantErr(""); setAssistantMsg("");
     setRecommendation(null);
@@ -238,7 +378,7 @@ export default function ClienteCotizarPage() {
 
   useEffect(() => {
     if (checkingSession || !userId) return;
-    loadVehiculos(); loadCotizaciones();
+    loadVehiculos(); loadCotizaciones(); loadCustomRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkingSession, userId]);
 
@@ -253,6 +393,7 @@ export default function ClienteCotizarPage() {
   useAutoRefresh(() => {
     loadVehiculos();
     loadCotizaciones(true);
+    loadCustomRequests();
   }, { enabled: !checkingSession && !!userId, intervalMs: 5000, immediate: false });
 
   const getStepError = (stepNumber: number) => {
@@ -374,6 +515,222 @@ export default function ClienteCotizarPage() {
   return (
     <LocalizedContent>
     <div className="space-y-6">
+
+      <section className="overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-lg">
+        <button type="button" onClick={() => { setShowCustomRequest(value => !value); setCustomRequestError(""); }}
+          aria-expanded={showCustomRequest}
+          className="flex w-full items-center justify-between gap-4 bg-[linear-gradient(115deg,#312e81,#6d28d9)] p-5 text-left text-white transition hover:brightness-110 sm:p-6">
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="rounded-2xl bg-white/15 p-3"><FileText size={20} /></span>
+            <span>
+              <span className="block text-sm font-black uppercase tracking-wide">Requerimiento personalizado</span>
+              <span className="mt-1 block text-xs font-medium text-violet-100">¿Necesitas varios vehículos o un servicio especial? Cuéntanos todos los detalles.</span>
+            </span>
+          </span>
+          {showCustomRequest ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+        </button>
+
+        {showCustomRequest && (
+          <div className="space-y-5 p-5 sm:p-6">
+            <div className="rounded-2xl border border-violet-100 bg-violet-50 p-4 text-xs leading-relaxed text-violet-900">
+              Describe aquí solicitudes que requieren coordinación especial, por ejemplo, grupos grandes, varios buses, más de una ruta, horarios escalonados, paradas o servicios para una empresa. Enviar el requerimiento no confirma disponibilidad ni reserva unidades.
+            </div>
+            <form onSubmit={submitCustomRequest} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label htmlFor="custom-organization" className="text-[10px] font-black uppercase tracking-widest text-slate-500">Empresa u organización (opcional)</label>
+                  <input id="custom-organization" maxLength={200} value={customRequest.organizacion}
+                    onChange={event => setCustomRequest(current => ({ ...current, organizacion: event.target.value }))}
+                    className={INPUT} placeholder="Nombre de la empresa" />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-700">Grupos de servicio</h3>
+                    <p className="mt-1 text-[11px] text-slate-500">Cada grupo reúne vehículos que comparten tipo, ruta y horario. Agrega otro grupo si cambia alguno de esos datos.</p>
+                  </div>
+                  <button type="button" disabled={customRequest.grupos_servicio.length >= 20}
+                    onClick={() => setCustomRequest(current => ({ ...current, grupos_servicio: [...current.grupos_servicio, createEmptyServiceGroup()] }))}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-violet-800 hover:bg-violet-100 disabled:opacity-50">
+                    <Plus size={14} /> Agregar grupo
+                  </button>
+                </div>
+                {customRequest.grupos_servicio.map((group, index) => (
+                  <section key={index} className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-xs font-black text-slate-800">Grupo {index + 1}</h4>
+                      <div className="flex items-center gap-2">
+                        {index > 0 && (
+                          <button type="button" onClick={() => copyPreviousServiceGroup(index)}
+                            className="rounded-lg px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-violet-700 hover:bg-violet-100">
+                            Copiar ruta y horario anterior
+                          </button>
+                        )}
+                        {customRequest.grupos_servicio.length > 1 && (
+                          <button type="button" onClick={() => setCustomRequest(current => ({
+                            ...current,
+                            grupos_servicio: current.grupos_servicio.filter((_, groupIndex) => groupIndex !== index),
+                          }))}
+                            className="rounded-lg px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-red-600 hover:bg-red-50">
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="space-y-1.5">
+                        <label htmlFor={`custom-count-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cantidad de vehículos *</label>
+                        <input id={`custom-count-${index}`} type="number" min={1} max={1000} required value={group.cantidad_vehiculos}
+                          onChange={event => updateCustomServiceGroup(index, { cantidad_vehiculos: event.target.value })}
+                          className={INPUT} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`custom-type-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tipo de vehículo</label>
+                        <input id={`custom-type-${index}`} maxLength={100} value={group.tipo_vehiculo}
+                          onChange={event => updateCustomServiceGroup(index, { tipo_vehiculo: event.target.value })}
+                          className={INPUT} placeholder="Ej: SUV, bus" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`custom-passengers-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pasajeros por vehículo</label>
+                        <input id={`custom-passengers-${index}`} type="number" min={1} max={1000} value={group.pasajeros_por_vehiculo}
+                          onChange={event => updateCustomServiceGroup(index, { pasajeros_por_vehiculo: event.target.value })}
+                          className={INPUT} placeholder="Ej: 40" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`custom-date-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Fecha de inicio</label>
+                        <input id={`custom-date-${index}`} type="date" value={group.fecha_servicio}
+                          onChange={event => updateCustomServiceGroup(index, { fecha_servicio: event.target.value })}
+                          className={INPUT} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`custom-end-date-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Fecha final</label>
+                        <input id={`custom-end-date-${index}`} type="date" min={group.fecha_servicio || undefined} value={group.fecha_fin}
+                          onChange={event => updateCustomServiceGroup(index, { fecha_fin: event.target.value })}
+                          className={INPUT} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`custom-time-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Hora de salida</label>
+                        <input id={`custom-time-${index}`} type="time" value={group.hora_salida}
+                          onChange={event => updateCustomServiceGroup(index, { hora_salida: event.target.value })}
+                          className={INPUT} />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label htmlFor={`custom-origin-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Punto de salida</label>
+                        <input id={`custom-origin-${index}`} maxLength={300} value={group.origen}
+                          onChange={event => updateCustomServiceGroup(index, { origen: event.target.value })}
+                          className={INPUT} placeholder="Ciudad, dirección o lugar de encuentro" />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label htmlFor={`custom-destination-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Destino o destinos</label>
+                        <input id={`custom-destination-${index}`} maxLength={300} value={group.destino}
+                          onChange={event => updateCustomServiceGroup(index, { destino: event.target.value })}
+                          className={INPUT} placeholder="Puedes incluir varios destinos" />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label htmlFor={`custom-stops-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Paradas</label>
+                        <input id={`custom-stops-${index}`} maxLength={1000} value={group.paradas}
+                          onChange={event => updateCustomServiceGroup(index, { paradas: event.target.value })}
+                          className={INPUT} placeholder="Opcional" />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label htmlFor={`custom-group-notes-${index}`} className="text-[10px] font-black uppercase tracking-widest text-slate-500">Indicaciones para este grupo</label>
+                        <input id={`custom-group-notes-${index}`} maxLength={2000} value={group.detalles}
+                          onChange={event => updateCustomServiceGroup(index, { detalles: event.target.value })}
+                          className={INPUT} placeholder="Horarios escalonados, equipaje, necesidades especiales..." />
+                      </div>
+                      <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-700 sm:col-span-2 lg:col-span-4">
+                        <input type="checkbox" checked={group.simultaneo}
+                          onChange={event => updateCustomServiceGroup(index, { simultaneo: event.target.checked })}
+                          className="mt-0.5 accent-violet-700" />
+                        Los vehículos de este grupo deben operar simultáneamente
+                      </label>
+                    </div>
+                  </section>
+                ))}
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="custom-details" className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cuéntanos qué necesitas *</label>
+                <textarea id="custom-details" required minLength={10} maxLength={5000} rows={6}
+                  value={customRequest.detalles}
+                  onChange={event => setCustomRequest(current => ({ ...current, detalles: event.target.value }))}
+                  className={INPUT + " resize-y"}
+                  placeholder="Incluye todo lo importante: cantidad y tipo de vehículos, horarios de cada grupo, rutas, paradas, duración, equipaje, necesidades especiales y cualquier otro detalle para preparar la propuesta." />
+                <p className="text-right text-[10px] font-semibold text-slate-400">{customRequest.detalles.length}/5000</p>
+              </div>
+              {customRequestError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{customRequestError}</p>}
+              {customRequestMessage && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{customRequestMessage}</p>}
+              <button type="submit" disabled={sendingCustomRequest}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-5 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-md transition hover:bg-violet-900 disabled:opacity-60 sm:w-auto">
+                {sendingCustomRequest ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                {sendingCustomRequest ? "Enviando requerimiento..." : "Enviar requerimiento"}
+              </button>
+            </form>
+
+            {customRequests.length > 0 && (
+              <div className="space-y-3 border-t border-slate-100 pt-5">
+                <h2 className="text-xs font-black uppercase tracking-widest text-slate-700">Mis requerimientos personalizados</h2>
+                {customRequests.map(request => (
+                  <article key={request.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-black text-slate-800">Requerimiento #{request.id}</p>
+                      <span className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase ${
+                        request.estado === "respondido" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : request.estado === "cerrado" ? "border-slate-200 bg-white text-slate-500"
+                            : request.estado === "en_revision" ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                      }`}>
+                        {request.estado === "en_revision" ? "En revisión" : request.estado === "respondido" ? "Respondido" : request.estado === "cerrado" ? "Cerrado" : "Pendiente"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {request.cantidad_vehiculos} vehículo(s)
+                      {request.organizacion ? ` · ${request.organizacion}` : ""}
+                    </p>
+                    {(request.service_groups?.length ? request.service_groups : [{
+                      cantidad_vehiculos: request.cantidad_vehiculos,
+                      tipo_vehiculo: request.tipo_vehiculo,
+                      pasajeros_por_vehiculo: request.pasajeros_por_vehiculo,
+                      fecha_servicio: request.fecha_servicio,
+                      fecha_fin: request.fecha_fin,
+                      hora_salida: request.hora_salida,
+                      origen: request.origen,
+                      destino: request.destino,
+                      paradas: null,
+                      detalles: null,
+                      simultaneo: false,
+                    }]).map((group, groupIndex) => (
+                      <div key={groupIndex} className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Grupo {groupIndex + 1}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-700">
+                          {group.cantidad_vehiculos} vehículo(s)
+                          {group.tipo_vehiculo ? ` · ${group.tipo_vehiculo}` : ""}
+                          {group.pasajeros_por_vehiculo ? ` · ${group.pasajeros_por_vehiculo} pasajeros por unidad` : ""}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {group.origen || "Salida por definir"} → {group.destino || "Destino por definir"}
+                          {group.fecha_servicio ? ` · ${new Date(`${String(group.fecha_servicio).slice(0, 10)}T00:00:00`).toLocaleDateString(dateLocale)}` : ""}
+                          {group.hora_salida ? ` · ${group.hora_salida}` : ""}
+                        </p>
+                        {group.paradas && <p className="mt-1 text-xs text-slate-500">Paradas: {group.paradas}</p>}
+                        {group.detalles && <p className="mt-1 whitespace-pre-line text-xs text-slate-600">{group.detalles}</p>}
+                        {group.simultaneo && <p className="mt-1 text-[10px] font-bold text-violet-700">Operación simultánea solicitada</p>}
+                      </div>
+                    ))}
+                    <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{request.detalles}</p>
+                    {request.respuesta_admin && (
+                      <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-blue-700">Respuesta de Turesma</p>
+                        <p className="mt-1 whitespace-pre-line text-sm text-blue-900">{request.respuesta_admin}</p>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* TOGGLE FORM */}
       <button onClick={() => { setShowForm(f => !f); setFormErr(""); setFormMsg(""); }}

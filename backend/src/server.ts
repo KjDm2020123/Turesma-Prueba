@@ -13,6 +13,7 @@ const adminRoutes = require("./routes/admin.routes");
 const conductorRoutes = require("./routes/conductor.routes");
 const comunicacionRoutes = require("./routes/comunicacion.routes");
 const cotizacionesRoutes = require("./routes/cotizaciones.routes");
+const requerimientosRoutes = require("./routes/requerimientos.routes");
 const { initDatabase } = require("./config/initDb");
 const pool = require("./config/db");
 
@@ -68,6 +69,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/conductor", conductorRoutes);
 app.use("/api/comunicacion", comunicacionRoutes);
 app.use("/api/cotizaciones", cotizacionesRoutes);
+app.use("/api/requerimientos-personalizados", requerimientosRoutes);
 
 // Mantiene las respuestas de la API en JSON incluso cuando una petición
 // supera el límite, evitando que el frontend reciba una página HTML de error.

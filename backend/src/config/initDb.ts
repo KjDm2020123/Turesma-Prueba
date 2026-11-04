@@ -841,6 +841,38 @@ const initDatabase = async () => {
     ON cotizaciones (estado, creado_en DESC);
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS requerimientos_personalizados (
+      id SERIAL PRIMARY KEY,
+      usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      organizacion VARCHAR(200),
+      cantidad_vehiculos INT NOT NULL DEFAULT 1,
+      tipo_vehiculo VARCHAR(100),
+      pasajeros_por_vehiculo INT,
+      service_groups JSONB NOT NULL DEFAULT '[]'::jsonb,
+      fecha_servicio DATE,
+      fecha_fin DATE,
+      hora_salida VARCHAR(10),
+      origen VARCHAR(300),
+      destino VARCHAR(300),
+      detalles TEXT NOT NULL,
+      estado VARCHAR(30) NOT NULL DEFAULT 'pendiente'
+        CHECK (estado IN ('pendiente', 'en_revision', 'respondido', 'cerrado')),
+      respuesta_admin TEXT,
+      respondido_por INT REFERENCES usuarios(id) ON DELETE SET NULL,
+      creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS requerimientos_personalizados_usuario_idx
+      ON requerimientos_personalizados (usuario_id, creado_en DESC);
+    CREATE INDEX IF NOT EXISTS requerimientos_personalizados_estado_idx
+      ON requerimientos_personalizados (estado, creado_en DESC);
+  `);
+  await pool.query(`
+    ALTER TABLE requerimientos_personalizados
+    ADD COLUMN IF NOT EXISTS service_groups JSONB NOT NULL DEFAULT '[]'::jsonb;
+  `);
+
   // Campos extra de cotizaciones (vehículo elegido, valor y duración del servicio)
   await pool.query(`
     ALTER TABLE cotizaciones
