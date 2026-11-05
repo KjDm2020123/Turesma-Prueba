@@ -227,14 +227,7 @@ export default function OperacionesPage() {
     pasajeros: "1",
   });
   const today = localToday();
-  const sortedReservations = [...reservations].sort((a, b) =>
-    compareSchedule(
-      reservationServiceDate(a),
-      reservationServiceTime(a),
-      reservationServiceDate(b),
-      reservationServiceTime(b)
-    ) || a.id - b.id
-  );
+  const sortedReservations = [...reservations].sort((a, b) => a.id - b.id);
   const activeOperationStates = ["programada", "asignada", "en_curso", "incidencia"];
   const sortedOperations = [...operations].sort((a, b) => {
     const activeRankA = activeOperationStates.includes(a.estado) ? 0 : 1;
