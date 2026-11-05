@@ -188,6 +188,10 @@ export default function OperacionesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [partnerCompanies, setPartnerCompanies] = useState<PartnerCompany[]>([]);
+  const [assignmentResourcesLoading, setAssignmentResourcesLoading] = useState(false);
+  const [partnerCompaniesLoading, setPartnerCompaniesLoading] = useState(false);
+  const [assignmentResourcesError, setAssignmentResourcesError] = useState("");
+  const [partnerCompaniesError, setPartnerCompaniesError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -247,25 +251,16 @@ export default function OperacionesPage() {
     setError("");
     try {
       const headers = getAuthHeaders();
-      const [operationsRes, reservationsRes, vehiclesRes, driversRes, partnersRes] = await Promise.all([
+      const [operationsRes, reservationsRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/operaciones`, { headers }),
         fetch(`${API_URL}/api/admin/operaciones/reservas-pendientes`, { headers }),
-        fetch(`${API_URL}/api/admin/vehiculos`, { headers }),
-        fetch(`${API_URL}/api/admin/conductores`, { headers }),
-        fetch(`${API_URL}/api/admin/empresas-asociadas`, { headers }),
       ]);
-      const [operationsData, reservationsData, vehiclesData, driversData, partnersData] = await Promise.all([
+      const [operationsData, reservationsData] = await Promise.all([
         readApiJson<{ data?: Operation[] }>(operationsRes, "/api/admin/operaciones"),
         readApiJson<{ data?: ReservationReady[] }>(reservationsRes, "/api/admin/operaciones/reservas-pendientes"),
-        readApiJson<ApiList<Vehicle>>(vehiclesRes, "/api/admin/vehiculos"),
-        readApiJson<ApiList<Driver>>(driversRes, "/api/admin/conductores"),
-        readApiJson<{ data?: PartnerCompany[] }>(partnersRes, "/api/admin/empresas-asociadas"),
       ]);
       setOperations(operationsData.data || []);
       setReservations(reservationsData.data || []);
-      setVehicles(getApiList(vehiclesData));
-      setDrivers(getApiList(driversData));
-      setPartnerCompanies(partnersData.data || []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Error cargando datos operativos");
     } finally {
@@ -392,8 +387,10 @@ export default function OperacionesPage() {
     }
   };
 
-  const openSubcontracting = (operation: Operation) => {
+  const openSubcontracting = async (operation: Operation) => {
     setSubcontracting(operation);
+    setPartnerCompaniesLoading(true);
+    setPartnerCompaniesError("");
     setSubcontractingForm({
       estado: operation.subcontratacion_estado && operation.subcontratacion_estado !== "no_requerida"
         ? operation.subcontratacion_estado
@@ -410,6 +407,15 @@ export default function OperacionesPage() {
       costo: operation.subcontratacion_costo == null ? "" : String(operation.subcontratacion_costo),
     });
     setError("");
+    try {
+      const response = await fetch(`${API_URL}/api/admin/empresas-asociadas`, { headers: getAuthHeaders() });
+      const payload = await readApiJson<{ data?: PartnerCompany[] }>(response, "/api/admin/empresas-asociadas");
+      setPartnerCompanies(payload.data || []);
+    } catch (loadError) {
+      setPartnerCompaniesError(loadError instanceof Error ? loadError.message : "No se pudieron cargar las empresas asociadas");
+    } finally {
+      setPartnerCompaniesLoading(false);
+    }
   };
 
   const saveSubcontracting = async (event: FormEvent<HTMLFormElement>) => {
@@ -439,13 +445,32 @@ export default function OperacionesPage() {
   const selectedPartner = partnerCompanies.find((company) => String(company.id) === subcontractingForm.empresa_asociada_id);
   const partnerVehicles = selectedPartner?.vehiculos.filter((vehicle) => vehicle.activo) || [];
 
-  const openAssignment = (operation: Operation) => {
+  const openAssignment = async (operation: Operation) => {
     setAssignment(operation);
+    setAssignmentResourcesLoading(true);
+    setAssignmentResourcesError("");
     setSelectedVehicleId(operation.vehiculo_id ? String(operation.vehiculo_id) : "");
     setSelectedDriverId(operation.conductor_usuario_id ? String(operation.conductor_usuario_id) : "");
     setAssignmentRecommendation(null);
     setDecisionReason("");
     setError("");
+    try {
+      const headers = getAuthHeaders();
+      const [vehiclesResponse, driversResponse] = await Promise.all([
+        fetch(`${API_URL}/api/admin/vehiculos`, { headers }),
+        fetch(`${API_URL}/api/admin/conductores`, { headers }),
+      ]);
+      const [vehiclesData, driversData] = await Promise.all([
+        readApiJson<ApiList<Vehicle>>(vehiclesResponse, "/api/admin/vehiculos"),
+        readApiJson<ApiList<Driver>>(driversResponse, "/api/admin/conductores"),
+      ]);
+      setVehicles(getApiList(vehiclesData));
+      setDrivers(getApiList(driversData));
+    } catch (loadError) {
+      setAssignmentResourcesError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los vehículos y conductores");
+    } finally {
+      setAssignmentResourcesLoading(false);
+    }
   };
 
   const recommendAssignment = async () => {
@@ -677,6 +702,8 @@ export default function OperacionesPage() {
                 <X />
               </button>
             </div>
+            {assignmentResourcesLoading && <p role="status" className="rounded-xl bg-cyan-50 p-3 text-xs font-semibold text-cyan-800">Cargando vehículos y conductores...</p>}
+            {assignmentResourcesError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{assignmentResourcesError}</p>}
             <button
               type="button"
               onClick={() => void recommendAssignment()}
@@ -745,6 +772,7 @@ export default function OperacionesPage() {
                   if (event.target.value === String(assignmentRecommendation?.vehiculo?.vehiculo_id)) setDecisionReason("");
                 }}
                 className="mt-1 w-full rounded-xl border p-3"
+                disabled={assignmentResourcesLoading || Boolean(assignmentResourcesError)}
                 required
               >
                 <option value="">Selecciona un vehículo</option>
@@ -768,7 +796,7 @@ export default function OperacionesPage() {
             )}
             <label className="block text-sm font-bold text-slate-600">
               Conductor
-              <select name="conductor_id" value={selectedDriverId} onChange={(event) => setSelectedDriverId(event.target.value)} className="mt-1 w-full rounded-xl border p-3" required>
+              <select name="conductor_id" value={selectedDriverId} onChange={(event) => setSelectedDriverId(event.target.value)} className="mt-1 w-full rounded-xl border p-3" disabled={assignmentResourcesLoading || Boolean(assignmentResourcesError)} required>
                 <option value="">Selecciona un conductor</option>
                 {drivers.filter((driver) => driver.activo && !["inactivo", "mantenimiento"].includes(driver.estado)).map((driver) => (
                   <option key={driver.id} value={driver.id}>{driver.nombre} {driver.apellido || ""}</option>
@@ -778,7 +806,7 @@ export default function OperacionesPage() {
             <p className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
               La sugerencia es una ayuda para decidir, no una asignación automática. El backend valida capacidad, mantenimiento, licencia y conflictos de horario antes de confirmar.
             </p>
-            <button disabled={saving} className="w-full rounded-xl bg-cyan-500 py-3 font-black text-slate-950 disabled:opacity-50">
+            <button disabled={saving || assignmentResourcesLoading || Boolean(assignmentResourcesError)} className="w-full rounded-xl bg-cyan-500 py-3 font-black text-slate-950 disabled:opacity-50">
               {saving ? "Validando..." : "Confirmar asignación"}
             </button>
           </form>
@@ -803,6 +831,8 @@ export default function OperacionesPage() {
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
               Registra aquí los datos que el administrador acuerde directamente con el proveedor. No se creará una cuenta externa ni se añadirá su vehículo a la flota.
             </p>
+            {partnerCompaniesLoading && <p role="status" className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">Cargando empresas y vehículos asociados...</p>}
+            {partnerCompaniesError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{partnerCompaniesError}</p>}
             <label className="block text-sm font-bold text-slate-600">
               Estado del servicio externo
               <select
@@ -845,6 +875,7 @@ export default function OperacionesPage() {
                         });
                       }}
                       className="mt-1 w-full rounded-xl border bg-white p-3"
+                      disabled={partnerCompaniesLoading || Boolean(partnerCompaniesError)}
                     >
                       <option value="">Selecciona empresa (o completa datos históricos abajo)</option>
                       {partnerCompanies.filter((company) => company.activa).map((company) => (
