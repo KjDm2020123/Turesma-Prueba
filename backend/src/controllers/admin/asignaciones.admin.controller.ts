@@ -53,21 +53,7 @@ const crearAsignacion = async (req: any, res: any) => {
       return res.status(400).json({ error: "Conductor y vehículo son obligatorios" });
     }
 
-    // Regla 1: Un conductor no puede tener dos vehículos activos
-    const conductorActivo = await pool.query(
-      `SELECT id, vehiculo_id FROM asignacion_vehiculos
-       WHERE conductor_id = $1 AND estado = 'activa'
-       LIMIT 1`,
-      [conductor_id]
-    );
-
-    if (conductorActivo.rowCount > 0) {
-      return res.status(409).json({
-        error: "Este conductor ya tiene un vehículo asignado activo. Finalice la asignación actual primero."
-      });
-    }
-
-    // Regla 2: Un vehículo no puede estar asignado a dos conductores simultáneamente
+    // Un vehículo no puede estar asignado a dos conductores simultáneamente.
     const vehiculoActivo = await pool.query(
       `SELECT id, conductor_id FROM asignacion_vehiculos
        WHERE vehiculo_id = $1 AND estado = 'activa'
@@ -79,6 +65,16 @@ const crearAsignacion = async (req: any, res: any) => {
       return res.status(409).json({
         error: "Este vehículo ya está asignado a otro conductor. Libere el vehículo primero."
       });
+    }
+
+    const vehiculo = await pool.query(
+      `SELECT id, placa, estado, activo FROM vehiculos WHERE id = $1`,
+      [vehiculo_id]
+    );
+    if (!vehiculo.rowCount) return res.status(404).json({ error: "Vehículo no encontrado" });
+    if (!vehiculo.rows[0].activo) return res.status(409).json({ error: "El vehículo está inactivo" });
+    if (vehiculo.rows[0].estado === "mantenimiento") {
+      return res.status(409).json({ error: "El vehículo está en mantenimiento y no puede asignarse para operar" });
     }
 
     // Verificar que conductor tenga licencia vigente
@@ -118,7 +114,7 @@ const crearAsignacion = async (req: any, res: any) => {
       [conductor_id, vehiculo_id, fecha_inicio || new Date().toISOString().slice(0, 10), observaciones || null]
     );
 
-    // Actualizar estado del vehículo
+    // El mismo conductor puede tener varias asignaciones activas, una por vehículo.
     await pool.query(
       `UPDATE vehiculos SET estado = 'en_servicio', usuario_id = (SELECT usuario_id FROM conductores WHERE id = $1) WHERE id = $2`,
       [conductor_id, vehiculo_id]
@@ -168,9 +164,11 @@ const finalizarAsignacion = async (req: any, res: any) => {
       [asignacion.vehiculo_id]
     );
 
-    // Liberar conductor
     await pool.query(
-      `UPDATE conductores SET estado = 'disponible' WHERE id = $1`,
+      `UPDATE conductores SET estado = CASE WHEN EXISTS (
+         SELECT 1 FROM asignacion_vehiculos WHERE conductor_id = $1 AND estado = 'activa'
+       ) THEN 'en_servicio' ELSE 'disponible' END
+       WHERE id = $1`,
       [asignacion.conductor_id]
     );
 
@@ -232,11 +230,8 @@ const conductoresDisponiblesParaAsignar = async (_req: any, res: any) => {
               u.nombre, u.apellido, u.email
        FROM conductores c
        INNER JOIN usuarios u ON u.id = c.usuario_id
-       WHERE c.estado = 'disponible'
+       WHERE c.estado IN ('disponible', 'en_servicio')
          AND u.activo = true
-         AND c.id NOT IN (
-           SELECT conductor_id FROM asignacion_vehiculos WHERE estado = 'activa'
-         )
        ORDER BY u.nombre`
     );
 

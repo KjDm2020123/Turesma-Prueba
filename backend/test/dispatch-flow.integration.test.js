@@ -374,6 +374,9 @@ const pool = {
           );
           return result(maintenance ? [{ ...maintenance }] : []);
         }
+        if (query.startsWith("select id, fecha_inicio::text, fecha_fin::text, hora_inicio::text, hora_fin::text, motivo")) {
+          return result([]);
+        }
         if (query.startsWith("select c.id, c.usuario_id, c.estado")) {
           const driver = driverForUser(params[0]);
           return result(driver ? [{ ...driver }] : []);

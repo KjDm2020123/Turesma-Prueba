@@ -20,7 +20,7 @@ const getCalendarioFlota = async (req: any, res: any) => {
   }
 
   try {
-    const [vehicles, operations, reservations, maintenance, unassignedReservations] = await Promise.all([
+    const [vehicles, operations, reservations, maintenance, externalAvailability, unassignedReservations] = await Promise.all([
       pool.query(
         `SELECT id, placa, tipo, modelo, estado
          FROM vehiculos
@@ -94,6 +94,19 @@ const getCalendarioFlota = async (req: any, res: any) => {
         [desde, hasta]
       ),
       pool.query(
+        `SELECT d.id, d.vehiculo_id, d.fecha_inicio::text, d.fecha_fin::text,
+                d.estado, d.motivo AS tipo_servicio, d.hora_inicio::text,
+                d.hora_fin::text, d.cliente_empresa, d.origen, d.destino, d.notas,
+                u.nombre AS conductor_nombre
+         FROM disponibilidad_externa d
+         JOIN usuarios u ON u.id = d.conductor_usuario_id
+         WHERE d.estado = 'activo'
+           AND d.fecha_inicio <= $2::date
+           AND d.fecha_fin >= $1::date
+         ORDER BY d.fecha_inicio, d.hora_inicio NULLS LAST, d.id`,
+        [desde, hasta]
+      ),
+      pool.query(
         `SELECT r.id, r.fecha_salida, r.fecha_servicio, r.fecha_reserva, r.fecha_llegada,
                 r.fecha_fin, r.fecha_regreso::text AS fecha_regreso, r.hora_regreso, r.origen, r.destino, r.tipo_vehiculo, r.num_personas,
                 COALESCE(u.nombre, 'Cliente') AS cliente_nombre,
@@ -132,6 +145,7 @@ const getCalendarioFlota = async (req: any, res: any) => {
         ...operations.rows.map((event: Record<string, unknown>) => ({ ...event, tipo: "operacion" })),
         ...reservations.rows.map((event: Record<string, unknown>) => ({ ...event, tipo: "reserva" })),
         ...maintenance.rows.map((event: Record<string, unknown>) => ({ ...event, tipo: "mantenimiento" })),
+        ...externalAvailability.rows.map((event: Record<string, unknown>) => ({ ...event, tipo: "externo" })),
       ],
       unassignedReservations: unassignedReservations.rows,
     });

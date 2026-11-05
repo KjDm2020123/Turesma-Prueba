@@ -24,6 +24,20 @@ const queryResults = [
     }],
   },
   {
+    match: "from disponibilidad_externa d",
+    rows: [{
+      id: 71,
+      vehiculo_id: 21,
+      fecha_inicio: "2026-10-17",
+      fecha_fin: "2026-10-17",
+      estado: "activo",
+      tipo_servicio: "viaje_externo",
+      hora_inicio: "08:00:00",
+      hora_fin: "12:00:00",
+      conductor_nombre: "Chofer externo",
+    }],
+  },
+  {
     match: "left join lateral",
     rows: [{
       id: 61,
@@ -126,7 +140,7 @@ test("el calendario de flota solo permite acceso administrativo y devuelve ocupa
     const response = await request("?desde=2026-10-01&hasta=2026-10-31", tokenForRole("admin"));
     assert.equal(response.status, 200);
     assert.equal(response.body.vehicles[0].placa, "TEST-021");
-    assert.deepEqual(response.body.events.map((event) => event.tipo), ["operacion", "reserva", "mantenimiento"]);
+    assert.deepEqual(response.body.events.map((event) => event.tipo), ["operacion", "reserva", "mantenimiento", "externo"]);
     assert.equal(response.body.unassignedReservations[0].id, 61);
   });
 });

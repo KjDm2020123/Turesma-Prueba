@@ -437,6 +437,32 @@ const asignarOperacion = async (req: any, res: any) => {
       });
     }
 
+    const externalBlock = await client.query(
+      `SELECT id, fecha_inicio::text, fecha_fin::text, hora_inicio::text, hora_fin::text,
+              motivo, cliente_empresa, origen, destino, notas
+       FROM disponibilidad_externa
+       WHERE vehiculo_id = $1 AND estado = 'activo'
+         AND fecha_inicio <= $3::date AND fecha_fin >= $2::date
+         AND (
+           $2::date <> $3::date OR hora_inicio IS NULL OR $4::time IS NULL
+           OR hora_fin IS NULL OR $5::time IS NULL
+           OR (hora_inicio < $5::time AND $4::time < hora_fin)
+         )
+       ORDER BY fecha_inicio, hora_inicio NULLS LAST, id
+       LIMIT 1`,
+      [vehicleId, current.fecha_programada, endDate, current.hora_inicio, current.hora_fin]
+    );
+    if (externalBlock.rowCount) {
+      const block = externalBlock.rows[0];
+      return reject(409, {
+        success: false,
+        error: block.motivo === "fuera_de_servicio"
+          ? "El vehículo está fuera de servicio por un bloqueo externo"
+          : "El vehículo está ocupado externamente en el horario solicitado",
+        conflicto: { ...block, vehiculo_id: vehicleId, placa: vehicleData.placa },
+      });
+    }
+
     const driver = await client.query(
       `SELECT c.id, c.usuario_id, c.estado, c.fecha_licencia_vencimiento, u.activo
        FROM conductores c JOIN usuarios u ON u.id = c.usuario_id

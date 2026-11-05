@@ -162,25 +162,23 @@ const registrarVehiculo = async (req, res) => {
 
     const nuevoVehiculo = result.rows[0];
 
-    // Si se asignó un conductor de una vez, deja consistentes ambas vías de
-    // resolución (usuario_id directo y asignacion_vehiculos), igual que al editar.
+    // Un conductor puede quedar asociado a varios vehículos. La asignación
+    // histórica se mantiene por vehículo y no se cierran sus otros vínculos.
     if (usuarioId) {
-      await pool.query(
-        `UPDATE vehiculos SET usuario_id = NULL WHERE usuario_id = $1 AND id <> $2`,
-        [usuarioId, nuevoVehiculo.id]
-      );
       const conductorRow = await pool.query(`SELECT id FROM conductores WHERE usuario_id = $1 LIMIT 1`, [usuarioId]);
       const conductorId = conductorRow.rowCount ? conductorRow.rows[0].id : null;
       if (conductorId) {
-        await pool.query(
-          `UPDATE asignacion_vehiculos SET estado = 'finalizada', fecha_fin = CURRENT_DATE, actualizado_en = CURRENT_TIMESTAMP
-           WHERE conductor_id = $1 AND estado = 'activa'`,
-          [conductorId]
-        );
-        await pool.query(
-          `INSERT INTO asignacion_vehiculos (conductor_id, vehiculo_id, estado) VALUES ($1, $2, 'activa')`,
-          [conductorId, nuevoVehiculo.id]
-        );
+        const vehicleState = await pool.query("SELECT estado, activo FROM vehiculos WHERE id = $1", [nuevoVehiculo.id]);
+        if (vehicleState.rows[0]?.activo && vehicleState.rows[0]?.estado !== "mantenimiento") {
+          await pool.query(
+            `INSERT INTO asignacion_vehiculos (conductor_id, vehiculo_id, estado)
+             VALUES ($1, $2, 'activa')
+             ON CONFLICT (vehiculo_id) WHERE estado = 'activa'
+             DO UPDATE SET conductor_id = EXCLUDED.conductor_id,
+                           actualizado_en = CURRENT_TIMESTAMP`,
+            [conductorId, nuevoVehiculo.id]
+          );
+        }
       }
     }
 
@@ -227,23 +225,11 @@ const editarVehiculo = async (req, res) => {
       return res.status(400).json({ error: "Capacidad inválida" });
     }
 
-    // Si el conductor asignado cambió, hay que dejar consistentes AMBAS vías de
-    // resolución que usa el conductor (getVehiculoCompleto): la asignación directa
-    // en vehiculos.usuario_id y la tabla asignacion_vehiculos. De lo contrario, el
-    // conductor podría seguir viendo el vehículo (y su mantenimiento) anterior.
+    // La relación directa conserva el vehículo asociado en la ficha. La tabla
+    // de asignaciones conserva además todos los vínculos históricos del conductor.
     const conductorCambio = usuarioId !== current.usuario_id;
     if (conductorCambio) {
-      // 1) Ese mismo conductor no puede seguir ligado a NINGÚN otro vehículo.
-      if (usuarioId) {
-        await pool.query(
-          `UPDATE vehiculos SET usuario_id = NULL WHERE usuario_id = $1 AND id <> $2`,
-          [usuarioId, vehiculoId]
-        );
-      }
-
-      // 2) Sincroniza asignacion_vehiculos: cierra la asignación activa previa de
-      //    este vehículo (si tenía otro conductor) y la del nuevo conductor (si
-      //    apuntaba a otro vehículo), luego abre la nueva asignación activa.
+      // Solo se cierra la asignación activa de este vehículo.
       await pool.query(
         `UPDATE asignacion_vehiculos SET estado = 'finalizada', fecha_fin = CURRENT_DATE, actualizado_en = CURRENT_TIMESTAMP
          WHERE vehiculo_id = $1 AND estado = 'activa'`,
@@ -255,13 +241,11 @@ const editarVehiculo = async (req, res) => {
         const conductorId = conductorRow.rowCount ? conductorRow.rows[0].id : null;
         if (conductorId) {
           await pool.query(
-            `UPDATE asignacion_vehiculos SET estado = 'finalizada', fecha_fin = CURRENT_DATE, actualizado_en = CURRENT_TIMESTAMP
-             WHERE conductor_id = $1 AND estado = 'activa' AND vehiculo_id <> $2`,
-            [conductorId, vehiculoId]
-          );
-          await pool.query(
             `INSERT INTO asignacion_vehiculos (conductor_id, vehiculo_id, estado)
-             VALUES ($1, $2, 'activa')`,
+             VALUES ($1, $2, 'activa')
+             ON CONFLICT (vehiculo_id) WHERE estado = 'activa'
+             DO UPDATE SET conductor_id = EXCLUDED.conductor_id,
+                           actualizado_en = CURRENT_TIMESTAMP`,
             [conductorId, vehiculoId]
           );
         }

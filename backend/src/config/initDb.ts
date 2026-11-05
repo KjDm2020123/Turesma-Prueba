@@ -274,6 +274,36 @@ const initDatabase = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS disponibilidad_externa (
+      id SERIAL PRIMARY KEY,
+      vehiculo_id INT NOT NULL REFERENCES vehiculos(id) ON DELETE CASCADE,
+      conductor_usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      fecha_inicio DATE NOT NULL,
+      fecha_fin DATE NOT NULL,
+      hora_inicio TIME,
+      hora_fin TIME,
+      motivo VARCHAR(40) NOT NULL DEFAULT 'viaje_externo',
+      cliente_empresa VARCHAR(160),
+      origen VARCHAR(300),
+      destino VARCHAR(300),
+      notas VARCHAR(1000),
+      estado VARCHAR(20) NOT NULL DEFAULT 'activo',
+      creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (fecha_fin >= fecha_inicio),
+      CHECK (hora_inicio IS NULL OR hora_fin IS NULL OR hora_fin > hora_inicio),
+      CHECK (motivo IN ('viaje_externo', 'ocupado', 'fuera_de_servicio')),
+      CHECK (estado IN ('activo', 'cancelado'))
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS disponibilidad_externa_vehiculo_fecha_idx
+    ON disponibilidad_externa (vehiculo_id, fecha_inicio, fecha_fin)
+    WHERE estado = 'activo';
+  `);
+
+  await pool.query(`
     ALTER TABLE vehiculos
     DROP CONSTRAINT IF EXISTS vehiculos_placa_key;
   `);
@@ -879,6 +909,12 @@ const initDatabase = async () => {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS asignacion_vehiculos_vehiculo_idx
     ON asignacion_vehiculos (vehiculo_id, estado);
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS asignacion_vehiculos_una_activa_por_vehiculo_idx
+    ON asignacion_vehiculos (vehiculo_id)
+    WHERE estado = 'activa';
   `);
 
   // ============ TABLA RUTAS CONDUCTOR REPORTES (si no existe) ============

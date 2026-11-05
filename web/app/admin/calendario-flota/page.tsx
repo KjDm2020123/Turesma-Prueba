@@ -27,7 +27,7 @@ type FleetEvent = {
   vehiculo_id: number;
   fecha_inicio: string;
   fecha_fin: string;
-  tipo: "operacion" | "reserva" | "mantenimiento";
+  tipo: "operacion" | "reserva" | "mantenimiento" | "externo";
   estado: string;
   tipo_servicio?: string | null;
   hora_inicio?: string | null;
@@ -35,6 +35,9 @@ type FleetEvent = {
   origen?: string | null;
   destino?: string | null;
   descripcion?: string | null;
+  cliente_empresa?: string | null;
+  conductor_nombre?: string | null;
+  notas?: string | null;
 };
 
 type UnassignedReservation = {
@@ -94,6 +97,7 @@ const formatDate = (value: string) => fromIsoDate(value).toLocaleDateString("es-
 
 const eventName = (event: FleetEvent) => {
   if (event.tipo === "mantenimiento") return "Mantenimiento";
+  if (event.tipo === "externo") return event.tipo_servicio === "fuera_de_servicio" ? "Fuera de servicio" : "Viaje externo";
   if (event.tipo_servicio === "Regreso de reserva") return "Regreso";
   if (event.tipo === "reserva") return "Reserva";
   return event.tipo_servicio || "Viaje";
@@ -101,6 +105,7 @@ const eventName = (event: FleetEvent) => {
 
 const eventStyle = (event: FleetEvent) => {
   if (event.tipo === "mantenimiento") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (event.tipo === "externo") return "border-violet-200 bg-violet-50 text-violet-800";
   if (event.estado === "en_curso") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (event.estado === "incidencia") return "border-red-200 bg-red-50 text-red-700";
   if (event.estado === "completada") return "border-slate-200 bg-slate-100 text-slate-600";
@@ -117,6 +122,7 @@ const eventStatusLabel = (event: FleetEvent) => {
   if (event.tipo === "mantenimiento") {
     return event.estado === "en_progreso" ? "Mantenimiento en curso" : "Mantenimiento programado";
   }
+  if (event.tipo === "externo") return `Bloqueo externo${event.conductor_nombre ? ` · ${event.conductor_nombre}` : ""}`;
   if (event.tipo === "reserva") return "Reserva confirmada · vehículo asignado";
   const labels: Record<string, string> = {
     programada: "Viaje programado",
@@ -648,6 +654,9 @@ export default function CalendarioFlotaPage() {
             </div>
             <p className="mt-3 text-xs font-semibold">{eventSummary(selectedEvent)}</p>
             {selectedEvent.tipo === "mantenimiento" && selectedEvent.descripcion && <p className="mt-1 text-xs">{selectedEvent.descripcion}</p>}
+            {selectedEvent.tipo === "externo" && (selectedEvent.cliente_empresa || selectedEvent.notas) && (
+              <p className="mt-1 text-xs">{[selectedEvent.cliente_empresa, selectedEvent.notas].filter(Boolean).join(" · ")}</p>
+            )}
             {selectedEvent.tipo !== "mantenimiento" && <p className="mt-2 text-xs font-bold">Unidad asignada a este servicio.</p>}
           </div>
         ) : selectedUnassignedReservation ? (

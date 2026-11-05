@@ -16,6 +16,7 @@ import {
   Truck,
   History,
   Wrench,
+  CalendarClock,
 } from "lucide-react";
 import { clearStoredUser } from "../../../lib/session";
 import { ConductorPanelProvider, useConductorPanelState } from "./use-conductor-panel";
@@ -38,6 +39,7 @@ const menuItems: MenuItemType[] = [
   { href: "/vehiculo/activas", label: "Viajes Activos", icon: Truck },
   { href: "/vehiculo/historial", label: "Historial", icon: History },
   { href: "/vehiculo/mantenimiento", label: "Mantenimiento", icon: Wrench },
+  { href: "/vehiculo/disponibilidad", label: "Mi disponibilidad", icon: CalendarClock },
   { href: "/vehiculo/ruta", label: "Registrar Ruta", icon: MapPinned },
   { href: "/vehiculo/perfil", label: "Perfil", icon: User },
 ];

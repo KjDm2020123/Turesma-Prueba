@@ -11,6 +11,120 @@ const parsePositiveInt = (value) => {
   return parsed;
 };
 
+const parseIsoDate = (value) => {
+  const date = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? date : null;
+};
+
+const parseTime = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours < 24 && minutes < 60 ? value : null;
+};
+
+const listarDisponibilidadExterna = async (req, res) => {
+  const conductorId = parsePositiveInt(req.params.id);
+  if (!conductorId) return res.status(400).json({ error: "ID de conductor inválido" });
+  try {
+    const result = await pool.query(
+      `SELECT d.*, v.placa, v.modelo
+       FROM disponibilidad_externa d
+       JOIN vehiculos v ON v.id = d.vehiculo_id
+       WHERE d.conductor_usuario_id = $1 AND d.estado = 'activo'
+       ORDER BY d.fecha_inicio ASC, d.hora_inicio ASC NULLS LAST, d.id DESC
+       LIMIT 100`,
+      [conductorId]
+    );
+    return res.json(result.rows);
+  } catch (error) {
+    console.error("Error listando disponibilidad externa:", error);
+    return res.status(500).json({ error: "No se pudo cargar la disponibilidad externa" });
+  }
+};
+
+const crearDisponibilidadExterna = async (req, res) => {
+  const conductorId = parsePositiveInt(req.params.id);
+  const requestedVehicleId = parsePositiveInt(req.body?.vehiculo_id);
+  const fechaInicio = parseIsoDate(req.body?.fecha_inicio);
+  const fechaFin = parseIsoDate(req.body?.fecha_fin || req.body?.fecha_inicio);
+  const horaInicio = parseTime(req.body?.hora_inicio);
+  const horaFin = parseTime(req.body?.hora_fin);
+  const motivo = ["viaje_externo", "ocupado", "fuera_de_servicio"].includes(req.body?.motivo)
+    ? req.body.motivo : null;
+  const hasInvalidText = (value, max) => value !== null && value !== undefined && value !== ""
+    && (typeof value !== "string" || value.trim().length > max);
+  const text = (value, max) => typeof value === "string" ? value.trim() || null : null;
+  const clienteEmpresa = text(req.body?.cliente_empresa, 160);
+  const origen = text(req.body?.origen, 300);
+  const destino = text(req.body?.destino, 300);
+  const notas = text(req.body?.notas, 1000);
+  if (!conductorId || !fechaInicio || !fechaFin || fechaFin < fechaInicio || !motivo
+    || (req.body?.hora_inicio !== undefined && req.body?.hora_inicio !== null && req.body?.hora_inicio !== "" && !horaInicio)
+    || (req.body?.hora_fin !== undefined && req.body?.hora_fin !== null && req.body?.hora_fin !== "" && !horaFin)
+    || hasInvalidText(req.body?.cliente_empresa, 160)
+    || hasInvalidText(req.body?.origen, 300)
+    || hasInvalidText(req.body?.destino, 300)
+    || hasInvalidText(req.body?.notas, 1000)
+    || ((horaInicio === null) !== (horaFin === null))
+    || (horaInicio && horaFin && horaFin <= horaInicio)) {
+    return res.status(400).json({ error: "Revisa las fechas, horario y motivo del bloqueo" });
+  }
+  try {
+    const assignedVehicles = await getVehiculosCompletos(conductorId);
+    const vehicle = requestedVehicleId
+      ? assignedVehicles.find((item) => Number(item.id) === requestedVehicleId)
+      : assignedVehicles[0];
+    if (!vehicle) return res.status(409).json({ error: "El vehículo seleccionado no está asociado contigo" });
+    const vehicleId = vehicle.id;
+    const conflict = await pool.query(
+      `SELECT id FROM disponibilidad_externa
+       WHERE vehiculo_id = $1 AND estado = 'activo'
+         AND fecha_inicio <= $3::date AND fecha_fin >= $2::date
+         AND (
+           $2::date <> $3::date OR hora_inicio IS NULL OR $4::time IS NULL
+           OR hora_fin IS NULL OR $5::time IS NULL
+           OR (hora_inicio < $5::time AND $4::time < hora_fin)
+         )
+       LIMIT 1`,
+      [vehicleId, fechaInicio, fechaFin, horaInicio, horaFin]
+    );
+    if (conflict.rowCount) return res.status(409).json({ error: "Ya existe un bloqueo externo que se cruza con ese horario" });
+    const saved = await pool.query(
+      `INSERT INTO disponibilidad_externa
+       (vehiculo_id, conductor_usuario_id, fecha_inicio, fecha_fin, hora_inicio, hora_fin, motivo, cliente_empresa, origen, destino, notas)
+       VALUES ($1, $2, $3::date, $4::date, $5::time, $6::time, $7, $8, $9, $10, $11)
+       RETURNING *`,
+      [vehicleId, conductorId, fechaInicio, fechaFin, horaInicio, horaFin, motivo, clienteEmpresa, origen, destino, notas]
+    );
+    return res.status(201).json({ message: "Disponibilidad externa registrada", data: saved.rows[0] });
+  } catch (error) {
+    console.error("Error creando disponibilidad externa:", error);
+    return res.status(500).json({ error: "No se pudo registrar la disponibilidad externa" });
+  }
+};
+
+const cancelarDisponibilidadExterna = async (req, res) => {
+  const conductorId = parsePositiveInt(req.params.id);
+  const blockId = parsePositiveInt(req.params.bloqueoId);
+  if (!conductorId || !blockId) return res.status(400).json({ error: "Identificadores inválidos" });
+  try {
+    const result = await pool.query(
+      `UPDATE disponibilidad_externa SET estado = 'cancelado', actualizado_en = CURRENT_TIMESTAMP
+       WHERE id = $1 AND conductor_usuario_id = $2 AND estado = 'activo'
+       RETURNING id`,
+      [blockId, conductorId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: "Bloqueo externo no encontrado" });
+    return res.json({ message: "Bloqueo externo cancelado" });
+  } catch (error) {
+    console.error("Error cancelando disponibilidad externa:", error);
+    return res.status(500).json({ error: "No se pudo cancelar el bloqueo externo" });
+  }
+};
+
 const hasReservasColumn = async (columnName) => {
   const result = await pool.query(
     `SELECT 1
@@ -474,6 +588,23 @@ const getVehiculoCompleto = async (usuarioId) => {
     [usuarioId]
   );
   return byAsignacion.rowCount ? byAsignacion.rows[0] : null;
+};
+
+const getVehiculosCompletos = async (usuarioId) => {
+  const result = await pool.query(
+    `SELECT DISTINCT v.id, v.placa, v.modelo, v.tipo, v.estado, v.capacidad, v.color,
+            v.imagen_url, v.descripcion, v.marca, v.anio, v.kilometraje,
+            v.fecha_proximo_mantenimiento, v.proximo_km_mantenimiento
+     FROM vehiculos v
+     LEFT JOIN conductores c ON c.usuario_id = $1
+     LEFT JOIN asignacion_vehiculos av
+       ON av.conductor_id = c.id AND av.vehiculo_id = v.id AND av.estado = 'activa'
+     WHERE v.activo = true
+       AND (v.usuario_id = $1 OR av.id IS NOT NULL)
+     ORDER BY v.id DESC`,
+    [usuarioId]
+  );
+  return result.rows;
 };
 
 const listarReservasConductor = async (req, res) => {
@@ -1125,11 +1256,11 @@ const obtenerMiVehiculoConductor = async (req, res) => {
     return res.status(400).json({ error: "ID de conductor inválido" });
   }
   try {
-    const vehiculo = await getVehiculoCompleto(conductorId);
-    if (!vehiculo) {
+    const vehiculos = await getVehiculosCompletos(conductorId);
+    if (!vehiculos.length) {
       return res.status(404).json({ error: "No tienes vehículo asignado" });
     }
-    return res.status(200).json(vehiculo);
+    return res.status(200).json({ ...vehiculos[0], vehiculos });
   } catch (error) {
     console.error("Error obteniendo vehículo del conductor:", error);
     return res.status(500).json({ error: "Error interno del servidor" });
@@ -1408,6 +1539,9 @@ module.exports = {
   marcarRecogidoConductor,
   obtenerDisponibilidadConductor,
   actualizarDisponibilidadConductor,
+  listarDisponibilidadExterna,
+  crearDisponibilidadExterna,
+  cancelarDisponibilidadExterna,
   crearReporteRutaConductor,
   listarReportesRutaConductor,
   actualizarEstadoConductor,

@@ -11,6 +11,9 @@ const {
   marcarRecogidoConductor,
   obtenerDisponibilidadConductor,
   actualizarDisponibilidadConductor,
+  listarDisponibilidadExterna,
+  crearDisponibilidadExterna,
+  cancelarDisponibilidadExterna,
   crearReporteRutaConductor,
   listarReportesRutaConductor,
   actualizarEstadoConductor,
@@ -36,6 +39,9 @@ router.patch("/:id/reservas/:reservaId/estado", actualizarEstadoReservaConductor
 router.patch("/:id/reservas/:reservaId/recoger", marcarRecogidoConductor);
 router.get("/:id/disponibilidad", obtenerDisponibilidadConductor);
 router.patch("/:id/disponibilidad", actualizarDisponibilidadConductor);
+router.get("/:id/disponibilidad-externa", listarDisponibilidadExterna);
+router.post("/:id/disponibilidad-externa", crearDisponibilidadExterna);
+router.delete("/:id/disponibilidad-externa/:bloqueoId", cancelarDisponibilidadExterna);
 router.get("/:id/rutas", listarReportesRutaConductor);
 router.post("/:id/rutas", crearReporteRutaConductor);
 router.patch("/:id/estado", actualizarEstadoConductor);
