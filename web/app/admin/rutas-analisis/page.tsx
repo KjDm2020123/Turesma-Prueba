@@ -81,7 +81,7 @@ export default function AdminRutasAnalisisPage() {
               </div>
               <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-2xl p-5 shadow-sm flex items-center gap-4">
                 <div className="bg-emerald-500/10 p-3 rounded-xl"><Award size={22} className="text-emerald-600" /></div>
-                <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Ruta más rentable</p>
+                <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Ruta con más cobro neto</p>
                   {resumen.ruta_mas_rentable ? (<p className="text-sm font-black text-slate-800 truncate">{resumen.ruta_mas_rentable.origen} → {resumen.ruta_mas_rentable.destino}<span className="text-emerald-600 ml-2">{fmt(Number(resumen.ruta_mas_rentable.ingresos))}</span></p>) : <p className="text-sm text-slate-300 italic">—</p>}
                 </div>
               </div>
@@ -107,7 +107,7 @@ export default function AdminRutasAnalisisPage() {
             <div className="overflow-x-auto">
               <table className="min-w-[680px] w-full text-left border-collapse">
                 <thead><tr className="bg-slate-50/60 border-b border-slate-100">
-                  {["Ruta", "Viajes", "Pasajeros", "Prom. pax", "Ingresos", "Cancelados"].map(h => (
+                  {["Ruta", "Viajes", "Pasajeros", "Prom. pax", "Cobrado neto", "Cancelados"].map(h => (
                     <th key={h} className="px-5 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
                   ))}
                 </tr></thead>

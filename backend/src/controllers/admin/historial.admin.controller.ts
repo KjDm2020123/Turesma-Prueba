@@ -10,12 +10,12 @@ const getHistorialMensual = async (req: any, res: any) => {
     const anio = Number(req.query.anio) || new Date().getFullYear();
 
     const [ingresosR, gastosR, aniosR] = await Promise.all([
-      // Actividad y dinero por mes (reservas que generan ingreso).
+      // Ingresos refleja lo cobrado neto, igual que el dashboard principal.
       pool.query(
         `SELECT EXTRACT(MONTH FROM fecha_reserva)::int AS mes,
                 COUNT(*) FILTER (WHERE estado IN ('confirmada','en_curso','finalizada'))::int AS viajes,
                 COALESCE(SUM(num_personas) FILTER (WHERE estado IN ('confirmada','en_curso','finalizada')), 0)::int AS pasajeros,
-                COALESCE(SUM(total) FILTER (WHERE estado IN ('confirmada','en_curso','finalizada')), 0)::numeric AS ingresos,
+                COALESCE(SUM(monto_pagado), 0)::numeric AS ingresos,
                 COUNT(*) FILTER (WHERE estado = 'cancelada')::int AS cancelados
          FROM reservas
          WHERE EXTRACT(YEAR FROM fecha_reserva) = $1

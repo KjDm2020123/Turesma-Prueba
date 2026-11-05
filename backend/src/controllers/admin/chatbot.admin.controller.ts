@@ -267,16 +267,16 @@ const answerFromDatabase = async (question: string) => {
   if (/(pago|ingreso|ganancia|venta|dinero|factur)/.test(text)) {
     const result = await pool.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN estado IN ('confirmada', 'en_curso', 'finalizada') THEN total ELSE 0 END), 0)::numeric AS ingresos,
-        COALESCE(SUM(CASE WHEN estado = 'finalizada' THEN total ELSE 0 END), 0)::numeric AS finalizados,
+        COALESCE(SUM(monto_pagado), 0)::numeric AS ingresos,
+        COALESCE(SUM(monto_pagado) FILTER (WHERE estado = 'finalizada'), 0)::numeric AS finalizados,
         COUNT(*) FILTER (WHERE estado_pago = 'pendiente')::int AS pagos_pendientes
       FROM reservas
       WHERE fecha_reserva >= date_trunc('month', CURRENT_DATE)
     `);
     const row = result.rows[0];
-    sources.push("reservas.total", "reservas.estado", "reservas.estado_pago");
+    sources.push("reservas.monto_pagado", "reservas.estado", "reservas.estado_pago");
     return {
-      answer: `En el mes actual se registran ${formatMoney(row.ingresos)} en reservas confirmadas, en curso o finalizadas; ${formatMoney(row.finalizados)} corresponde a reservas finalizadas y hay ${formatNumber(row.pagos_pendientes)} pago(s) pendiente(s).`,
+      answer: `En el mes actual se han cobrado netos ${formatMoney(row.ingresos)}; ${formatMoney(row.finalizados)} corresponde a reservas finalizadas y hay ${formatNumber(row.pagos_pendientes)} pago(s) pendiente(s).`,
       recommendation: Number(row.pagos_pendientes) > 0 ? "Revisar los pagos pendientes antes de confirmar servicios relacionados." : "No hay pagos pendientes registrados para el mes actual.",
       sources,
     };

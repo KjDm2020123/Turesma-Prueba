@@ -222,7 +222,7 @@ const getRutasDesdeReservas = async (_req: any, res: any) => {
         COALESCE(NULLIF(TRIM(destino), ''), 'Sin destino') AS destino,
         COUNT(*)::int AS viajes,
         COALESCE(SUM(num_personas), 0)::int AS pasajeros,
-        COALESCE(SUM(CASE WHEN estado <> 'cancelada' THEN total ELSE 0 END), 0)::numeric AS ingresos,
+        COALESCE(SUM(monto_pagado), 0)::numeric AS ingresos,
         ROUND(AVG(num_personas)::numeric, 1) AS prom_pasajeros,
         COUNT(CASE WHEN estado = 'cancelada' THEN 1 END)::int AS cancelados
       FROM reservas

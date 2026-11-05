@@ -76,6 +76,63 @@ const actualizarEmpresaAsociada = async (req: any, res: any) => {
     return res.status(400).json({ success: false, error: "Los datos de la empresa no son válidos" });
   }
   try {
+    if (body.activa === false) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const current = await client.query("SELECT id FROM empresas_asociadas WHERE id = $1 FOR UPDATE", [id]);
+        if (!current.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ success: false, error: "Empresa asociada no encontrada" });
+        }
+        const impact = await client.query(
+          `SELECT COUNT(DISTINCT o.id)::int AS servicios_afectados
+           FROM operaciones o
+           JOIN vehiculos_asociados v ON v.id = o.vehiculo_asociado_id
+           WHERE v.empresa_id = $1
+             AND o.estado = ANY($2::text[])
+             AND o.fecha_programada >= CURRENT_DATE`,
+          [id, ["programada", "asignada", "en_curso", "incidencia"]]
+        );
+        const affectedServices = Number(impact.rows[0]?.servicios_afectados || 0);
+        if (affectedServices > 0
+          && (body.confirmar_servicios_afectados !== true
+            || Number(body.servicios_afectados_confirmados) !== affectedServices)) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            success: false,
+            confirmacion_requerida: true,
+            servicios_afectados: affectedServices,
+            error: "La empresa tiene servicios futuros asignados. Confirma la baja para continuar.",
+          });
+        }
+        const result = await client.query(
+          `UPDATE empresas_asociadas
+           SET nombre = COALESCE($1, nombre),
+               identificacion = CASE WHEN $2 THEN $3 ELSE identificacion END,
+               contacto = CASE WHEN $4 THEN $5 ELSE contacto END,
+               telefono = CASE WHEN $6 THEN $7 ELSE telefono END,
+               email = CASE WHEN $8 THEN $9 ELSE email END,
+               notas = CASE WHEN $10 THEN $11 ELSE notas END,
+               activa = FALSE,
+               actualizado_en = CURRENT_TIMESTAMP
+           WHERE id = $12 RETURNING *`,
+          [
+            nombre, body.identificacion !== undefined, identificacion,
+            body.contacto !== undefined, contacto, body.telefono !== undefined, telefono,
+            body.email !== undefined, email, body.notas !== undefined, notas, id,
+          ]
+        );
+        await client.query("COMMIT");
+        return res.json({ success: true, data: result.rows[0] });
+      } catch (error: any) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
     const result = await pool.query(
       `UPDATE empresas_asociadas
        SET nombre = COALESCE($1, nombre),
@@ -151,6 +208,60 @@ const actualizarVehiculoAsociado = async (req: any, res: any) => {
     return res.status(400).json({ success: false, error: "Los datos del vehículo asociado no son válidos" });
   }
   try {
+    if (body.activo === false) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const current = await client.query("SELECT id FROM vehiculos_asociados WHERE id = $1 FOR UPDATE", [id]);
+        if (!current.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ success: false, error: "Vehículo asociado no encontrado" });
+        }
+        const impact = await client.query(
+          `SELECT COUNT(*)::int AS servicios_afectados
+           FROM operaciones
+           WHERE vehiculo_asociado_id = $1
+             AND estado = ANY($2::text[])
+             AND fecha_programada >= CURRENT_DATE`,
+          [id, ["programada", "asignada", "en_curso", "incidencia"]]
+        );
+        const affectedServices = Number(impact.rows[0]?.servicios_afectados || 0);
+        if (affectedServices > 0
+          && (body.confirmar_servicios_afectados !== true
+            || Number(body.servicios_afectados_confirmados) !== affectedServices)) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            success: false,
+            confirmacion_requerida: true,
+            servicios_afectados: affectedServices,
+            error: "El vehículo tiene servicios futuros asignados. Confirma la baja para continuar.",
+          });
+        }
+        const result = await client.query(
+          `UPDATE vehiculos_asociados
+           SET placa = COALESCE($1, placa),
+               modelo = COALESCE($2, modelo),
+               capacidad = COALESCE($3, capacidad),
+               conductor = CASE WHEN $4 THEN $5 ELSE conductor END,
+               conductor_telefono = CASE WHEN $6 THEN $7 ELSE conductor_telefono END,
+               activo = FALSE,
+               actualizado_en = CURRENT_TIMESTAMP
+           WHERE id = $8 RETURNING *`,
+          [
+            placa?.toUpperCase() || null, modelo, capacidad, body.conductor !== undefined, conductor,
+            body.conductor_telefono !== undefined, conductorTelefono, id,
+          ]
+        );
+        await client.query("COMMIT");
+        return res.json({ success: true, data: result.rows[0] });
+      } catch (error: any) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
     const result = await pool.query(
       `UPDATE vehiculos_asociados
        SET placa = COALESCE($1, placa), modelo = COALESCE($2, modelo), capacidad = COALESCE($3, capacidad),

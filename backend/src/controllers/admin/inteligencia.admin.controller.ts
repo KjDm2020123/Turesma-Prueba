@@ -468,16 +468,15 @@ const getAnaliticaInteligente = async (_req: any, res: any) => {
         GROUP BY 1 ORDER BY 1
       `),
       pool.query(`
-        SELECT COALESCE(SUM(total), 0)::numeric AS total
+        SELECT COALESCE(SUM(monto_pagado), 0)::numeric AS total
         FROM reservas
-        WHERE estado IN ('confirmada', 'en_curso', 'finalizada')
-          AND date_trunc('month', fecha_reserva) = date_trunc('month', CURRENT_DATE)
+        WHERE date_trunc('month', fecha_reserva) = date_trunc('month', CURRENT_DATE)
       `),
       pool.query(`
         SELECT COALESCE(AVG(m.total), 0)::numeric AS prom FROM (
-          SELECT date_trunc('month', fecha_reserva) AS mes, SUM(total) AS total
+          SELECT date_trunc('month', fecha_reserva) AS mes, SUM(monto_pagado) AS total
           FROM reservas
-          WHERE estado = 'finalizada' AND fecha_reserva >= CURRENT_DATE - INTERVAL '6 months'
+          WHERE fecha_reserva >= CURRENT_DATE - INTERVAL '6 months'
           GROUP BY 1
         ) m
       `),

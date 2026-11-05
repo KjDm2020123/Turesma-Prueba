@@ -14,6 +14,8 @@ const state = {
   nextCompanyId: 1,
   nextVehicleId: 1,
   nextRefundId: 1,
+  companyServices: 0,
+  vehicleServices: 0,
 };
 
 const result = (rows = []) => ({ rows, rowCount: rows.length });
@@ -40,6 +42,12 @@ const pool = {
       const company = state.companies.find((row) => row.id === Number(params[0]));
       return result(company ? [company] : []);
     }
+    if (query.startsWith("update empresas_asociadas set nombre = coalesce")) {
+      const company = state.companies.find((row) => row.id === Number(params[12]));
+      if (!company) return result();
+      Object.assign(company, { activa: params[11] === null ? company.activa : params[11] });
+      return result([company]);
+    }
     if (query.startsWith("insert into vehiculos_asociados")) {
       const vehicle = {
         id: state.nextVehicleId++,
@@ -61,6 +69,32 @@ const pool = {
       async query(sql, params = []) {
         const query = sql.replace(/\s+/g, " ").trim().toLowerCase();
         if (["begin", "commit", "rollback"].includes(query)) return result();
+        if (query.startsWith("select id from empresas_asociadas where id = $1 for update")) {
+          const company = state.companies.find((row) => row.id === Number(params[0]));
+          return result(company ? [company] : []);
+        }
+        if (query.startsWith("select count(distinct o.id)::int as servicios_afectados")) {
+          return result([{ servicios_afectados: state.companyServices }]);
+        }
+        if (query.startsWith("select id from vehiculos_asociados where id = $1 for update")) {
+          const vehicle = state.vehicles.find((row) => row.id === Number(params[0]));
+          return result(vehicle ? [vehicle] : []);
+        }
+        if (query.startsWith("select count(*)::int as servicios_afectados from operaciones")) {
+          return result([{ servicios_afectados: state.vehicleServices }]);
+        }
+        if (query.startsWith("update empresas_asociadas set nombre = coalesce")) {
+          const company = state.companies.find((row) => row.id === Number(params[11]));
+          if (!company) return result();
+          Object.assign(company, { activa: false });
+          return result([company]);
+        }
+        if (query.startsWith("update vehiculos_asociados set placa = coalesce")) {
+          const vehicle = state.vehicles.find((row) => row.id === Number(params[7]));
+          if (!vehicle) return result();
+          Object.assign(vehicle, { activo: false });
+          return result([vehicle]);
+        }
         if (query.startsWith("select p.id, p.reserva_id, p.monto, p.estado, r.total")) {
           return result([{
             ...state.payment,
@@ -152,32 +186,93 @@ test("administra empresas asociadas y registra devoluciones con permisos y contr
     });
     assert.equal(created.status, 201);
     assert.equal(created.body.data.nombre, "Transporte de prueba");
+    const vehicle = await request(`/empresas-asociadas/${created.body.data.id}/vehiculos`, "admin", {
+      method: "POST",
+      body: { placa: "ABC-1234", modelo: "Van", capacidad: 12, conductor: "Conductor", conductor_telefono: "0990000000" },
+    });
+    assert.equal(vehicle.status, 201);
     const invalidVehicle = await request(`/empresas-asociadas/${created.body.data.id}/vehiculos`, "admin", {
       method: "POST",
       body: { placa: "ABC-1234", modelo: "Van", capacidad: 0 },
     });
     assert.equal(invalidVehicle.status, 400);
+
+    state.companyServices = 2;
+    const companyWarning = await request(`/empresas-asociadas/${created.body.data.id}`, "admin", {
+      method: "PATCH",
+      body: { activa: false },
+    });
+    assert.equal(companyWarning.status, 409);
+    assert.equal(companyWarning.body.confirmacion_requerida, true);
+    assert.equal(companyWarning.body.servicios_afectados, 2);
+    assert.equal(state.companies[0].activa, true);
+
+    state.companyServices = 3;
+    const changedCompanyWarning = await request(`/empresas-asociadas/${created.body.data.id}`, "admin", {
+      method: "PATCH",
+      body: { activa: false, confirmar_servicios_afectados: true, servicios_afectados_confirmados: 2 },
+    });
+    assert.equal(changedCompanyWarning.status, 409);
+    assert.equal(changedCompanyWarning.body.servicios_afectados, 3);
+
+    const deactivatedCompany = await request(`/empresas-asociadas/${created.body.data.id}`, "admin", {
+      method: "PATCH",
+      body: { activa: false, confirmar_servicios_afectados: true, servicios_afectados_confirmados: 3 },
+    });
+    assert.equal(deactivatedCompany.status, 200);
+    assert.equal(state.companies[0].activa, false);
+    assert.equal(state.vehicles[0].activo, true);
+
+    state.vehicleServices = 1;
+    const vehicleWarning = await request(`/empresas-asociadas/vehiculos/${vehicle.body.data.id}`, "admin", {
+      method: "PATCH",
+      body: { activo: false },
+    });
+    assert.equal(vehicleWarning.status, 409);
+    assert.equal(vehicleWarning.body.servicios_afectados, 1);
+    assert.equal(state.vehicles[0].activo, true);
+    const deactivatedVehicle = await request(`/empresas-asociadas/vehiculos/${vehicle.body.data.id}`, "admin", {
+      method: "PATCH",
+      body: { activo: false, confirmar_servicios_afectados: true, servicios_afectados_confirmados: 1 },
+    });
+    assert.equal(deactivatedVehicle.status, 200);
+    assert.equal(state.vehicles[0].activo, false);
   });
 
   await t.test("solo admin puede registrar una devolución y una devolución total exige reserva cancelada", async () => {
     const payload = {
-      monto: 80,
+      monto: 20,
       motivo: "Servicio cancelado por emergencia",
-      referencia_externa: "DEV-TEST-001",
+      referencia_externa: "DEV-TEST-PARTIAL",
     };
     assert.equal((await request("/pagos/601/reembolso", "operativo", { method: "POST", body: payload })).status, 403);
 
-    const notCancelled = await request("/pagos/601/reembolso", "admin", { method: "POST", body: payload });
+    const partial = await request("/pagos/601/reembolso", "admin", { method: "POST", body: payload });
+    assert.equal(partial.status, 201, JSON.stringify(partial.body));
+    assert.equal(partial.body.monto_pagado_neto, 60);
+    assert.equal(partial.body.estado_pago, "parcial");
+    assert.equal(state.reservation.estado, "confirmada");
+    assert.equal(state.refunds.length, 1);
+
+    const totalPayload = { ...payload, monto: 60, referencia_externa: "DEV-TEST-TOTAL" };
+    const notCancelled = await request("/pagos/601/reembolso", "admin", { method: "POST", body: totalPayload });
     assert.equal(notCancelled.status, 409);
     assert.match(notCancelled.body.error, /primero debe cancelarse/i);
-    assert.equal(state.refunds.length, 0);
+    assert.equal(state.refunds.length, 1);
 
     state.reservation.estado = "cancelada";
-    const registered = await request("/pagos/601/reembolso", "admin", { method: "POST", body: payload });
+    const registered = await request("/pagos/601/reembolso", "admin", { method: "POST", body: totalPayload });
     assert.equal(registered.status, 201, JSON.stringify(registered.body));
     assert.match(registered.body.message, /no se transfirió dinero/i);
     assert.equal(registered.body.monto_pagado_neto, 0);
     assert.equal(registered.body.estado_pago, "reembolsado");
-    assert.equal(state.refunds.length, 1);
+    assert.equal(state.refunds.length, 2);
+
+    const overRefund = await request("/pagos/601/reembolso", "admin", {
+      method: "POST",
+      body: { ...payload, monto: 0.01, referencia_externa: "DEV-TEST-EXCESS" },
+    });
+    assert.equal(overRefund.status, 409);
+    assert.equal(state.refunds.length, 2);
   });
 });

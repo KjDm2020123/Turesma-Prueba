@@ -46,6 +46,13 @@ type VehicleForm = {
   conductor_telefono: string;
 };
 
+type DeactivationPrompt = {
+  kind: "company" | "vehicle";
+  id: number;
+  name: string;
+  affectedServices: number;
+};
+
 const EMPTY_COMPANY: PartnerCompanyForm = {
   nombre: "",
   identificacion: "",
@@ -82,6 +89,7 @@ export default function EmpresasAsociadasPage() {
   const [vehicleForms, setVehicleForms] = useState<Record<number, VehicleForm>>({});
   const [editingVehicle, setEditingVehicle] = useState<PartnerVehicle | null>(null);
   const [editVehicleForm, setEditVehicleForm] = useState<VehicleForm>(EMPTY_VEHICLE);
+  const [deactivationPrompt, setDeactivationPrompt] = useState<DeactivationPrompt | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -145,24 +153,56 @@ export default function EmpresasAsociadasPage() {
     }
   };
 
-  const toggleCompany = async (company: PartnerCompany) => {
+  const updateAvailability = async (
+    target: { kind: "company"; id: number; name: string; active: boolean } | { kind: "vehicle"; id: number; name: string; active: boolean },
+    confirmedServiceCount?: number,
+  ) => {
     setSaving(true);
     setError("");
     setMessage("");
     try {
-      await readJson(await fetch(`${API}/api/admin/empresas-asociadas/${company.id}`, {
+      const response = await fetch(target.kind === "company"
+        ? `${API}/api/admin/empresas-asociadas/${target.id}`
+        : `${API}/api/admin/empresas-asociadas/vehiculos/${target.id}`, {
         method: "PATCH",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ activa: !company.activa }),
-      }));
-      setMessage(company.activa ? "Empresa desactivada para nuevas asignaciones." : "Empresa activada.");
+        body: JSON.stringify({
+          [target.kind === "company" ? "activa" : "activo"]: !target.active,
+          ...(confirmedServiceCount === undefined ? {} : {
+            confirmar_servicios_afectados: true,
+            servicios_afectados_confirmados: confirmedServiceCount,
+          }),
+        }),
+      });
+      const payload = await response.json();
+      if (response.status === 409 && payload.confirmacion_requerida === true) {
+        setDeactivationPrompt({
+          kind: target.kind,
+          id: target.id,
+          name: target.name,
+          affectedServices: Number(payload.servicios_afectados),
+        });
+        return;
+      }
+      if (!response.ok) throw new Error(payload.error || "No se pudo actualizar la disponibilidad");
+      setDeactivationPrompt(null);
+      setMessage(target.active
+        ? `${target.kind === "company" ? "La empresa quedó desactivada" : "El vehículo quedó desactivado"} para nuevas asignaciones. Los servicios existentes se conservaron.`
+        : `${target.kind === "company" ? "Empresa" : "Vehículo"} activado.`);
       await load();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No se pudo actualizar la empresa");
+    } catch (availabilityError) {
+      setError(availabilityError instanceof Error ? availabilityError.message : "No se pudo actualizar la disponibilidad");
     } finally {
       setSaving(false);
     }
   };
+
+  const toggleCompany = (company: PartnerCompany) => updateAvailability({
+    kind: "company",
+    id: company.id,
+    name: company.nombre,
+    active: company.activa,
+  });
 
   const editCompany = (company: PartnerCompany) => {
     setEditingCompany(company);
@@ -198,24 +238,12 @@ export default function EmpresasAsociadasPage() {
     }
   };
 
-  const toggleVehicle = async (vehicle: PartnerVehicle) => {
-    setSaving(true);
-    setError("");
-    setMessage("");
-    try {
-      await readJson(await fetch(`${API}/api/admin/empresas-asociadas/vehiculos/${vehicle.id}`, {
-        method: "PATCH",
-        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ activo: !vehicle.activo }),
-      }));
-      setMessage(vehicle.activo ? "Vehículo desactivado para nuevas asignaciones." : "Vehículo activado.");
-      await load();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No se pudo actualizar el vehículo");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const toggleVehicle = (vehicle: PartnerVehicle) => updateAvailability({
+    kind: "vehicle",
+    id: vehicle.id,
+    name: `${vehicle.placa} · ${vehicle.modelo}`,
+    active: vehicle.activo,
+  });
 
   const editVehicle = (vehicle: PartnerVehicle) => {
     setEditingVehicle(vehicle);
@@ -351,6 +379,36 @@ export default function EmpresasAsociadasPage() {
             </div>
             <div className="flex gap-3"><button type="button" onClick={() => setEditingVehicle(null)} className="flex-1 rounded-xl border py-3 text-sm font-bold text-slate-600">Cancelar</button><button disabled={saving} className="flex-1 rounded-xl bg-slate-950 py-3 text-sm font-black text-white disabled:opacity-50">{saving ? "Guardando..." : "Guardar cambios"}</button></div>
           </form>
+        </div>
+      )}
+      {deactivationPrompt && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/60 p-4">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="deactivation-title" className="w-full max-w-lg space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-amber-700">Revisión operativa</p>
+              <h2 id="deactivation-title" className="mt-1 text-xl font-black text-slate-950">Confirmar desactivación</h2>
+            </div>
+            <p className="text-sm leading-6 text-slate-700">
+              <strong>{deactivationPrompt.name}</strong> tiene <strong>{deactivationPrompt.affectedServices} {deactivationPrompt.affectedServices === 1 ? "servicio futuro asignado" : "servicios futuros asignados"}</strong>.
+              Desactivarlo impedirá nuevas asignaciones, pero no cancelará ni reasignará los servicios existentes. Revisa esos compromisos después de confirmar.
+            </p>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" disabled={saving} onClick={() => setDeactivationPrompt(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 disabled:opacity-50">Cancelar</button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void updateAvailability({
+                  kind: deactivationPrompt.kind,
+                  id: deactivationPrompt.id,
+                  name: deactivationPrompt.name,
+                  active: true,
+                }, deactivationPrompt.affectedServices)}
+                className="rounded-xl bg-amber-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+              >
+                {saving ? "Confirmando..." : "Desactivar y revisar servicios"}
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </main>
